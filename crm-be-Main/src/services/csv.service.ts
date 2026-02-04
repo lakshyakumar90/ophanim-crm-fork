@@ -18,8 +18,7 @@ interface CsvLeadRow {
   lead_name?: string;
   leadName?: string;
   "lead_/_email"?: string; // Handling typical import format
-  company_name?: string;
-  companyName?: string;
+  business_name?: string;
   email?: string;
   phone?: string;
   alternate_phone?: string;
@@ -38,17 +37,11 @@ interface CsvLeadRow {
   website?: string;
   description?: string;
   tags?: string;
+  timezone?: string;
+  nal_reason?: string;
+  client_response?: string;
+  lead_type?: string;
   profession?: string;
-  course_name?: string;
-  courseName?: string;
-  webinar_date?: string;
-  webinarDate?: string;
-  time_in_session?: string;
-  days_attended?: string;
-  bootcamp_attendee?: string;
-  utm_source?: string;
-  utm_campaign?: string;
-  utm_medium?: string;
   created?: string;
 }
 
@@ -63,17 +56,48 @@ interface ImportResult {
  * Parse CSV file content
  */
 export function parseCsv(csvContent: string): CsvLeadRow[] {
-  const result = Papa.parse<CsvLeadRow>(csvContent, {
+  // Normalize line endings to handle different CSV formats
+  // Replace \r\n (Windows) and \r (old Mac) with \n (Unix)
+  let normalizedContent = csvContent
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+
+  // Fix malformed CSV headers where the first column is on a separate line
+  // This happens when Excel exports create split headers
+  const lines = normalizedContent.split("\n");
+
+  // Check if we have a split header (first line is just one column, second line starts with comma)
+  if (lines.length > 1 && lines[1]?.startsWith(",")) {
+    console.log("Detected split header - merging lines 1 and 2");
+    // Merge the first two lines to create a proper header
+    lines[0] = lines[0] + lines[1];
+    lines.splice(1, 1); // Remove the second line
+    normalizedContent = lines.join("\n");
+    console.log("Fixed CSV header:", lines[0]?.substring(0, 200));
+  }
+
+  const result = Papa.parse<CsvLeadRow>(normalizedContent, {
     header: true,
     skipEmptyLines: true,
-    transformHeader: (header) =>
+    transformHeader: (header: string) =>
       header.trim().toLowerCase().replace(/\s+/g, "_"),
   });
 
+  console.log("Parse result fields:", result.meta.fields);
+
   if (result.errors.length > 0) {
+    const firstError = result.errors[0];
+    console.error("Parse errors:", result.errors.slice(0, 3)); // Only log first 3 errors
     throw new ApiError(
       ERROR_CODES.VALIDATION_ERROR,
-      `CSV parsing error: ${result.errors[0]?.message}`,
+      `CSV parsing error: ${firstError?.message}${firstError?.row !== undefined ? ` at row ${firstError.row}` : ""}`,
+    );
+  }
+
+  if (!result.data || result.data.length === 0) {
+    throw new ApiError(
+      ERROR_CODES.VALIDATION_ERROR,
+      "CSV file contains no data rows",
     );
   }
 
@@ -119,18 +143,32 @@ function validateLeadRow(
     return { valid: false, error: `Row ${rowIndex}: Invalid email format` };
   }
 
-  const status = row.status?.trim().toLowerCase() || "new";
-  // Allow any status if it matches enum, otherwise default or error?
-  // Existing logic enforced enum matching. Keeping it strict is safer.
+  const status = row.status?.trim().toLowerCase() || "fresh_lead";
+  // Validate status against current enum values
   const validStatuses = Object.values(LEAD_STATUSES);
-  if (!validStatuses.includes(status as any)) {
-    // If user passes "New Lead" instead of "new", maybe map it?
-    // For now, strict check.
-    // return { valid: false, error: `Row ${rowIndex}: Invalid status "${status}"` };
-    // User request says "Status" field exists.
+  if (status && !validStatuses.includes(status as any)) {
+    // Try to map common variations to valid statuses
+    const statusMap: Record<string, string> = {
+      new: "fresh_lead",
+      contacted: "fresh_lead",
+      qualified: "hot_lead",
+      negotiation: "hot_lead",
+      lost: "not_interested",
+      on_hold: "future_lead",
+      unqualified: "not_a_lead",
+    };
+    const mappedStatus = statusMap[status];
+    if (!mappedStatus) {
+      return {
+        valid: false,
+        error: `Row ${rowIndex}: Invalid status "${status}". Valid values: ${validStatuses.join(", ")}`,
+      };
+    }
+    // Use mapped status
+    return validateLeadRow({ ...row, status: mappedStatus }, rowIndex);
   }
 
-  const source = row.source?.trim().toLowerCase();
+  const source = row.source?.trim().toLowerCase() || null;
 
   const leadValue = row.lead_value || row.leadValue;
   let parsedValue: number | null = null;
@@ -141,19 +179,11 @@ function validateLeadRow(
     }
   }
 
-  // Parsing booleans/dates
-  const daysAttended = row.days_attended ? parseInt(row.days_attended) : null;
-  const bootcampAttendee = row.bootcamp_attendee
-    ? row.bootcamp_attendee.toLowerCase() === "yes" ||
-      row.bootcamp_attendee.toLowerCase() === "true" ||
-      row.bootcamp_attendee === "1"
-    : false;
-
   return {
     valid: true,
     data: {
       lead_name: leadName?.trim(),
-      company_name: (row.company_name || row.companyName)?.trim() || null,
+      business_name: row.business_name?.trim() || null,
       email: email?.toLowerCase() || null,
       phone: row.phone?.trim() || null,
       alternate_phone:
@@ -163,7 +193,7 @@ function validateLeadRow(
       state: row.state?.trim() || null,
       country: row.country?.trim() || null,
       pincode: row.pincode?.trim() || null,
-      status, // Mapping logic might be needed if CSV uses different status terms
+      status,
       source: source || null,
       lead_value: parsedValue,
       industry: row.industry?.trim() || null,
@@ -176,17 +206,13 @@ function validateLeadRow(
             .map((t) => t.trim())
             .filter(Boolean)
         : null,
-      // New columns
+      // Additional lead fields
+      timezone: row.timezone?.trim() || null,
+      nal_reason: row.nal_reason?.trim() || null,
+      client_response: row.client_response?.trim() || null,
+      lead_type: row.lead_type?.trim() || null,
+      // Optional custom field
       profession: row.profession?.trim() || null,
-      course_name: (row.course_name || row.courseName)?.trim() || null,
-      webinar_date: row.webinar_date || row.webinarDate || null,
-      time_in_session: row.time_in_session || null,
-      days_attended: isNaN(daysAttended || NaN) ? null : daysAttended,
-      bootcamp_attendee: bootcampAttendee,
-      utm_source: row.utm_source || null,
-      utm_campaign: row.utm_campaign || null,
-      utm_medium: row.utm_medium || null,
-      // Optional: created_at: row.created ? new Date(row.created).toISOString() : undefined // Be careful with this, usually system sets it.
     },
   };
 }
@@ -201,6 +227,8 @@ export async function importLeads(
   departmentId?: string | null,
 ): Promise<ImportResult> {
   const rows = parseCsv(csvContent);
+
+  console.log(`Parsed ${rows.length} rows from CSV`);
 
   if (rows.length === 0) {
     throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "CSV file is empty");
@@ -225,6 +253,7 @@ export async function importLeads(
     if (!validation.valid) {
       result.failed++;
       result.errors.push({ row: i + 2, error: validation.error! });
+      console.log(`Row ${i + 2} validation failed:`, validation.error);
     } else {
       validLeads.push({
         ...validation.data,
@@ -236,19 +265,30 @@ export async function importLeads(
     }
   }
 
+  console.log(
+    `Validation complete: ${validLeads.length} valid, ${result.failed} failed`,
+  );
+
   // Insert valid leads in batches
   const chunks = chunkArray(validLeads, BULK_LIMITS.BATCH_SIZE);
 
   for (const chunk of chunks) {
+    console.log(`Inserting batch of ${chunk.length} leads`);
     const { error, count } = await supabaseAdmin.from("leads").insert(chunk);
 
     if (error) {
+      console.error("Database insertion error:", error);
       result.failed += chunk.length;
       result.errors.push({ row: 0, error: `Database error: ${error.message}` });
     } else {
+      console.log(`Successfully inserted ${count || chunk.length} leads`);
       result.successful += count || chunk.length;
     }
   }
+
+  console.log(
+    `Import complete: ${result.successful} successful, ${result.failed} failed`,
+  );
 
   return result;
 }
@@ -271,7 +311,7 @@ export async function exportLeads(
     .select(
       `
       lead_name,
-      company_name,
+      business_name,
       email,
       phone,
       alternate_phone,
@@ -335,13 +375,13 @@ export async function exportLeads(
   }
 
   if (!data || data.length === 0) {
-    return "lead_name,company_name,email,phone,status,source,lead_value,city,state,country,created_at\n";
+    return "lead_name,business_name,email,phone,status,source,lead_value,city,state,country,created_at\n";
   }
 
   // Transform data for export
   const exportData = data.map((lead: any) => ({
     lead_name: lead.lead_name,
-    company_name: lead.company_name || "",
+    business_name: lead.business_name || "",
     email: lead.email || "",
     phone: lead.phone || "",
     alternate_phone: lead.alternate_phone || "",
@@ -369,24 +409,28 @@ export async function exportLeads(
  */
 export function getLeadsCsvTemplate(): string {
   const headers = [
-    "lead_name",
-    "company_name",
-    "email",
-    "phone",
+    "lead_name", // Required
+    "business_name",
+    "email", // Required (if provided, must be valid)
+    "phone", // Required
     "alternate_phone",
     "address",
     "city",
     "state",
-    "country",
+    "country", // Required
     "pincode",
-    "status",
-    "source",
+    "status", // Optional: fresh_lead (default), hot_lead, meeting_scheduled, did_not_pick, follow_up, future_lead, not_interested, not_a_lead, won, proposal_sent
+    "source", // website, referral, cold_call, email_campaign, social_media, etc.
     "lead_value",
     "industry",
     "designation",
     "website",
     "description",
-    "tags",
+    "tags", // Comma-separated: hot,priority,follow-up
+    "timezone",
+    "nal_reason",
+    "client_response",
+    "lead_type",
   ];
 
   const sampleRow = [
@@ -400,14 +444,18 @@ export function getLeadsCsvTemplate(): string {
     "NY",
     "USA",
     "10001",
-    "new",
+    "fresh_lead", // Or leave empty for default
     "website",
     "5000",
     "Technology",
     "Manager",
     "https://example.com",
-    "Sample lead",
+    "Sample lead description",
     "hot,priority",
+    "America/New_York",
+    "",
+    "",
+    "B2B",
   ];
 
   return headers.join(",") + "\n" + sampleRow.join(",");

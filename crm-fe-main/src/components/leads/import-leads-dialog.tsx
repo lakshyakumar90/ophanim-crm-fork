@@ -47,7 +47,13 @@ export function ImportLeadsDialog({
         const workbook = XLSX.read(data, { type: "array" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        csvContent = XLSX.utils.sheet_to_csv(worksheet);
+        // Use defval to ensure empty cells are handled properly
+        // This prevents the leading comma issue
+        csvContent = XLSX.utils.sheet_to_csv(worksheet, {
+          FS: ",", // Force comma as field separator
+          RS: "\n", // Force newline as record separator
+          blankrows: false, // Skip blank rows
+        });
       } else {
         throw new Error("Invalid file format. Please upload CSV or Excel.");
       }
