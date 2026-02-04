@@ -1,0 +1,161 @@
+// Standardized Error Codes for the CRM API
+
+export const ERROR_CODES = {
+  // Authentication Errors (1xxx)
+  AUTH_INVALID_CREDENTIALS: "AUTH_001",
+  AUTH_TOKEN_EXPIRED: "AUTH_002",
+  AUTH_TOKEN_INVALID: "AUTH_003",
+  AUTH_TOKEN_MISSING: "AUTH_004",
+  AUTH_REFRESH_TOKEN_EXPIRED: "AUTH_005",
+  AUTH_REFRESH_TOKEN_INVALID: "AUTH_006",
+  AUTH_ACCOUNT_DISABLED: "AUTH_007",
+  AUTH_PASSWORD_MISMATCH: "AUTH_008",
+  AUTH_PASSWORD_WEAK: "AUTH_009",
+  UNAUTHORIZED: "AUTH_010",
+
+  // Authorization Errors (2xxx)
+  FORBIDDEN: "AUTHZ_001",
+  INSUFFICIENT_PERMISSIONS: "AUTHZ_002",
+  RESOURCE_ACCESS_DENIED: "AUTHZ_003",
+
+  // Validation Errors (3xxx)
+  VALIDATION_ERROR: "VAL_001",
+  INVALID_INPUT: "VAL_002",
+  MISSING_REQUIRED_FIELD: "VAL_003",
+  INVALID_FORMAT: "VAL_004",
+  INVALID_ENUM_VALUE: "VAL_005",
+
+  // Resource Errors (4xxx)
+  NOT_FOUND: "RES_001",
+  ALREADY_EXISTS: "RES_002",
+  CONFLICT: "RES_003",
+  GONE: "RES_004",
+
+  // Business Logic Errors (5xxx)
+  LEAD_ALREADY_ASSIGNED: "BUS_001",
+  LEAD_CANNOT_REASSIGN: "BUS_002",
+  TASK_ALREADY_COMPLETED: "BUS_003",
+  ATTENDANCE_ALREADY_CLOCKED_IN: "BUS_004",
+  ATTENDANCE_NOT_CLOCKED_IN: "BUS_005",
+  BULK_LIMIT_EXCEEDED: "BUS_006",
+  IMPORT_FAILED: "BUS_007",
+  EXPORT_FAILED: "BUS_008",
+
+  // Server Errors (6xxx)
+  INTERNAL_ERROR: "SRV_001",
+  DATABASE_ERROR: "SRV_002",
+  EXTERNAL_SERVICE_ERROR: "SRV_003",
+  EMAIL_SEND_FAILED: "SRV_004",
+
+  // Rate Limiting (7xxx)
+  RATE_LIMIT_EXCEEDED: "RATE_001",
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+// Error messages map
+export const ERROR_MESSAGES: Record<ErrorCode, string> = {
+  // Auth
+  [ERROR_CODES.AUTH_INVALID_CREDENTIALS]: "Invalid email or password",
+  [ERROR_CODES.AUTH_TOKEN_EXPIRED]: "Access token has expired",
+  [ERROR_CODES.AUTH_TOKEN_INVALID]: "Invalid access token",
+  [ERROR_CODES.AUTH_TOKEN_MISSING]: "Access token is required",
+  [ERROR_CODES.AUTH_REFRESH_TOKEN_EXPIRED]: "Refresh token has expired",
+  [ERROR_CODES.AUTH_REFRESH_TOKEN_INVALID]: "Invalid refresh token",
+  [ERROR_CODES.AUTH_ACCOUNT_DISABLED]: "Account has been disabled",
+  [ERROR_CODES.AUTH_PASSWORD_MISMATCH]: "Current password is incorrect",
+  [ERROR_CODES.AUTH_PASSWORD_WEAK]:
+    "Password does not meet security requirements",
+  [ERROR_CODES.UNAUTHORIZED]: "Authentication required",
+
+  // Authorization
+  [ERROR_CODES.FORBIDDEN]: "You do not have permission to perform this action",
+  [ERROR_CODES.INSUFFICIENT_PERMISSIONS]:
+    "Insufficient permissions for this operation",
+  [ERROR_CODES.RESOURCE_ACCESS_DENIED]: "Access to this resource is denied",
+
+  // Validation
+  [ERROR_CODES.VALIDATION_ERROR]: "Validation failed",
+  [ERROR_CODES.INVALID_INPUT]: "Invalid input provided",
+  [ERROR_CODES.MISSING_REQUIRED_FIELD]: "Required field is missing",
+  [ERROR_CODES.INVALID_FORMAT]: "Invalid format",
+  [ERROR_CODES.INVALID_ENUM_VALUE]: "Invalid value for enum field",
+
+  // Resource
+  [ERROR_CODES.NOT_FOUND]: "Resource not found",
+  [ERROR_CODES.ALREADY_EXISTS]: "Resource already exists",
+  [ERROR_CODES.CONFLICT]: "Resource conflict",
+  [ERROR_CODES.GONE]: "Resource no longer available",
+
+  // Business Logic
+  [ERROR_CODES.LEAD_ALREADY_ASSIGNED]: "Lead is already assigned to this user",
+  [ERROR_CODES.LEAD_CANNOT_REASSIGN]: "Cannot reassign lead at current status",
+  [ERROR_CODES.TASK_ALREADY_COMPLETED]: "Task is already completed",
+  [ERROR_CODES.ATTENDANCE_ALREADY_CLOCKED_IN]: "Already clocked in for today",
+  [ERROR_CODES.ATTENDANCE_NOT_CLOCKED_IN]: "Not clocked in yet",
+  [ERROR_CODES.BULK_LIMIT_EXCEEDED]: "Bulk operation limit exceeded",
+  [ERROR_CODES.IMPORT_FAILED]: "CSV import failed",
+  [ERROR_CODES.EXPORT_FAILED]: "CSV export failed",
+
+  // Server
+  [ERROR_CODES.INTERNAL_ERROR]: "An internal server error occurred",
+  [ERROR_CODES.DATABASE_ERROR]: "Database operation failed",
+  [ERROR_CODES.EXTERNAL_SERVICE_ERROR]: "External service error",
+  [ERROR_CODES.EMAIL_SEND_FAILED]: "Failed to send email",
+
+  // Rate Limiting
+  [ERROR_CODES.RATE_LIMIT_EXCEEDED]:
+    "Too many requests, please try again later",
+};
+
+// HTTP Status codes mapping
+export const ERROR_STATUS_CODES: Record<ErrorCode, number> = {
+  // Auth - 401
+  [ERROR_CODES.AUTH_INVALID_CREDENTIALS]: 401,
+  [ERROR_CODES.AUTH_TOKEN_EXPIRED]: 401,
+  [ERROR_CODES.AUTH_TOKEN_INVALID]: 401,
+  [ERROR_CODES.AUTH_TOKEN_MISSING]: 401,
+  [ERROR_CODES.AUTH_REFRESH_TOKEN_EXPIRED]: 401,
+  [ERROR_CODES.AUTH_REFRESH_TOKEN_INVALID]: 401,
+  [ERROR_CODES.AUTH_ACCOUNT_DISABLED]: 401,
+  [ERROR_CODES.AUTH_PASSWORD_MISMATCH]: 400,
+  [ERROR_CODES.AUTH_PASSWORD_WEAK]: 400,
+  [ERROR_CODES.UNAUTHORIZED]: 401,
+
+  // Authorization - 403
+  [ERROR_CODES.FORBIDDEN]: 403,
+  [ERROR_CODES.INSUFFICIENT_PERMISSIONS]: 403,
+  [ERROR_CODES.RESOURCE_ACCESS_DENIED]: 403,
+
+  // Validation - 400
+  [ERROR_CODES.VALIDATION_ERROR]: 400,
+  [ERROR_CODES.INVALID_INPUT]: 400,
+  [ERROR_CODES.MISSING_REQUIRED_FIELD]: 400,
+  [ERROR_CODES.INVALID_FORMAT]: 400,
+  [ERROR_CODES.INVALID_ENUM_VALUE]: 400,
+
+  // Resource - 404/409
+  [ERROR_CODES.NOT_FOUND]: 404,
+  [ERROR_CODES.ALREADY_EXISTS]: 409,
+  [ERROR_CODES.CONFLICT]: 409,
+  [ERROR_CODES.GONE]: 410,
+
+  // Business Logic - 400/409
+  [ERROR_CODES.LEAD_ALREADY_ASSIGNED]: 409,
+  [ERROR_CODES.LEAD_CANNOT_REASSIGN]: 400,
+  [ERROR_CODES.TASK_ALREADY_COMPLETED]: 400,
+  [ERROR_CODES.ATTENDANCE_ALREADY_CLOCKED_IN]: 409,
+  [ERROR_CODES.ATTENDANCE_NOT_CLOCKED_IN]: 400,
+  [ERROR_CODES.BULK_LIMIT_EXCEEDED]: 400,
+  [ERROR_CODES.IMPORT_FAILED]: 400,
+  [ERROR_CODES.EXPORT_FAILED]: 400,
+
+  // Server - 500
+  [ERROR_CODES.INTERNAL_ERROR]: 500,
+  [ERROR_CODES.DATABASE_ERROR]: 500,
+  [ERROR_CODES.EXTERNAL_SERVICE_ERROR]: 502,
+  [ERROR_CODES.EMAIL_SEND_FAILED]: 500,
+
+  // Rate Limiting - 429
+  [ERROR_CODES.RATE_LIMIT_EXCEEDED]: 429,
+};

@@ -1,0 +1,414 @@
+import { Router, type Router as RouterType } from "express";
+import { authenticate } from "../middleware/auth.middleware.js";
+import {
+  requireAdmin,
+  requireManager,
+} from "../middleware/authorization.middleware.js";
+import {
+  validateBody,
+  validateQuery,
+  validateParams,
+} from "../middleware/validation.middleware.js";
+import { asyncHandler } from "../middleware/error.middleware.js";
+import {
+  clockInSchema,
+  clockOutSchema,
+  manualAttendanceSchema,
+  updateAttendanceSchema,
+  attendanceListQuerySchema,
+  attendanceRulesSchema,
+  createHolidaySchema,
+} from "../validators/attendance.validator.js";
+import { uuidParamSchema } from "../validators/users.validator.js";
+import * as attendanceService from "../services/attendance.service.js";
+import {
+  sendSuccess,
+  sendCreated,
+  sendPaginated,
+  sendNoContent,
+} from "../utils/responses.js";
+import type { Request, Response } from "express";
+import type { AuthenticatedRequest } from "../types/api.types.js";
+import {
+  getTodayIST,
+  getMonthIST,
+  getYearIST,
+  nowIST,
+} from "../utils/date-utils.js";
+
+const router: RouterType = Router();
+
+// All routes require authentication
+router.use(authenticate as any);
+
+/**
+ * POST /attendance/clock-in
+ * Clock in for the day
+ */
+router.post(
+  "/clock-in",
+  validateBody(clockInSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const record = await attendanceService.clockIn(authReq.user.id, req.body);
+    sendCreated(res, record);
+  }),
+);
+
+/**
+ * POST /attendance/clock-out
+ * Clock out for the day
+ */
+router.post(
+  "/clock-out",
+  validateBody(clockOutSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const record = await attendanceService.clockOut(authReq.user.id, req.body);
+    sendSuccess(res, record);
+  }),
+);
+
+/**
+ * GET /attendance/today
+ * Get today's attendance for current user
+ */
+router.get(
+  "/today",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const record = await attendanceService.getMyTodayAttendance(
+      authReq.user.id,
+    );
+    sendSuccess(res, record);
+  }),
+);
+
+/**
+ * GET /attendance/summary
+ * Get attendance summary for current user
+ */
+router.get(
+  "/summary",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const month = parseInt(req.query["month"] as string) || getMonthIST();
+    const year = parseInt(req.query["year"] as string) || getYearIST();
+    const summary = await attendanceService.getAttendanceSummary(
+      authReq.user.id,
+      month,
+      year,
+    );
+    sendSuccess(res, summary);
+  }),
+);
+
+/**
+ * GET /attendance/analytics
+ * Get attendance analytics for dashboard (admin and manager)
+ */
+router.get(
+  "/analytics",
+  requireManager as any,
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const startDate = (req.query["startDate"] as string) || getTodayIST();
+    const endDate = (req.query["endDate"] as string) || getTodayIST();
+
+    // Managers can only see their department's analytics
+    let departmentId = req.query["departmentId"] as string | undefined;
+    if (authReq.user.role === "manager" && authReq.user.departmentId) {
+      departmentId = authReq.user.departmentId;
+    }
+
+    const analytics = await attendanceService.getAttendanceAnalytics(
+      startDate,
+      endDate,
+      departmentId,
+    );
+    sendSuccess(res, analytics);
+  }),
+);
+
+/**
+ * GET /attendance/users-today
+ * Get all users attendance for a specific date (admin only)
+ */
+router.get(
+  "/users-today",
+  requireAdmin as any,
+  asyncHandler(async (req: Request, res: Response) => {
+    const date = (req.query["date"] as string) || getTodayIST();
+    const departmentId = req.query["departmentId"] as string | undefined;
+
+    const usersAttendance = await attendanceService.getAllUsersAttendance(
+      date,
+      departmentId,
+    );
+    sendSuccess(res, usersAttendance);
+  }),
+);
+
+/**
+ * GET /attendance/user/:userId/history
+ * Get user attendance history (admin/manager only)
+ * Managers can only view their team members' history
+ */
+router.get(
+  "/user/:userId/history",
+  requireManager as any,
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const userId = req.params["userId"] as string;
+
+    // Managers can only view their own team members' history
+    if (authReq.user.role === "manager" && authReq.user.teamId) {
+      const { data: targetUser } = await (
+        await import("../config/supabase.js")
+      ).supabaseAdmin
+        .from("users")
+        .select("team_id")
+        .eq("id", userId)
+        .single();
+
+      if (
+        targetUser?.team_id !== authReq.user.teamId &&
+        userId !== authReq.user.id
+      ) {
+        throw new (await import("../utils/responses.js")).ApiError(
+          (await import("../utils/error-codes.js")).ERROR_CODES.FORBIDDEN,
+          "You can only view attendance history for your team members",
+        );
+      }
+    }
+
+    // Default start date is 30 days ago
+    const thirtyDaysAgo = nowIST();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const startDate =
+      (req.query["startDate"] as string) ||
+      thirtyDaysAgo.toISOString().split("T")[0]!;
+
+    const endDate = (req.query["endDate"] as string) || getTodayIST();
+    const history = await attendanceService.getUserAttendanceHistory(
+      userId,
+      startDate,
+      endDate,
+    );
+    sendSuccess(res, history);
+  }),
+);
+
+/**
+ * GET /attendance
+ * Get paginated list of attendance records
+ */
+router.get(
+  "/",
+  requireManager as any,
+  validateQuery(attendanceListQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const result = await attendanceService.getAttendanceList(
+      req.query as any,
+      authReq.user,
+    );
+    sendPaginated(res, result.data, result.meta);
+  }),
+);
+
+/**
+ * POST /attendance/manual
+ * Create manual attendance record (admin only)
+ */
+router.post(
+  "/manual",
+  requireAdmin as any,
+  validateBody(manualAttendanceSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const record = await attendanceService.createManualAttendance(req.body);
+    sendCreated(res, record);
+  }),
+);
+
+/**
+ * PUT /attendance/:id
+ * Update attendance record (admin only)
+ */
+router.put(
+  "/:id",
+  requireAdmin as any,
+  validateParams(uuidParamSchema),
+  validateBody(updateAttendanceSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const record = await attendanceService.updateAttendance(
+      req.params["id"] as string,
+      req.body,
+    );
+    sendSuccess(res, record);
+  }),
+);
+
+/**
+ * GET /attendance/rules
+ * Get attendance rules
+ */
+router.get(
+  "/rules",
+  asyncHandler(async (_req: Request, res: Response) => {
+    const rules = await attendanceService.getAttendanceRules();
+    sendSuccess(res, rules);
+  }),
+);
+
+/**
+ * PUT /attendance/rules
+ * Update attendance rules (admin only)
+ */
+router.put(
+  "/rules",
+  requireAdmin as any,
+  validateBody(attendanceRulesSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const rules = await attendanceService.updateAttendanceRules(req.body);
+    sendSuccess(res, rules);
+  }),
+);
+
+/**
+ * GET /attendance/holidays
+ * Get holidays list
+ */
+router.get(
+  "/holidays",
+  asyncHandler(async (req: Request, res: Response) => {
+    const year = req.query["year"]
+      ? parseInt(req.query["year"] as string)
+      : undefined;
+    const holidays = await attendanceService.getHolidays(year);
+    sendSuccess(res, holidays);
+  }),
+);
+
+/**
+ * POST /attendance/holidays
+ * Create holiday (admin only)
+ */
+router.post(
+  "/holidays",
+  requireAdmin as any,
+  validateBody(createHolidaySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const holiday = await attendanceService.createHoliday(req.body);
+    sendCreated(res, holiday);
+  }),
+);
+
+/**
+ * DELETE /attendance/holidays/:id
+ * Delete holiday (admin only)
+ */
+router.delete(
+  "/holidays/:id",
+  requireAdmin as any,
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    await attendanceService.deleteHoliday(req.params["id"] as string);
+    sendNoContent(res);
+  }),
+);
+
+/**
+ * POST /attendance/admin/clock-in/:userId
+ * Admin clock in for any user (bypasses restrictions)
+ */
+router.post(
+  "/admin/clock-in/:userId",
+  requireAdmin as any,
+  validateBody(clockInSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const userId = req.params["userId"] as string;
+    if (
+      !userId ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        userId,
+      )
+    ) {
+      throw new Error("Invalid user ID format");
+    }
+    const record = await attendanceService.adminClockIn(
+      userId,
+      authReq.user.id,
+      req.body,
+    );
+    sendCreated(res, record);
+  }),
+);
+
+/**
+ * POST /attendance/admin/clock-out/:userId
+ * Admin clock out for any user (bypasses restrictions)
+ */
+router.post(
+  "/admin/clock-out/:userId",
+  requireAdmin as any,
+  validateBody(clockOutSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const userId = req.params["userId"] as string;
+    if (
+      !userId ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        userId,
+      )
+    ) {
+      throw new Error("Invalid user ID format");
+    }
+    const record = await attendanceService.adminClockOut(
+      userId,
+      authReq.user.id,
+      req.body,
+    );
+    sendSuccess(res, record);
+  }),
+);
+
+/**
+ * GET /attendance/weekly-hours
+ * Get weekly hours for a user (all users can access their own, admin can access any)
+ */
+router.get(
+  "/weekly-hours",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const isAdmin = authReq.user.role === "admin";
+
+    // If userId is provided and user is admin, use that; otherwise use current user
+    let targetUserId = authReq.user.id;
+    if (req.query["userId"] && isAdmin) {
+      targetUserId = req.query["userId"] as string;
+    }
+
+    // Get the week start date (Monday) - default to current week
+    let weekStart = req.query["weekStart"] as string;
+    if (!weekStart) {
+      // Calculate current week's Monday
+      const today = nowIST();
+      const dayOfWeek = today.getDay();
+      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Adjust for Sunday
+      const monday = new Date(today);
+      monday.setDate(today.getDate() + diff);
+      weekStart = monday.toISOString().split("T")[0]!;
+    }
+
+    const weeklyHours = await attendanceService.getWeeklyHours(
+      targetUserId,
+      weekStart,
+    );
+    sendSuccess(res, weeklyHours);
+  }),
+);
+
+export default router;
