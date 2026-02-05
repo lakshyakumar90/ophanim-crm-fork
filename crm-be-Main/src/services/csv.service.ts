@@ -85,12 +85,28 @@ export function parseCsv(csvContent: string): CsvLeadRow[] {
 
   console.log("Parse result fields:", result.meta.fields);
 
-  if (result.errors.length > 0) {
-    const firstError = result.errors[0];
-    console.error("Parse errors:", result.errors.slice(0, 3)); // Only log first 3 errors
+  // Filter out FieldMismatch errors (TooFewFields, TooManyFields) - these are common
+  // when trailing empty columns are omitted. Only throw on actual fatal parse errors.
+  const fatalErrors = result.errors.filter(
+    (err) => err.type !== "FieldMismatch",
+  );
+
+  if (fatalErrors.length > 0) {
+    const firstError = fatalErrors[0];
+    console.error("Parse errors:", fatalErrors.slice(0, 3)); // Only log first 3 errors
     throw new ApiError(
       ERROR_CODES.VALIDATION_ERROR,
       `CSV parsing error: ${firstError?.message}${firstError?.row !== undefined ? ` at row ${firstError.row}` : ""}`,
+    );
+  }
+
+  // Log field mismatch warnings for debugging, but don't fail
+  const fieldMismatchErrors = result.errors.filter(
+    (err) => err.type === "FieldMismatch",
+  );
+  if (fieldMismatchErrors.length > 0) {
+    console.warn(
+      `CSV has ${fieldMismatchErrors.length} rows with mismatched field counts - proceeding anyway`,
     );
   }
 
