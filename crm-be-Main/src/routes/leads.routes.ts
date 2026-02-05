@@ -431,4 +431,20 @@ router.delete(
   }),
 );
 
+/**
+ * PATCH /leads/reminders/:reminderId/done
+ * Mark a reminder as done
+ */
+router.patch(
+  "/reminders/:reminderId/done",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const reminder = await leadsService.markReminderDone(
+      req.params["reminderId"] as string,
+      authReq.user.id,
+    );
+    sendSuccess(res, reminder);
+  }),
+);
+
 export default router;

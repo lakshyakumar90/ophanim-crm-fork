@@ -1075,6 +1075,7 @@ interface LeadReminder {
   reminderAt: string;
   note: string | null;
   isSent: boolean;
+  isDone: boolean;
   createdAt: string;
   lead?: {
     leadName: string;
@@ -1088,6 +1089,7 @@ interface ReminderRow {
   reminder_at: string;
   note: string | null;
   is_sent: boolean;
+  is_done: boolean;
   created_at: string;
   leads?: {
     lead_name: string;
@@ -1102,6 +1104,7 @@ function mapReminderRowToRecord(data: ReminderRow): LeadReminder {
     reminderAt: data.reminder_at,
     note: data.note,
     isSent: data.is_sent,
+    isDone: data.is_done ?? false,
     createdAt: data.created_at,
     lead: data.leads ? { leadName: data.leads.lead_name } : undefined,
   };
@@ -1289,4 +1292,32 @@ export async function getAllReminders(
     data: reminders,
     meta: calculatePaginationMeta(count || 0, { page, limit }),
   };
+}
+
+/**
+ * Mark a reminder as done
+ */
+export async function markReminderDone(
+  reminderId: string,
+  userId: string,
+): Promise<LeadReminder> {
+  const { data, error } = await supabaseAdmin
+    .from("lead_reminders")
+    .update({
+      is_done: true,
+    })
+    .eq("id", reminderId)
+    .eq("user_id", userId) // Users can only mark their own reminders as done
+    .select("*, leads:lead_id (lead_name)")
+    .single();
+
+  if (error) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+
+  if (!data) {
+    throw ApiError.notFound("Reminder");
+  }
+
+  return mapReminderRowToRecord(data as ReminderRow);
 }

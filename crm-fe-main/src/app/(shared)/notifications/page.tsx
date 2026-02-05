@@ -1,26 +1,45 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
+import { useRouter } from "next/navigation";
 import { notificationsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bell, Check, Trash2 } from "lucide-react";
+import { Bell, Check, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { toLocaleStringIST } from "@/lib/date-utils";
+import { useAuth } from "@/providers/auth-provider";
+
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  isRead: boolean;
+  createdAt: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+}
 
 export default function NotificationsPage() {
-  const { data, isLoading } = useSWR("notifications", () =>
-    notificationsApi.list().then((res) => res.data)
+  const router = useRouter();
+  const { user } = useAuth();
+
+  // Add auto-refresh every 30 seconds
+  const { data, isLoading } = useSWR(
+    "notifications",
+    () => notificationsApi.list().then((res) => res.data),
+    { refreshInterval: 30000 },
   );
 
-  const notifications = data?.data || [];
+  const notifications: Notification[] = data?.data || [];
 
   const handleMarkAsRead = async (id: string) => {
     try {
       await notificationsApi.markAsRead(id);
       mutate("notifications");
-      mutate("notifications-unread");
+      mutate("notifications-unread-count");
     } catch {
       toast.error("Failed to mark as read");
     }
@@ -30,7 +49,7 @@ export default function NotificationsPage() {
     try {
       await notificationsApi.markAllAsRead();
       mutate("notifications");
-      mutate("notifications-unread");
+      mutate("notifications-unread-count");
       toast.success("All marked as read");
     } catch {
       toast.error("Failed to mark all as read");
@@ -41,10 +60,43 @@ export default function NotificationsPage() {
     try {
       await notificationsApi.delete(id);
       mutate("notifications");
-      mutate("notifications-unread");
+      mutate("notifications-unread-count");
     } catch {
       toast.error("Failed to delete notification");
     }
+  };
+
+  // Navigate to related entity (lead, task, etc.)
+  const handleNavigateToEntity = (notification: Notification) => {
+    if (
+      notification.relatedEntityType === "lead" &&
+      notification.relatedEntityId
+    ) {
+      const departmentSlug = user?.departmentSlug || "sales";
+      router.push(`/${departmentSlug}/leads/${notification.relatedEntityId}`);
+      // Mark as read when clicking
+      if (!notification.isRead) {
+        handleMarkAsRead(notification.id);
+      }
+    } else if (
+      notification.relatedEntityType === "task" &&
+      notification.relatedEntityId
+    ) {
+      const departmentSlug = user?.departmentSlug || "sales";
+      router.push(`/${departmentSlug}/tasks`);
+      if (!notification.isRead) {
+        handleMarkAsRead(notification.id);
+      }
+    }
+  };
+
+  // Check if notification has a valid link
+  const hasLink = (notification: Notification) => {
+    return (
+      notification.relatedEntityType &&
+      notification.relatedEntityId &&
+      ["lead", "task"].includes(notification.relatedEntityType)
+    );
   };
 
   return (
@@ -56,7 +108,7 @@ export default function NotificationsPage() {
             Stay updated with your activities
           </p>
         </div>
-        {notifications.some((n: any) => !n.isRead) && (
+        {notifications.some((n) => !n.isRead) && (
           <Button variant="outline" onClick={handleMarkAllRead}>
             <Check className="w-4 h-4 mr-2" />
             Mark all as read
@@ -84,32 +136,53 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((notification: any) => (
+              {notifications.map((notification) => (
                 <div
                   key={notification.id}
                   className={`p-4 flex gap-4 ${
-                    !notification.isRead ? "bg-blue-50/50" : ""
-                  }`}
+                    !notification.isRead
+                      ? "bg-blue-50/50 dark:bg-blue-950/20"
+                      : ""
+                  } ${hasLink(notification) ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}`}
+                  onClick={() =>
+                    hasLink(notification) &&
+                    handleNavigateToEntity(notification)
+                  }
                 >
                   <div
                     className={`w-2 h-2 mt-2 rounded-full shrink-0 ${
                       !notification.isRead ? "bg-blue-500" : "bg-transparent"
                     }`}
                   />
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <h4 className="font-semibold text-foreground">
-                          {notification.title}
-                        </h4>
-                        <p className="text-muted-foreground mt-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-foreground">
+                            {notification.title}
+                          </h4>
+                          {hasLink(notification) && (
+                            <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-muted-foreground mt-1 break-words">
                           {notification.message}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {toLocaleStringIST(notification.createdAt)}
-                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <p className="text-xs text-muted-foreground">
+                            {toLocaleStringIST(notification.createdAt)}
+                          </p>
+                          {notification.relatedEntityType && (
+                            <span className="text-xs px-1.5 py-0.5 bg-muted rounded text-muted-foreground capitalize">
+                              {notification.relatedEntityType}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div
+                        className="flex items-center gap-1 shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {!notification.isRead && (
                           <Button
                             variant="ghost"

@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import useSWR from "swr";
 import { cn } from "@/lib/utils";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
+import { notificationsApi, leadsApi } from "@/lib/api";
 import {
   LayoutDashboard,
   Users,
@@ -46,23 +48,32 @@ import {
 } from "@/components/ui/collapsible";
 import { useState } from "react";
 import type { Department } from "@/types";
+import { Badge } from "@/components/ui/badge";
 
 interface NavItem {
   title: string;
   href: string;
   icon: React.ElementType;
   roles?: ("admin" | "manager" | "employee")[];
+  showBadge?: boolean; // For notification count
+  showReminderBadge?: boolean; // For reminder count
 }
 
 function NavLink({
   item,
   isActive,
   collapsed,
+  badgeCount,
+  badgeColor = "red", // "red" for notifications, "amber" for reminders
 }: {
   item: NavItem;
   isActive: boolean;
   collapsed?: boolean;
+  badgeCount?: number;
+  badgeColor?: "red" | "amber";
 }) {
+  const badgeBgClass = badgeColor === "amber" ? "bg-amber-500" : "bg-red-500";
+
   return (
     <Link
       href={item.href}
@@ -74,15 +85,42 @@ function NavLink({
         collapsed ? "justify-center px-2" : "",
       )}
     >
-      <item.icon
-        className={cn(
-          "w-4 h-4 shrink-0 transition-colors",
-          isActive
-            ? "text-primary"
-            : "text-muted-foreground group-hover:text-foreground",
+      <div className="relative">
+        <item.icon
+          className={cn(
+            "w-4 h-4 shrink-0 transition-colors",
+            isActive
+              ? "text-primary"
+              : "text-muted-foreground group-hover:text-foreground",
+          )}
+        />
+        {collapsed && badgeCount && badgeCount > 0 && (
+          <span
+            className={cn(
+              "absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-medium text-white rounded-full",
+              badgeBgClass,
+            )}
+          >
+            {badgeCount > 9 ? "9+" : badgeCount}
+          </span>
         )}
-      />
-      {!collapsed && <span className="truncate">{item.title}</span>}
+      </div>
+      {!collapsed && (
+        <>
+          <span className="truncate flex-1">{item.title}</span>
+          {badgeCount && badgeCount > 0 && (
+            <Badge
+              className={cn(
+                "h-5 min-w-[20px] flex items-center justify-center px-1.5 text-[10px] text-white",
+                badgeBgClass,
+                `hover:${badgeBgClass}`,
+              )}
+            >
+              {badgeCount > 9 ? "9+" : badgeCount}
+            </Badge>
+          )}
+        </>
+      )}
     </Link>
   );
 }
@@ -375,8 +413,18 @@ function GlobalSidebar({
       icon: Activity,
       roles: ["admin"],
     },
-    { title: "Notifications", href: "/notifications", icon: Bell },
-    { title: "Reminders", href: "/reminders", icon: CalendarClock },
+    {
+      title: "Notifications",
+      href: "/notifications",
+      icon: Bell,
+      showBadge: true,
+    },
+    {
+      title: "Reminders",
+      href: "/reminders",
+      icon: CalendarClock,
+      showReminderBadge: true,
+    },
     { title: "Settings", href: "/settings", icon: Settings },
   ];
 
@@ -393,6 +441,26 @@ function GlobalSidebar({
     });
 
   const filteredGlobal = filterNav(globalItems);
+
+  // Fetch unread notification count for badge - use same key as header for shared cache
+  const { data: unreadData } = useSWR(
+    user ? "notifications-unread-count" : null,
+    () => notificationsApi.getUnreadCount().then((res) => res.data.data),
+    { refreshInterval: 30000 }, // Refresh every 30 seconds
+  );
+  const unreadCount = unreadData?.count || 0;
+
+  // Fetch today's pending reminders count
+  const today = new Date().toISOString().split("T")[0];
+  const { data: remindersData } = useSWR(
+    user ? ["sidebar-reminders-count", today] : null,
+    () =>
+      leadsApi
+        .getAllReminders({ date: today, status: "pending", limit: 100 })
+        .then((res) => res.data),
+    { refreshInterval: 60000 }, // Refresh every minute
+  );
+  const remindersCount = remindersData?.data?.length || 0;
 
   const getInitials = (name: string) => {
     return name
@@ -464,6 +532,14 @@ function GlobalSidebar({
               pathname === item.href ||
               (item.href !== "/" && pathname.startsWith(item.href))
             }
+            badgeCount={
+              item.showBadge
+                ? unreadCount
+                : item.showReminderBadge
+                  ? remindersCount
+                  : undefined
+            }
+            badgeColor={item.showReminderBadge ? "amber" : "red"}
           />
         ))}
 

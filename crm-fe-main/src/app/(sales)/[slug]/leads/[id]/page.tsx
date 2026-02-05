@@ -78,6 +78,7 @@ import {
   LeadReminderWidget,
   SetReminderButton,
 } from "@/components/leads/lead-reminder-widget";
+import { cn } from "@/lib/utils";
 
 const activityTypeIcons: Record<
   string,
@@ -168,6 +169,12 @@ export default function LeadDetailPage() {
     () => leadsApi.getComments(id as string).then((res) => res.data.data),
   );
 
+  // Fetch reminders for this lead
+  const { data: remindersData, mutate: mutateReminders } = useSWR(
+    id ? `lead-reminders-${id}` : null,
+    () => leadsApi.getReminders(id as string).then((res) => res.data.data),
+  );
+
   // Fetch users list for admin assignment - filter to sales department only
   const { data: usersData, isLoading: loadingUsers } = useSWR(
     isAdmin ? "users-list-sales" : null,
@@ -188,6 +195,30 @@ export default function LeadDetailPage() {
   const lead = leadData as Lead | undefined;
   const activities = (activitiesData || []) as LeadActivity[];
   const comments = (commentsData || []) as any[];
+
+  // Process reminders - show all reminders not marked as done
+  // This includes overdue reminders (where time has passed but user hasn't marked done)
+  const reminders = (remindersData || []) as any[];
+  const pendingReminders = reminders.filter((r: any) => !r.isDone);
+
+  // Check if a reminder is overdue (time has passed)
+  const isReminderOverdue = (reminderAt: string) => {
+    return new Date(reminderAt).getTime() < Date.now();
+  };
+
+  // Handle marking reminder as done
+  const handleMarkReminderDone = async (reminderId: string) => {
+    try {
+      await leadsApi.markReminderDone(reminderId);
+      toast.success("Reminder marked as done");
+      mutateReminders();
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.error?.message ||
+          "Failed to mark reminder as done",
+      );
+    }
+  };
 
   // Handle lead assignment/reassignment
   const handleAssign = async () => {
@@ -426,6 +457,74 @@ export default function LeadDetailPage() {
           </div>
         </div>
 
+        {/* Reminder Banner - Show if lead has pending reminders */}
+        {pendingReminders.length > 0 && (
+          <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Bell className="h-5 w-5 text-amber-600" />
+              <span className="font-semibold text-amber-800">
+                {pendingReminders.length} Active Reminder
+                {pendingReminders.length > 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {pendingReminders.map((reminder: any) => {
+                const isOverdue = isReminderOverdue(reminder.reminderAt);
+                return (
+                  <div
+                    key={reminder.id}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-md",
+                      isOverdue
+                        ? "bg-red-100 border border-red-300"
+                        : "bg-amber-100 border border-amber-300",
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Clock
+                        className={cn(
+                          "h-4 w-4",
+                          isOverdue ? "text-red-600" : "text-amber-600",
+                        )}
+                      />
+                      <div>
+                        <p
+                          className={cn(
+                            "font-medium text-sm",
+                            isOverdue ? "text-red-800" : "text-amber-800",
+                          )}
+                        >
+                          {isOverdue ? "OVERDUE: " : ""}
+                          {toLocaleStringIST(reminder.reminderAt)}
+                        </p>
+                        {reminder.note && (
+                          <p className="text-sm text-slate-600 mt-0.5">
+                            {reminder.note}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={cn(
+                        "shrink-0",
+                        isOverdue
+                          ? "border-red-400 text-red-700 hover:bg-red-200"
+                          : "border-amber-400 text-amber-700 hover:bg-amber-200",
+                      )}
+                      onClick={() => handleMarkReminderDone(reminder.id)}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Done
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Tabs: Info and Activities */}
         <Tabs defaultValue="info" className="space-y-4">
           <TabsList className="w-auto">
@@ -479,6 +578,29 @@ export default function LeadDetailPage() {
                           <span className="text-sm">{lead.country}</span>
                         </div>
                       )}
+                      {lead.website && (
+                        <div className="flex items-center gap-2">
+                          <Globe className="h-4 w-4 text-slate-400 shrink-0" />
+                          <a
+                            href={
+                              lead.website.startsWith("http")
+                                ? lead.website
+                                : `https://${lead.website}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline text-sm truncate"
+                          >
+                            {lead.website}
+                          </a>
+                        </div>
+                      )}
+                      {lead.timezone && (
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+                          <span className="text-sm">{lead.timezone}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Divider */}
@@ -488,9 +610,17 @@ export default function LeadDetailPage() {
                     <div className="space-y-2">
                       {lead.source && (
                         <div className="flex items-center gap-2">
-                          <Globe className="h-4 w-4 text-slate-400 shrink-0" />
+                          <User className="h-4 w-4 text-slate-400 shrink-0" />
                           <span className="capitalize text-sm">
                             Source: {lead.source.replace("_", " ")}
+                          </span>
+                        </div>
+                      )}
+                      {lead.leadType && (
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-slate-400 shrink-0" />
+                          <span className="capitalize text-sm">
+                            Type: {lead.leadType.replace("_", " ")}
                           </span>
                         </div>
                       )}
@@ -954,22 +1084,22 @@ function CommentItem({
   handleDeleteComment: (id: string) => void;
 }) {
   return (
-    <div className="flex gap-2 p-2 bg-slate-50 rounded-lg">
+    <div className="flex gap-3 p-3 bg-slate-50 rounded-lg">
       {/* Avatar */}
       <div className="flex-shrink-0">
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-xs">
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
           {comment.user?.fullName?.charAt(0) || "U"}
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-1">
-          <div className="min-w-0">
-            <span className="font-medium text-slate-900 text-xs block truncate">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <span className="font-medium text-slate-900 text-sm truncate">
               {comment.user?.fullName || "Unknown User"}
             </span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-xs text-slate-500">
               {toLocaleStringIST(comment.createdAt)}
             </span>
           </div>
@@ -980,21 +1110,21 @@ function CommentItem({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 w-6 p-0"
+                className="h-7 w-7 p-0"
                 onClick={() => {
                   setEditingCommentId(comment.id);
                   setEditingCommentContent(comment.content);
                 }}
               >
-                <Edit3 className="h-3 w-3 text-slate-500" />
+                <Edit3 className="h-3.5 w-3.5 text-slate-500" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 w-6 p-0"
+                className="h-7 w-7 p-0"
                 onClick={() => handleDeleteComment(comment.id)}
               >
-                <Trash2 className="h-3 w-3 text-red-500" />
+                <Trash2 className="h-3.5 w-3.5 text-red-500" />
               </Button>
             </div>
           )}
@@ -1007,12 +1137,12 @@ function CommentItem({
               value={editingCommentContent}
               onChange={(e) => setEditingCommentContent(e.target.value)}
               rows={2}
-              className="resize-none text-xs"
+              className="resize-none text-sm"
             />
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className="h-6 text-xs"
+                className="h-7 text-sm"
                 onClick={() => handleUpdateComment(comment.id)}
               >
                 Save
@@ -1020,7 +1150,7 @@ function CommentItem({
               <Button
                 size="sm"
                 variant="outline"
-                className="h-6 text-xs"
+                className="h-7 text-sm"
                 onClick={() => {
                   setEditingCommentId(null);
                   setEditingCommentContent("");
@@ -1031,7 +1161,7 @@ function CommentItem({
             </div>
           </div>
         ) : (
-          <p className="mt-1 text-slate-700 whitespace-pre-wrap text-xs">
+          <p className="mt-1.5 text-slate-700 whitespace-pre-wrap text-sm">
             {comment.content}
           </p>
         )}

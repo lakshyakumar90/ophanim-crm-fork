@@ -50,6 +50,7 @@ import {
   List,
   User,
   Users,
+  Bell,
 } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/leads/import-leads-dialog";
 import { BulkEditLeadsDialog } from "@/components/leads/bulk-edit-leads-dialog";
@@ -194,6 +195,13 @@ export default function LeadsPage() {
 
   const leadsWithReminders = new Set(
     (remindersData?.data || []).map((r: any) => r.leadId),
+  );
+
+  // Create a map of leadId -> hasOverdue for styling
+  const leadsWithOverdueReminders = new Set(
+    (remindersData?.data || [])
+      .filter((r: any) => new Date(r.reminderAt).getTime() < Date.now())
+      .map((r: any) => r.leadId),
   );
 
   const leads = data?.data || [];
@@ -626,10 +634,16 @@ export default function LeadsPage() {
                                   >
                                     <Card
                                       {...provided.dragHandleProps}
-                                      className={`cursor-grab hover:shadow-md transition-all hover:border-primary/50 ${
+                                      className={`cursor-grab hover:shadow-md transition-all ${
                                         snapshot.isDragging
                                           ? "shadow-lg rotate-2 scale-105"
                                           : ""
+                                      } ${
+                                        leadsWithOverdueReminders.has(lead.id)
+                                          ? "border-l-4 border-l-red-500 bg-red-50/30 dark:bg-red-950/10 hover:border-red-400"
+                                          : leadsWithReminders.has(lead.id)
+                                            ? "border-l-4 border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/10 hover:border-amber-400"
+                                            : "hover:border-primary/50"
                                       }`}
                                     >
                                       <CardContent className="p-3 space-y-1">
@@ -642,8 +656,21 @@ export default function LeadsPage() {
                                                 e.stopPropagation()
                                               }
                                             >
-                                              <div className="font-semibold text-sm truncate hover:text-primary">
+                                              <div className="font-semibold text-sm truncate hover:text-primary flex items-center gap-1">
                                                 {lead.leadName}
+                                                {leadsWithReminders.has(
+                                                  lead.id,
+                                                ) && (
+                                                  <Bell
+                                                    className={`h-3 w-3 shrink-0 ${
+                                                      leadsWithOverdueReminders.has(
+                                                        lead.id,
+                                                      )
+                                                        ? "text-red-500"
+                                                        : "text-amber-500"
+                                                    }`}
+                                                  />
+                                                )}
                                               </div>
                                             </Link>
                                             {lead.businessName && (
@@ -761,9 +788,11 @@ export default function LeadsPage() {
                         className={`cursor-pointer hover:bg-muted ${
                           selectedIds.includes(lead.id)
                             ? "bg-primary/5"
-                            : leadsWithReminders.has(lead.id)
-                              ? "bg-amber-50/50 hover:bg-amber-100/50 border-l-2 border-l-amber-500"
-                              : ""
+                            : leadsWithOverdueReminders.has(lead.id)
+                              ? "bg-red-50/50 hover:bg-red-100/50 border-l-2 border-l-red-500"
+                              : leadsWithReminders.has(lead.id)
+                                ? "bg-amber-50/50 hover:bg-amber-100/50 border-l-2 border-l-amber-500"
+                                : ""
                         }`}
                         onClick={() => router.push(`/${slug}/leads/${lead.id}`)}
                       >

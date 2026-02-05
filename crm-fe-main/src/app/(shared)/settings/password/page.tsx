@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { settingsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -81,7 +82,7 @@ export default function ChangePasswordPage() {
       router.push("/settings");
     } catch (error: any) {
       toast.error(
-        error.response?.data?.error?.message || "Failed to change password"
+        error.response?.data?.error?.message || "Failed to change password",
       );
     } finally {
       setIsSubmitting(false);
@@ -186,9 +187,8 @@ export default function ChangePasswordPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input
+                <PasswordInput
                   id="newPassword"
-                  type="password"
                   placeholder="Enter new password"
                   {...register("newPassword")}
                 />
@@ -201,9 +201,8 @@ export default function ChangePasswordPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input
+                <PasswordInput
                   id="confirmPassword"
-                  type="password"
                   placeholder="Confirm new password"
                   {...register("confirmPassword")}
                 />

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { emailApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -54,7 +55,7 @@ export default function EmailSettingsForm() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data, isLoading, mutate } = useSWR("email-settings", () =>
-    emailApi.getSettings().then((res) => res.data.data)
+    emailApi.getSettings().then((res) => res.data.data),
   );
 
   const settings = data;
@@ -109,7 +110,7 @@ export default function EmailSettingsForm() {
       mutate();
     } catch (error: any) {
       toast.error(
-        error.response?.data?.error?.message || "Failed to save settings"
+        error.response?.data?.error?.message || "Failed to save settings",
       );
     } finally {
       setIsSubmitting(false);
@@ -130,7 +131,7 @@ export default function EmailSettingsForm() {
       mutate();
     } catch (error: any) {
       toast.error(
-        error.response?.data?.error?.message || "Connection test failed"
+        error.response?.data?.error?.message || "Connection test failed",
       );
     } finally {
       setIsTesting(false);
@@ -259,9 +260,8 @@ export default function EmailSettingsForm() {
               <Label htmlFor="smtpPassword">
                 {emailType === "gmail" ? "App Password" : "Password"}
               </Label>
-              <Input
+              <PasswordInput
                 id="smtpPassword"
-                type="password"
                 placeholder={
                   emailType === "gmail"
                     ? "Your 16-character app password"

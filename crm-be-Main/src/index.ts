@@ -32,6 +32,7 @@ import financeRoutes from "./routes/finance.routes.js";
 import searchRoutes from "./routes/search.routes.js";
 import projectsRoutes from "./routes/projects.routes.js";
 import hrRoutes from "./routes/hr.routes.js";
+import cronRoutes from "./routes/cron.routes.js";
 
 // Create Express app
 const app: Application = express();
@@ -98,6 +99,7 @@ app.use(`${API_PREFIX}/finance`, financeRoutes);
 app.use(`${API_PREFIX}/search`, searchRoutes);
 app.use(`${API_PREFIX}/projects`, projectsRoutes);
 app.use(`${API_PREFIX}/hr`, hrRoutes);
+app.use(`${API_PREFIX}/cron`, cronRoutes);
 
 // 404 handler
 app.use(notFoundMiddleware);

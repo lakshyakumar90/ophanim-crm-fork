@@ -9,6 +9,7 @@ import { settingsApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -115,7 +116,7 @@ export function SecurityForm() {
       reset();
     } catch (error: any) {
       toast.error(
-        error.response?.data?.error?.message || "Failed to change password"
+        error.response?.data?.error?.message || "Failed to change password",
       );
     } finally {
       setIsSubmitting(false);
@@ -130,7 +131,7 @@ export function SecurityForm() {
       setQrCodeData(response.data);
     } catch (error: any) {
       toast.error(
-        error.response?.data?.error?.message || "Failed to setup 2FA"
+        error.response?.data?.error?.message || "Failed to setup 2FA",
       );
     } finally {
       setIsSettingUp2FA(false);
@@ -172,7 +173,7 @@ export function SecurityForm() {
       await refreshUser();
     } catch (error: any) {
       toast.error(
-        error.response?.data?.error?.message || "Failed to disable 2FA"
+        error.response?.data?.error?.message || "Failed to disable 2FA",
       );
     } finally {
       setIsDisabling(false);
@@ -245,11 +246,7 @@ export function SecurityForm() {
 
               <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  {...register("newPassword")}
-                />
+                <PasswordInput id="newPassword" {...register("newPassword")} />
                 {errors.newPassword && (
                   <p className="text-sm text-red-500">
                     {errors.newPassword.message}
@@ -259,9 +256,8 @@ export function SecurityForm() {
 
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input
+                <PasswordInput
                   id="confirmPassword"
-                  type="password"
                   {...register("confirmPassword")}
                 />
                 {errors.confirmPassword && (
@@ -331,8 +327,7 @@ export function SecurityForm() {
                       <div className="space-y-4 py-4">
                         <div className="space-y-2">
                           <Label>Password</Label>
-                          <Input
-                            type="password"
+                          <PasswordInput
                             value={disablePassword}
                             onChange={(e) => setDisablePassword(e.target.value)}
                             placeholder="Enter your password"

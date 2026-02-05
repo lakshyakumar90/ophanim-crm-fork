@@ -12,6 +12,7 @@ import { useIsAdmin } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -554,9 +555,8 @@ export default function EditUserPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="newPassword">New Password</Label>
-            <Input
+            <PasswordInput
               id="newPassword"
-              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Enter new password"
@@ -564,9 +564,8 @@ export default function EditUserPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <Input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirm new password"
@@ -666,8 +665,7 @@ export default function EditUserPage() {
 
           <div className="space-y-2">
             <Label>{emailType === "gmail" ? "App Password" : "Password"}</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={smtpPassword}
               onChange={(e) => setSmtpPassword(e.target.value)}
               placeholder={

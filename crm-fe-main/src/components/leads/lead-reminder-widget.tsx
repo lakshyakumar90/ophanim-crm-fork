@@ -25,8 +25,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Bell, Plus, Trash2, Clock, Loader2, Calendar } from "lucide-react";
+import {
+  Bell,
+  Plus,
+  Trash2,
+  Clock,
+  Loader2,
+  Calendar,
+  Check,
+} from "lucide-react";
 import { formatIST } from "@/lib/date-utils";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 interface LeadReminderWidgetProps {
   leadId: string;
@@ -39,6 +49,7 @@ interface Reminder {
   reminderAt: string;
   note: string | null;
   isSent: boolean;
+  isDone: boolean;
   createdAt: string;
 }
 
@@ -153,8 +164,26 @@ export function LeadReminderWidget({ leadId }: LeadReminderWidgetProps) {
     }
   };
 
+  const handleMarkDone = async (reminderId: string) => {
+    try {
+      await leadsApi.markReminderDone(reminderId);
+      toast.success("Reminder marked as done");
+      mutate();
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.error?.message ||
+          "Failed to mark reminder as done",
+      );
+    }
+  };
+
+  const isOverdue = (reminderAt: string) => {
+    return new Date(reminderAt).getTime() < Date.now();
+  };
+
+  // Include overdue reminders (not just future ones)
   const pendingReminders = (reminders || []).filter(
-    (r: Reminder) => !r.isSent && new Date(r.reminderAt) > new Date(),
+    (r: Reminder) => !r.isSent && !r.isDone,
   );
 
   const today = new Date().toISOString().split("T")[0];
@@ -327,32 +356,77 @@ export function LeadReminderWidget({ leadId }: LeadReminderWidgetProps) {
           </p>
         ) : (
           <div className="space-y-2">
-            {pendingReminders.map((reminder: Reminder) => (
-              <div
-                key={reminder.id}
-                className="flex items-start justify-between gap-2 p-3 bg-white dark:bg-slate-900 rounded-lg border"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 text-sm font-medium">
-                    <Clock className="h-3.5 w-3.5 text-primary" />
-                    {formatIST(reminder.reminderAt, "EEE, MMM d 'at' h:mm a")}
-                  </div>
-                  {reminder.note && (
-                    <p className="text-xs text-muted-foreground mt-1 truncate">
-                      {reminder.note}
-                    </p>
+            {pendingReminders.map((reminder: Reminder) => {
+              const overdue = isOverdue(reminder.reminderAt);
+              return (
+                <div
+                  key={reminder.id}
+                  className={cn(
+                    "flex items-start justify-between gap-2 p-3 rounded-lg border",
+                    overdue
+                      ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+                      : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
                   )}
-                </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDeleteReminder(reminder.id)}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                      <Clock
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          overdue ? "text-red-600" : "text-amber-600",
+                        )}
+                      />
+                      <span
+                        className={overdue ? "text-red-700" : "text-amber-700"}
+                      >
+                        {formatIST(
+                          reminder.reminderAt,
+                          "EEE, MMM d 'at' h:mm a",
+                        )}
+                      </span>
+                      {overdue && (
+                        <Badge
+                          variant="destructive"
+                          className="text-[10px] px-1.5 py-0"
+                        >
+                          Overdue
+                        </Badge>
+                      )}
+                    </div>
+                    {reminder.note && (
+                      <p className="text-xs text-muted-foreground mt-1 truncate">
+                        {reminder.note}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className={cn(
+                        "h-7 w-7",
+                        overdue
+                          ? "text-red-600 hover:bg-red-200 dark:hover:bg-red-900"
+                          : "text-amber-600 hover:bg-amber-200 dark:hover:bg-amber-900",
+                      )}
+                      onClick={() => handleMarkDone(reminder.id)}
+                      title="Mark as Done"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDeleteReminder(reminder.id)}
+                      title="Delete Reminder"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </CardContent>

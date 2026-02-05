@@ -29,11 +29,11 @@ export function Header() {
   // Track the last theme value synced from DB to prevent reverting optimistic updates
   const syncedThemeRef = useRef<string | null>(null);
 
-  // Fetch unread count
+  // Fetch unread count - use same key as sidebar for shared cache
   const { data: unreadData, mutate } = useSWR(
-    user ? "notifications-unread" : null,
+    user ? "notifications-unread-count" : null,
     () => notificationsApi.getUnreadCount().then((res) => res.data.data),
-    { refreshInterval: 0 }, // No polling
+    { refreshInterval: 30000 }, // Refresh every 30 seconds to stay in sync
   );
 
   // Sync theme with user preference on load
@@ -114,7 +114,7 @@ export function Header() {
           variant="ghost"
           size="icon"
           className="text-muted-foreground hover:bg-accent mr-1"
-          onClick={() => mutate(user ? "notifications-unread" : null)}
+          onClick={() => mutate("notifications-unread-count")}
           title="Refresh Notifications"
         >
           <RefreshCw className="h-4 w-4" />

@@ -251,7 +251,6 @@ export const leadsApi = {
     api.put(`/leads/${leadId}/comments/${commentId}`, { content }),
   deleteComment: (leadId: string, commentId: string) =>
     api.delete(`/leads/${leadId}/comments/${commentId}`),
-  // Reminders
   getAllReminders: (params?: {
     page?: number;
     limit?: number;
@@ -266,6 +265,8 @@ export const leadsApi = {
     api.post(`/leads/${id}/reminders`, { reminderAt, note }),
   deleteReminder: (leadId: string, reminderId: string) =>
     api.delete(`/leads/${leadId}/reminders/${reminderId}`),
+  markReminderDone: (reminderId: string) =>
+    api.patch(`/leads/reminders/${reminderId}/done`),
 };
 
 export const tasksApi = {

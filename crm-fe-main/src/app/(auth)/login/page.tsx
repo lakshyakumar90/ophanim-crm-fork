@@ -12,6 +12,7 @@ import { authApi, tokens, twoFactorApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -245,10 +246,9 @@ const LoginForm = () => {
               Password
             </Label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10" />
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="••••••••"
                 className="pl-10 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500"
                 {...register("password")}
