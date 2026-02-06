@@ -46,7 +46,7 @@ router.post(
   bulkOperationRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
-    const { csvData, assignTo } = req.body;
+    const { csvData, assignTo, status } = req.body;
 
     if (!csvData) {
       throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "CSV data is required");
@@ -57,6 +57,7 @@ router.post(
       authReq.user.id,
       assignTo,
       authReq.user.departmentId,
+      status,
     );
 
     sendCreated(res, result);
@@ -83,14 +84,17 @@ router.get(
       assignedTo: req.query["assignedTo"] as string | undefined,
       startDate: req.query["startDate"] as string | undefined,
       endDate: req.query["endDate"] as string | undefined,
+      removeAfterExport: req.query["removeAfterExport"] === "true",
     };
 
-    const csv = await csvService.exportLeads(authReq.user, filters);
+    const result = await csvService.exportLeads(authReq.user, filters);
 
     const filename = `leads_export_${getTodayIST()}.csv`;
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-    res.send(csv);
+    res.setHeader("X-Exported-Count", result.exportedCount.toString());
+    res.setHeader("X-Removed-Count", result.removedCount.toString());
+    res.send(result.csv);
   }),
 );
 

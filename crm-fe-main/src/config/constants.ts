@@ -21,6 +21,7 @@ export type UserRole = (typeof USER_ROLES)[keyof typeof USER_ROLES];
 export const LEAD_STATUSES = {
   FRESH_LEAD: "fresh_lead",
   HOT_LEAD: "hot_lead",
+  COLD_LEAD: "cold_lead",
   MEETING_SCHEDULED: "meeting_scheduled",
   DID_NOT_PICK: "did_not_pick",
   FOLLOW_UP: "follow_up",
@@ -36,6 +37,7 @@ export type LeadStatus = (typeof LEAD_STATUSES)[keyof typeof LEAD_STATUSES];
 export const LEAD_STATUS_ORDER: LeadStatus[] = [
   "fresh_lead",
   "hot_lead",
+  "cold_lead",
   "meeting_scheduled",
   "did_not_pick",
   "follow_up",
@@ -60,6 +62,7 @@ export const LEAD_STATUS_CONFIG: StatusConfig[] = [
     color: "bg-blue-100 text-blue-700",
   },
   { value: "hot_lead", label: "Hot Lead", color: "bg-red-100 text-red-700" },
+  { value: "cold_lead", label: "Cold Lead", color: "bg-sky-100 text-sky-700" },
   {
     value: "meeting_scheduled",
     label: "Meeting Scheduled",

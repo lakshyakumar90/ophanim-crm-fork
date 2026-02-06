@@ -157,15 +157,40 @@ export async function getLeads(
     )
     .eq("is_deleted", false);
 
-  // Role-based filtering with department security
+  // Role-based filtering with team security
+  console.log(
+    `[getLeads] Role: ${authUser.role}, TeamId: ${authUser.teamId}, UserId: ${authUser.id}`,
+  );
+
   if (authUser.role === USER_ROLES.EMPLOYEE) {
     // Employees see only their assigned leads
     baseQuery = baseQuery.eq("assigned_to", authUser.id);
-  } else if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
-    // Managers see leads in their department OR leads assigned directly to them
-    baseQuery = baseQuery.or(
-      `department_id.eq.${authUser.departmentId},assigned_to.eq.${authUser.id}`,
-    );
+  } else if (authUser.role === USER_ROLES.MANAGER) {
+    // Managers see their own leads + leads assigned to their team members
+    if (authUser.teamId) {
+      // Get all users in the manager's team
+      const { data: teamUsers } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("team_id", authUser.teamId);
+
+      const teamUserIds = (teamUsers || []).map((u: { id: string }) => u.id);
+      // Make sure manager's own ID is included
+      if (!teamUserIds.includes(authUser.id)) {
+        teamUserIds.push(authUser.id);
+      }
+
+      console.log(
+        `[getLeads] Manager team users: ${teamUserIds.length}, filtering by assigned_to`,
+      );
+      baseQuery = baseQuery.in("assigned_to", teamUserIds);
+    } else {
+      console.log(
+        `[getLeads] Manager without team, filtering by assigned_to only`,
+      );
+      // Manager without team only sees their own assigned leads
+      baseQuery = baseQuery.eq("assigned_to", authUser.id);
+    }
   }
   // Admins see all leads (no filter)
 
@@ -664,11 +689,23 @@ export async function getLeadPipeline(
 
   if (authUser.role === USER_ROLES.EMPLOYEE) {
     query = query.eq("assigned_to", authUser.id);
-  } else if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
-    // Managers see leads in their department OR leads assigned to them
-    query = query.or(
-      `department_id.eq.${authUser.departmentId},assigned_to.eq.${authUser.id}`,
-    );
+  } else if (authUser.role === USER_ROLES.MANAGER) {
+    // Managers see leads assigned to their team members
+    if (authUser.teamId) {
+      const { data: teamUsers } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("team_id", authUser.teamId);
+
+      const teamUserIds = (teamUsers || []).map((u: { id: string }) => u.id);
+      if (!teamUserIds.includes(authUser.id)) {
+        teamUserIds.push(authUser.id);
+      }
+      query = query.in("assigned_to", teamUserIds);
+    } else {
+      // Manager without team only sees their own assigned leads
+      query = query.eq("assigned_to", authUser.id);
+    }
   }
   // Admins see all leads in pipeline
 
@@ -687,6 +724,130 @@ export async function getLeadPipeline(
   }
 
   return pipeline;
+}
+
+/**
+ * Get lead counts by user for filtering
+ * Returns users with their lead counts based on role
+ */
+export async function getLeadCountsByUser(authUser: AuthUser): Promise<{
+  users: Array<{
+    id: string;
+    fullName: string;
+    role: string;
+    teamId: string | null;
+    teamName: string | null;
+    leadCount: number;
+  }>;
+  unassignedCount: number;
+}> {
+  // Manager Restriction: If manager has no team, they shouldn't see any dropdown options
+  if (authUser.role === USER_ROLES.MANAGER && !authUser.teamId) {
+    return { users: [], unassignedCount: 0 };
+  }
+
+  // Get "Sales" department ID to filter users
+  const { data: salesDept } = await supabaseAdmin
+    .from("departments")
+    .select("id")
+    .eq("name", "Sales")
+    .single();
+
+  // Get users based on role
+  let usersQuery = supabaseAdmin
+    .from("users")
+    .select("id, full_name, role, team_id")
+    .eq("is_active", true);
+
+  if (salesDept) {
+    usersQuery = usersQuery.eq("department_id", salesDept.id);
+  }
+
+  if (authUser.role === USER_ROLES.MANAGER && authUser.teamId) {
+    // Manager sees only users in their team
+    usersQuery = usersQuery.eq("team_id", authUser.teamId);
+  } else if (authUser.role === USER_ROLES.EMPLOYEE) {
+    // Employee sees only themselves
+    usersQuery = usersQuery.eq("id", authUser.id);
+  }
+  // Admin sees all users (but limited to Sales department above)
+
+  const { data: usersData, error: usersError } = await usersQuery;
+
+  if (usersError) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersError.message);
+  }
+
+  // Get team names separately to avoid ambiguous relationship error
+  // (users.team_id -> teams.id AND teams.manager_id -> users.id)
+  const teamIds = [
+    ...new Set((usersData || []).map((u: any) => u.team_id).filter(Boolean)),
+  ];
+
+  let teamMap: Record<string, string> = {};
+  if (teamIds.length > 0) {
+    const { data: teamsData } = await supabaseAdmin
+      .from("teams")
+      .select("id, name")
+      .in("id", teamIds);
+
+    if (teamsData) {
+      teamMap = teamsData.reduce((acc: any, team: any) => {
+        acc[team.id] = team.name;
+        return acc;
+      }, {});
+    }
+  }
+
+  // Get lead counts for each user
+  const userIds = (usersData || []).map((u: any) => u.id);
+
+  // Get all leads assigned to these users
+  const { data: leadsData, error: leadsError } = await supabaseAdmin
+    .from("leads")
+    .select("assigned_to")
+    .eq("is_deleted", false)
+    .in("assigned_to", userIds.length > 0 ? userIds : ["_none_"])
+    .limit(100000); // Increase limit to ensure accurate counts (default is 1000)
+
+  if (leadsError) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, leadsError.message);
+  }
+
+  // Count leads per user
+  const leadCounts: Record<string, number> = {};
+  for (const lead of leadsData || []) {
+    const assignedTo = (lead as { assigned_to: string | null }).assigned_to;
+    if (assignedTo) {
+      leadCounts[assignedTo] = (leadCounts[assignedTo] || 0) + 1;
+    }
+  }
+
+  // Get unassigned count (admin only)
+  let unassignedCount = 0;
+  if (authUser.role === USER_ROLES.ADMIN) {
+    const { count } = await supabaseAdmin
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("is_deleted", false)
+      .is("assigned_to", null);
+    unassignedCount = count || 0;
+  }
+
+  // Map users with their lead counts
+  const users = (usersData || []).map((u: any) => ({
+    id: u.id,
+    fullName: u.full_name,
+    role: u.role,
+    teamId: u.team_id,
+    teamName: (u.team_id ? teamMap[u.team_id] : null) || null,
+    leadCount: leadCounts[u.id] || 0,
+  }));
+
+  // Sort by lead count descending
+  users.sort((a, b) => b.leadCount - a.leadCount);
+
+  return { users, unassignedCount };
 }
 
 /**
@@ -711,11 +872,23 @@ export async function getWonLeads(authUser: AuthUser): Promise<
   // Role-based filtering
   if (authUser.role === USER_ROLES.EMPLOYEE) {
     query = query.eq("assigned_to", authUser.id);
-  } else if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
-    // Managers see won leads in their department OR won leads assigned to them
-    query = query.or(
-      `department_id.eq.${authUser.departmentId},assigned_to.eq.${authUser.id}`,
-    );
+  } else if (authUser.role === USER_ROLES.MANAGER) {
+    // Managers see won leads assigned to their team members
+    if (authUser.teamId) {
+      const { data: teamUsers } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("team_id", authUser.teamId);
+
+      const teamUserIds = (teamUsers || []).map((u: { id: string }) => u.id);
+      if (!teamUserIds.includes(authUser.id)) {
+        teamUserIds.push(authUser.id);
+      }
+      query = query.in("assigned_to", teamUserIds);
+    } else {
+      // Manager without team only sees their own assigned leads
+      query = query.eq("assigned_to", authUser.id);
+    }
   }
   // Admins see all won leads
 

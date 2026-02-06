@@ -267,6 +267,8 @@ export const leadsApi = {
     api.delete(`/leads/${leadId}/reminders/${reminderId}`),
   markReminderDone: (reminderId: string) =>
     api.patch(`/leads/reminders/${reminderId}/done`),
+  // Stats for filtering
+  getStatsByUser: () => api.get("/leads/stats/by-user"),
 };
 
 export const tasksApi = {
@@ -372,8 +374,8 @@ export const dashboardApi = {
 
 export const csvApi = {
   getTemplate: () => api.get("/csv/leads/template", { responseType: "blob" }),
-  importLeads: (csvData: string, assignTo?: string) =>
-    api.post("/csv/leads/import", { csvData, assignTo }),
+  importLeads: (csvData: string, assignTo?: string, status?: string) =>
+    api.post("/csv/leads/import", { csvData, assignTo, status }),
   exportLeads: (params?: Record<string, unknown>) =>
     api.get("/csv/leads/export", { params, responseType: "blob" }),
 };

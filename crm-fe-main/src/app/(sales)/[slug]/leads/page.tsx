@@ -45,6 +45,7 @@ import {
   Pencil,
   MoreHorizontal,
   Upload,
+  Download,
   X,
   LayoutGrid,
   List,
@@ -53,6 +54,7 @@ import {
   Bell,
 } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/leads/import-leads-dialog";
+import { ExportLeadsDialog } from "@/components/leads/export-leads-dialog";
 import { BulkEditLeadsDialog } from "@/components/leads/bulk-edit-leads-dialog";
 import {
   DropdownMenu,
@@ -104,10 +106,11 @@ const DEFAULT_COLUMNS = [
   "createdAt",
 ];
 
-// Kanban status columns - the 8 statuses to show
+// Kanban status columns - the statuses to show
 const KANBAN_STATUSES: LeadStatus[] = [
   "fresh_lead",
   "hot_lead",
+  "cold_lead",
   "did_not_pick",
   "follow_up",
   "meeting_scheduled",
@@ -127,9 +130,15 @@ export default function LeadsPage() {
     searchParams.get("status") || "all",
   );
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50); // Default to 50 for bulk operations
   const [visibleColumns, setVisibleColumns] =
     useState<string[]>(DEFAULT_COLUMNS);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  // Kanban pagination - limit leads per status column
+  const [statusLimits, setStatusLimits] = useState<Record<string, number>>(
+    Object.fromEntries(KANBAN_STATUSES.map((s) => [s, 100])),
+  );
   // Admins and managers can choose view mode, employees see Kanban only
   const [viewMode, setViewMode] = useState<"table" | "kanban">(
     isAdmin || isManager ? "table" : "kanban",
@@ -158,23 +167,49 @@ export default function LeadsPage() {
     "all" | "assigned" | "unassigned"
   >("all");
 
+  // User filter state (Admin/Manager, table view only)
+  const [assignedToUserId, setAssignedToUserId] = useState<string>("all");
+
   // Fetch users for assignment (Admin only)
   const { data: usersData } = useSWR(isAdmin ? "users-list" : null, () =>
     usersApi.list({ limit: 100 }).then((res) => res.data),
   );
   const users = usersData?.data || [];
 
+  // Fetch user stats for filtering (Admin/Manager with team)
+  const { data: userStatsData } = useSWR(
+    (isAdmin || isManager) && viewMode === "table" ? "leads-user-stats" : null,
+    () => leadsApi.getStatsByUser().then((res) => res.data?.data),
+  );
+  const userStats = userStatsData || { users: [], unassignedCount: 0 };
+
   const { data, isLoading, error, mutate } = useSWR(
-    ["leads", page, status, viewMode, assignmentFilter],
+    [
+      "leads",
+      page,
+      pageSize,
+      status,
+      viewMode,
+      assignmentFilter,
+      assignedToUserId,
+    ],
     () =>
       leadsApi
         .list({
           page,
-          limit: viewMode === "kanban" ? 500 : 10, // Get more leads for Kanban view
+          limit: viewMode === "kanban" ? 500 : pageSize, // Use pageSize for table view
           status: status !== "all" ? status : undefined,
           assigned:
             viewMode === "table" && assignmentFilter !== "all"
               ? assignmentFilter
+              : viewMode === "table" && assignedToUserId === "_unassigned"
+                ? "unassigned"
+                : undefined,
+          assignedTo:
+            viewMode === "table" &&
+            assignedToUserId !== "all" &&
+            assignedToUserId !== "_unassigned"
+              ? assignedToUserId
               : undefined,
         })
         .then((res) => res.data),
@@ -325,9 +360,26 @@ export default function LeadsPage() {
     }
   };
 
-  // Group leads by status for Kanban view
+  // Group leads by status for Kanban view (with pagination limits)
   const getLeadsByStatus = (statusValue: LeadStatus) => {
-    return leads.filter((lead: Lead) => lead.status === statusValue);
+    const allForStatus = leads.filter(
+      (lead: Lead) => lead.status === statusValue,
+    );
+    const limit = statusLimits[statusValue] || 100;
+    return allForStatus.slice(0, limit);
+  };
+
+  // Get total count for a status
+  const getTotalCountByStatus = (statusValue: LeadStatus) => {
+    return leads.filter((lead: Lead) => lead.status === statusValue).length;
+  };
+
+  // Load more leads for a status
+  const loadMoreForStatus = (statusValue: LeadStatus) => {
+    setStatusLimits((prev) => ({
+      ...prev,
+      [statusValue]: (prev[statusValue] || 100) + 100,
+    }));
   };
 
   // Handle drag end - update lead status
@@ -395,6 +447,12 @@ export default function LeadsPage() {
       <ImportLeadsDialog
         open={isImportOpen}
         onOpenChange={setIsImportOpen}
+        onSuccess={() => mutate()}
+      />
+
+      <ExportLeadsDialog
+        open={isExportOpen}
+        onOpenChange={setIsExportOpen}
         onSuccess={() => mutate()}
       />
 
@@ -473,6 +531,10 @@ export default function LeadsPage() {
                 <Upload className="w-4 h-4 mr-2" />
                 Import
               </Button>
+              <Button variant="outline" onClick={() => setIsExportOpen(true)}>
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
               <Button
                 onClick={() => router.push(`/${slug}/leads/new`)}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -525,12 +587,41 @@ export default function LeadsPage() {
       {viewMode === "table" && (
         <div className="p-4 flex items-center justify-end">
           <div className="flex flex-col sm:flex-row gap-4">
+            {/* User Filter - Admin/Manager with team */}
+            {(isAdmin || (isManager && userStats.users.length > 0)) && (
+              <Select
+                value={assignedToUserId}
+                onValueChange={(v) => {
+                  setAssignedToUserId(v);
+                  setAssignmentFilter("all"); // Reset assignment filter when selecting user
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectValue placeholder="Filter by User" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  <SelectItem value="all">All Users</SelectItem>
+                  {isAdmin && userStats.unassignedCount > 0 && (
+                    <SelectItem value="_unassigned">
+                      Unassigned ({userStats.unassignedCount})
+                    </SelectItem>
+                  )}
+                  {userStats.users.map((user: any) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.fullName} ({user.leadCount})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {/* Assignment Filter - Admin only */}
             {isAdmin && (
               <Select
                 value={assignmentFilter}
                 onValueChange={(v: "all" | "assigned" | "unassigned") => {
                   setAssignmentFilter(v);
+                  setAssignedToUserId("all"); // Reset user filter when changing assignment
                   setPage(1);
                 }}
               >
@@ -592,7 +683,12 @@ export default function LeadsPage() {
                         {statusConfig?.label || getStatusLabel(statusValue)}
                       </div>
                       <div className="text-center text-sm opacity-80">
-                        ({statusLeads.length})
+                        ({statusLeads.length}
+                        {getTotalCountByStatus(statusValue) >
+                          statusLeads.length && (
+                          <span> / {getTotalCountByStatus(statusValue)}</span>
+                        )}
+                        )
                       </div>
                     </div>
 
@@ -724,6 +820,22 @@ export default function LeadsPage() {
                               Drop leads here
                             </div>
                           )}
+                          {/* Load More Button */}
+                          {!isLoading &&
+                            getTotalCountByStatus(statusValue) >
+                              statusLeads.length && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full mt-2"
+                                onClick={() => loadMoreForStatus(statusValue)}
+                              >
+                                Load More (
+                                {getTotalCountByStatus(statusValue) -
+                                  statusLeads.length}{" "}
+                                remaining)
+                              </Button>
+                            )}
                         </div>
                       )}
                     </Droppable>
@@ -861,30 +973,56 @@ export default function LeadsPage() {
           </Card>
 
           {/* Pagination */}
-          {meta && meta.totalPages > 1 && (
+          {meta && (
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Showing {(meta.page - 1) * meta.limit + 1} to{" "}
-                {Math.min(meta.page * meta.limit, meta.total)} of {meta.total}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!meta.hasPrevPage}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!meta.hasNextPage}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+              <div className="flex items-center gap-4">
+                <p className="text-sm text-muted-foreground">
+                  Showing{" "}
+                  {meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1} to{" "}
+                  {Math.min(meta.page * meta.limit, meta.total)} of {meta.total}
+                </p>
+                {/* Page Size Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Rows:</span>
+                  <Select
+                    value={pageSize.toString()}
+                    onValueChange={(val) => {
+                      setPageSize(Number(val));
+                      setPage(1); // Reset to first page when changing page size
+                    }}
+                  >
+                    <SelectTrigger className="w-fit h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              {meta.totalPages > 1 && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!meta.hasPrevPage}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!meta.hasNextPage}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </>

@@ -41,7 +41,6 @@ interface CsvLeadRow {
   nal_reason?: string;
   client_response?: string;
   lead_type?: string;
-  profession?: string;
   created?: string;
 }
 
@@ -132,30 +131,38 @@ function validateLeadRow(
 
   let email = (row.email || leadEmailField)?.trim();
   let leadName = row.lead_name || row.leadName;
+  let businessName = row.business_name;
 
-  // Attempt to extract name from email if name is missing but email exists
-  if (!leadName && email) {
-    if (isValidEmail(email)) {
-      leadName = email.split("@")[0];
+  // Helper to check if value is empty or NA
+  const isEmptyOrNA = (val: string | undefined | null): boolean => {
+    if (!val) return true;
+    const trimmed = val.trim().toLowerCase();
+    return (
+      trimmed === "" || trimmed === "na" || trimmed === "n/a" || trimmed === "-"
+    );
+  };
+
+  // Extract website name for fallback - USE AS IS (no parsing)
+  let websiteName: string | null = null;
+  if (row.website) {
+    websiteName = row.website.trim();
+  }
+
+  // Handle lead_name fallback
+  if (isEmptyOrNA(leadName)) {
+    if (websiteName && !isEmptyOrNA(websiteName)) {
+      leadName = websiteName;
     } else {
-      // If the field isn't an email, treat it as the name if we extracted it from "Lead / Email"
-      if (!row.email && leadEmailField) {
-        leadName = leadEmailField;
-        email = undefined; // It wasn't an email
-      }
+      leadName = "Unknown Lead";
     }
   }
 
-  // Fallback if still no name
-  if (!leadName || leadName.trim().length === 0) {
-    if (email)
-      leadName = email.split("@")[0]; // Last resort
-    else leadName = "Unknown Lead";
+  // Handle business_name fallback - use website if empty or NA
+  if (isEmptyOrNA(businessName) && websiteName && !isEmptyOrNA(websiteName)) {
+    businessName = websiteName;
   }
 
   if (email && !isValidEmail(email)) {
-    // Soft fail: if email is invalid, just clear it but keep the lead if name exists
-    // OR return error. Let's return error to be safe as per previous logic.
     return { valid: false, error: `Row ${rowIndex}: Invalid email format` };
   }
 
@@ -172,6 +179,8 @@ function validateLeadRow(
       lost: "not_interested",
       on_hold: "future_lead",
       unqualified: "not_a_lead",
+      // Map cold_lead to fresh_lead until DB migration is applied
+      cold_lead: "fresh_lead",
     };
     const mappedStatus = statusMap[status];
     if (!mappedStatus) {
@@ -199,16 +208,17 @@ function validateLeadRow(
     valid: true,
     data: {
       lead_name: leadName?.trim(),
-      business_name: row.business_name?.trim() || null,
+      business_name: isEmptyOrNA(businessName) ? null : businessName?.trim(),
       email: email?.toLowerCase() || null,
-      phone: row.phone?.trim() || null,
+      phone: row.phone?.trim().substring(0, 20) || null,
       alternate_phone:
-        (row.alternate_phone || row.alternatePhone)?.trim() || null,
+        (row.alternate_phone || row.alternatePhone)?.trim().substring(0, 20) ||
+        null,
       address: row.address?.trim() || null,
       city: row.city?.trim() || null,
       state: row.state?.trim() || null,
       country: row.country?.trim() || null,
-      pincode: row.pincode?.trim() || null,
+      pincode: row.pincode?.trim().substring(0, 20) || null,
       status,
       source: source || null,
       lead_value: parsedValue,
@@ -221,14 +231,13 @@ function validateLeadRow(
             .split(",")
             .map((t) => t.trim())
             .filter(Boolean)
+            .join(", ")
         : null,
       // Additional lead fields
       timezone: row.timezone?.trim() || null,
       nal_reason: row.nal_reason?.trim() || null,
       client_response: row.client_response?.trim() || null,
       lead_type: row.lead_type?.trim() || null,
-      // Optional custom field
-      profession: row.profession?.trim() || null,
     },
   };
 }
@@ -241,6 +250,7 @@ export async function importLeads(
   createdBy: string,
   assignTo?: string,
   departmentId?: string | null,
+  defaultStatus?: string,
 ): Promise<ImportResult> {
   const rows = parseCsv(csvContent);
 
@@ -271,8 +281,16 @@ export async function importLeads(
       result.errors.push({ row: i + 2, error: validation.error! });
       console.log(`Row ${i + 2} validation failed:`, validation.error);
     } else {
+      // Override status if defaultStatus is provided
+      const leadData = validation.data!;
+      if (
+        defaultStatus &&
+        (defaultStatus === "fresh_lead" || defaultStatus === "cold_lead")
+      ) {
+        leadData.status = defaultStatus;
+      }
       validLeads.push({
-        ...validation.data,
+        ...leadData,
         created_by: createdBy,
         assigned_to: assignTo || null,
         department_id: departmentId || null,
@@ -288,17 +306,33 @@ export async function importLeads(
   // Insert valid leads in batches
   const chunks = chunkArray(validLeads, BULK_LIMITS.BATCH_SIZE);
 
-  for (const chunk of chunks) {
-    console.log(`Inserting batch of ${chunk.length} leads`);
-    const { error, count } = await supabaseAdmin.from("leads").insert(chunk);
+  for (const [index, chunk] of chunks.entries()) {
+    console.log(
+      `Inserting batch ${index + 1}/${chunks.length} (${chunk.length} leads)`,
+    );
+    try {
+      const { error, count } = await supabaseAdmin.from("leads").insert(chunk);
 
-    if (error) {
-      console.error("Database insertion error:", error);
+      if (error) {
+        console.error(`Batch ${index + 1} insertion error:`, error);
+        result.failed += chunk.length;
+        result.errors.push({
+          row: 0,
+          error: `Batch ${index + 1} failed: ${error.message}`,
+        });
+      } else {
+        console.log(
+          `Batch ${index + 1} success: inserted ${count || chunk.length} leads`,
+        );
+        result.successful += count || chunk.length;
+      }
+    } catch (err: any) {
+      console.error(`Batch ${index + 1} exception:`, err);
       result.failed += chunk.length;
-      result.errors.push({ row: 0, error: `Database error: ${error.message}` });
-    } else {
-      console.log(`Successfully inserted ${count || chunk.length} leads`);
-      result.successful += count || chunk.length;
+      result.errors.push({
+        row: 0,
+        error: `Batch ${index + 1} crashed: ${err.message}`,
+      });
     }
   }
 
@@ -320,12 +354,14 @@ export async function exportLeads(
     assignedTo?: string;
     startDate?: string;
     endDate?: string;
+    removeAfterExport?: boolean;
   },
-): Promise<string> {
+): Promise<{ csv: string; exportedCount: number; removedCount: number }> {
   let query = supabaseAdmin
     .from("leads")
     .select(
       `
+      id,
       lead_name,
       business_name,
       email,
@@ -352,18 +388,25 @@ export async function exportLeads(
   // Role-based filtering
   if (authUser.role === "employee") {
     query = query.eq("assigned_to", authUser.id);
-  } else if (authUser.role === "manager" && authUser.teamId) {
-    const { data: teamMembers } = await supabaseAdmin
-      .from("users")
-      .select("id")
-      .eq("team_id", authUser.teamId);
+  } else if (authUser.role === "manager") {
+    // Managers see leads assigned to their team members
+    if (authUser.teamId) {
+      const { data: teamUsers } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("team_id", authUser.teamId);
 
-    const memberIds = (teamMembers || []).map(
-      (m: any) => (m as { id: string }).id,
-    );
-    memberIds.push(authUser.id);
-    query = query.in("assigned_to", memberIds);
+      const teamUserIds = (teamUsers || []).map((u: { id: string }) => u.id);
+      if (!teamUserIds.includes(authUser.id)) {
+        teamUserIds.push(authUser.id);
+      }
+      query = query.in("assigned_to", teamUserIds);
+    } else {
+      // Manager without team only sees their own assigned leads
+      query = query.eq("assigned_to", authUser.id);
+    }
   }
+  // Admins see all leads (no filter)
 
   // Apply filters
   if (filters?.status?.length) {
@@ -391,10 +434,17 @@ export async function exportLeads(
   }
 
   if (!data || data.length === 0) {
-    return "lead_name,business_name,email,phone,status,source,lead_value,city,state,country,created_at\n";
+    return {
+      csv: "lead_name,business_name,email,phone,status,source,lead_value,city,state,country,created_at\n",
+      exportedCount: 0,
+      removedCount: 0,
+    };
   }
 
-  // Transform data for export
+  // Collect lead IDs for potential removal
+  const exportedIds = data.map((lead: any) => lead.id as string);
+
+  // Transform data for export (exclude id from CSV)
   const exportData = data.map((lead: any) => ({
     lead_name: lead.lead_name,
     business_name: lead.business_name || "",
@@ -413,11 +463,32 @@ export async function exportLeads(
     designation: lead.designation || "",
     website: lead.website || "",
     description: lead.description || "",
-    tags: (lead.tags as string[])?.join(", ") || "",
+    tags: lead.tags || "",
     created_at: lead.created_at,
   }));
 
-  return Papa.unparse(exportData);
+  const csvContent = Papa.unparse(exportData);
+
+  // Soft-delete exported leads if requested
+  let removedCount = 0;
+  if (filters?.removeAfterExport && exportedIds.length > 0) {
+    const { count, error: deleteError } = await supabaseAdmin
+      .from("leads")
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .in("id", exportedIds);
+
+    if (deleteError) {
+      console.error("Failed to remove leads after export:", deleteError);
+    } else {
+      removedCount = count || exportedIds.length;
+    }
+  }
+
+  return {
+    csv: csvContent,
+    exportedCount: exportedIds.length,
+    removedCount,
+  };
 }
 
 /**

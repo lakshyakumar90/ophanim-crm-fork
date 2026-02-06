@@ -46,16 +46,27 @@ export function UserSelector({
   className,
 }: UserSelectorProps) {
   const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
 
-  // Filter out excluded user and inactive users
+  // Filter out excluded user and inactive users, then apply search
   const filteredUsers = React.useMemo(() => {
-    return users.filter(
+    const activeUsers = users.filter(
       (u) =>
         u.id !== excludeUserId &&
         (u as any).isActive !== false &&
-        (u as any).is_active !== false
+        (u as any).is_active !== false,
     );
-  }, [users, excludeUserId]);
+
+    // Apply search filter
+    if (!search) return activeUsers;
+
+    const searchLower = search.toLowerCase();
+    return activeUsers.filter((u) => {
+      const name = (u.fullName || u.full_name || "").toLowerCase();
+      const email = (u.email || "").toLowerCase();
+      return name.includes(searchLower) || email.includes(searchLower);
+    });
+  }, [users, excludeUserId, search]);
 
   // Find selected user
   const selectedUser = users.find((u) => u.id === value);
@@ -64,7 +75,7 @@ export function UserSelector({
     : null;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -74,7 +85,7 @@ export function UserSelector({
           className={cn(
             "w-full justify-between font-normal",
             !value && "text-muted-foreground",
-            className
+            className,
           )}
         >
           {displayName ? (
@@ -97,9 +108,16 @@ export function UserSelector({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[350px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search users by name or email..." />
-          <CommandList>
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search users by name or email..."
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandList
+            className="max-h-[250px] overflow-y-auto pointer-events-auto"
+            onWheel={(e) => e.stopPropagation()}
+          >
             <CommandEmpty>No users found.</CommandEmpty>
             <CommandGroup>
               {filteredUsers.map((user) => {
@@ -117,7 +135,7 @@ export function UserSelector({
                     <Check
                       className={cn(
                         "h-4 w-4",
-                        value === user.id ? "opacity-100" : "opacity-0"
+                        value === user.id ? "opacity-100" : "opacity-0",
                       )}
                     />
                     <div className="flex flex-col">

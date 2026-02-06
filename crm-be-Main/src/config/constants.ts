@@ -9,7 +9,7 @@ export const PAGINATION = {
 
 // Bulk Operations
 export const BULK_LIMITS = {
-  MAX_RECORDS: 500,
+  MAX_RECORDS: parseInt(process.env.BULK_OPERATION_LIMIT || "10000"),
   BATCH_SIZE: 100,
 } as const;
 
@@ -26,6 +26,7 @@ export type UserRole = (typeof USER_ROLES)[keyof typeof USER_ROLES];
 export const LEAD_STATUSES = {
   FRESH_LEAD: "fresh_lead",
   HOT_LEAD: "hot_lead",
+  COLD_LEAD: "cold_lead",
   MEETING_SCHEDULED: "meeting_scheduled",
   DID_NOT_PICK: "did_not_pick",
   FOLLOW_UP: "follow_up",
@@ -41,6 +42,7 @@ export type LeadStatus = (typeof LEAD_STATUSES)[keyof typeof LEAD_STATUSES];
 export const LEAD_STATUS_ORDER: LeadStatus[] = [
   "fresh_lead",
   "hot_lead",
+  "cold_lead",
   "meeting_scheduled",
   "did_not_pick",
   "follow_up",

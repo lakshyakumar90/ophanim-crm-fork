@@ -50,6 +50,7 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID"],
+    exposedHeaders: ["X-Exported-Count", "X-Removed-Count"],
   }),
 );
 
@@ -117,12 +118,15 @@ if (!process.env.VERCEL) {
     startReminderService();
   });
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     logger.info(`🚀 CRM Backend server running on port ${PORT}`);
     logger.info(`📍 API available at http://localhost:${PORT}${API_PREFIX}`);
     logger.info(`💚 Health check at http://localhost:${PORT}/health`);
     logger.info(`🔧 Environment: ${config.server.nodeEnv}`);
   });
+
+  // Set timeout to 5 minutes for long-running imports
+  server.setTimeout(300000);
 }
 
 // Export for Vercel serverless

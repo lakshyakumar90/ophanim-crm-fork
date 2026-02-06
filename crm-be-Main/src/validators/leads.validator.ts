@@ -4,6 +4,7 @@ import { LEAD_STATUSES, LEAD_SOURCES } from "../config/constants.js";
 const leadStatusEnum = z.enum([
   "fresh_lead",
   "hot_lead",
+  "cold_lead",
   "meeting_scheduled",
   "did_not_pick",
   "follow_up",

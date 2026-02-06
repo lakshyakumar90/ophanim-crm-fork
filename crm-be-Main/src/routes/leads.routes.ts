@@ -82,6 +82,19 @@ router.get(
 );
 
 /**
+ * GET /leads/stats/by-user
+ * Get lead counts per user for filtering
+ */
+router.get(
+  "/stats/by-user",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const stats = await leadsService.getLeadCountsByUser(authReq.user);
+    sendSuccess(res, stats);
+  }),
+);
+
+/**
  * POST /leads
  * Create new lead
  */
