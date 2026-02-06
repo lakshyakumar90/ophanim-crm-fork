@@ -11,11 +11,5 @@
       "src": "/(.*)",
       "dest": "src/index.ts"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/v1/cron/reminders",
-      "schedule": "*/5 * * * *"
-    }
   ]
 }

@@ -1,0 +1,15 @@
+name: Trigger Reminders
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # Run every 5 minutes
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Reminder API
+        run: |
+          curl -X GET "https://ophanim-crm.vercel.app/api/v1/cron/reminders" \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
