@@ -187,6 +187,7 @@ export async function clockIn(
 
 /**
  * Clock out
+ * For night shifts crossing midnight, checks yesterday's record if in early morning hours
  */
 export async function clockOut(
   userId: string,
@@ -195,15 +196,61 @@ export async function clockOut(
   const today = getTodayDateString();
   const now = getTimestampIST();
 
-  // Get today's attendance record
-  const { data: existing, error: findError } = await supabaseAdmin
+  // First, try to get today's attendance record
+  let { data: existing } = await supabaseAdmin
     .from("attendance")
     .select("*")
     .eq("user_id", userId)
     .eq("date", today)
+    .is("clock_out_time", null)
     .single();
 
-  if (findError || !existing) {
+  // If no today record, check for night shift (yesterday's open record)
+  if (!existing) {
+    const { data: rules } = await supabaseAdmin
+      .from("attendance_rules")
+      .select("work_start_time, work_end_time")
+      .single();
+
+    if (rules) {
+      const workStartTime = rules.work_start_time as string;
+      const workEndTime = rules.work_end_time as string;
+      const [startHour] = workStartTime.split(":").map(Number);
+      const [endHour, endMin] = workEndTime.split(":").map(Number);
+
+      // Check if shift crosses midnight
+      if (startHour! > endHour!) {
+        const currentDate = new Date();
+        const currentHour = currentDate.getHours();
+        const currentMin = currentDate.getMinutes();
+
+        // If current time is before shift end time (early morning hours)
+        if (
+          currentHour < endHour! ||
+          (currentHour === endHour! && currentMin <= endMin!)
+        ) {
+          // Try to get yesterday's open record
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split("T")[0]!;
+
+          const { data: yesterdayRecord } = await supabaseAdmin
+            .from("attendance")
+            .select("*")
+            .eq("user_id", userId)
+            .eq("date", yesterdayStr)
+            .is("clock_out_time", null)
+            .single();
+
+          if (yesterdayRecord) {
+            existing = yesterdayRecord;
+          }
+        }
+      }
+    }
+  }
+
+  if (!existing) {
     throw ApiError.notFound("Clock-in record for today");
   }
 
@@ -279,24 +326,74 @@ export async function clockOut(
 
 /**
  * Get my attendance for today
+ * For night shifts crossing midnight (e.g., 7pm-4am), also checks yesterday's record
+ * if current time is before shift end time and no today record exists
  */
 export async function getMyTodayAttendance(
   userId: string,
 ): Promise<AttendanceRecord | null> {
   const today = getTodayDateString();
 
-  const { data, error } = await supabaseAdmin
+  // First, try to get today's record
+  const { data: todayData, error: todayError } = await supabaseAdmin
     .from("attendance")
     .select("*")
     .eq("user_id", userId)
     .eq("date", today)
     .single();
 
-  if (error || !data) {
-    return null;
+  if (todayData) {
+    return mapAttendanceRowToRecord(todayData as unknown as AttendanceRow);
   }
 
-  return mapAttendanceRowToRecord(data as unknown as AttendanceRow);
+  // If no today record, check if this is early morning of a night shift
+  // and return yesterday's open record if exists
+  const { data: rules } = await supabaseAdmin
+    .from("attendance_rules")
+    .select("work_start_time, work_end_time")
+    .single();
+
+  if (rules) {
+    const workStartTime = rules.work_start_time as string;
+    const workEndTime = rules.work_end_time as string;
+    const [startHour] = workStartTime.split(":").map(Number);
+    const [endHour, endMin] = workEndTime.split(":").map(Number);
+
+    // Check if shift crosses midnight (start hour > end hour, like 19:00 to 04:00)
+    if (startHour! > endHour!) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMin = now.getMinutes();
+
+      // If current time is before shift end time (early morning hours)
+      if (
+        currentHour < endHour! ||
+        (currentHour === endHour! && currentMin <= endMin!)
+      ) {
+        // Calculate yesterday's date
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split("T")[0]!;
+
+        // Try to get yesterday's record that hasn't been clocked out
+        const { data: yesterdayData } = await supabaseAdmin
+          .from("attendance")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("date", yesterdayStr)
+          .is("clock_out_time", null)
+          .single();
+
+        if (yesterdayData) {
+          return mapAttendanceRowToRecord(
+            yesterdayData as unknown as AttendanceRow,
+          );
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -320,18 +417,22 @@ export async function getAttendanceList(
   // Role-based filtering
   if (authUser.role === USER_ROLES.EMPLOYEE) {
     baseQuery = baseQuery.eq("user_id", authUser.id);
-  } else if (authUser.role === USER_ROLES.MANAGER && authUser.teamId) {
-    const { data: teamMembers } = await supabaseAdmin
+  } else if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
+    // Managers see their own attendance + all users in their department
+    const { data: deptUsers } = await supabaseAdmin
       .from("users")
       .select("id")
-      .eq("team_id", authUser.teamId);
+      .eq("department_id", authUser.departmentId);
 
-    const teamMemberIds = (teamMembers || []).map(
-      (m: any) => (m as { id: string }).id,
+    const deptUserIds = (deptUsers || []).map(
+      (u: any) => (u as { id: string }).id,
     );
-    teamMemberIds.push(authUser.id);
+    // Ensure manager's own ID is included
+    if (!deptUserIds.includes(authUser.id)) {
+      deptUserIds.push(authUser.id);
+    }
 
-    baseQuery = baseQuery.in("user_id", teamMemberIds);
+    baseQuery = baseQuery.in("user_id", deptUserIds);
   }
 
   // Apply filters

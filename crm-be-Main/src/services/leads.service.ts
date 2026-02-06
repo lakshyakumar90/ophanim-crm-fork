@@ -162,8 +162,10 @@ export async function getLeads(
     // Employees see only their assigned leads
     baseQuery = baseQuery.eq("assigned_to", authUser.id);
   } else if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
-    // Managers see only leads in their department
-    baseQuery = baseQuery.eq("department_id", authUser.departmentId);
+    // Managers see leads in their department OR leads assigned directly to them
+    baseQuery = baseQuery.or(
+      `department_id.eq.${authUser.departmentId},assigned_to.eq.${authUser.id}`,
+    );
   }
   // Admins see all leads (no filter)
 
@@ -430,10 +432,10 @@ export async function assignLead(
     throw new ApiError(ERROR_CODES.LEAD_ALREADY_ASSIGNED);
   }
 
-  // Fetch user details for the new assignee
+  // Fetch user details for the new assignee (including department_id for visibility)
   const { data: newAssigneeData } = await supabaseAdmin
     .from("users")
-    .select("id, full_name, email")
+    .select("id, full_name, email, department_id")
     .eq("id", input.assignTo)
     .single();
 
@@ -455,9 +457,14 @@ export async function assignLead(
   const newAssigneeName = newAssigneeData?.full_name || "Unknown";
   const newAssigneeEmail = newAssigneeData?.email || "";
 
+  // Update both assigned_to and department_id so managers can see leads assigned to their team
   const { data, error } = await supabaseAdmin
     .from("leads")
-    .update({ assigned_to: input.assignTo, updated_at: getCurrentTimestamp() })
+    .update({
+      assigned_to: input.assignTo,
+      department_id: newAssigneeData?.department_id || null,
+      updated_at: getCurrentTimestamp(),
+    })
     .eq("id", leadId)
     .select()
     .single();
@@ -508,10 +515,10 @@ export async function bulkAssignLeads(
     throw ApiError.bulkLimitExceeded(BULK_LIMITS.MAX_RECORDS);
   }
 
-  // Fetch user details for the assignee
+  // Fetch user details for the assignee (including department_id for visibility)
   const { data: assigneeData } = await supabaseAdmin
     .from("users")
-    .select("id, full_name, email")
+    .select("id, full_name, email, department_id")
     .eq("id", input.assignTo)
     .single();
 
@@ -524,10 +531,12 @@ export async function bulkAssignLeads(
   const chunks = chunkArray(input.ids, BULK_LIMITS.BATCH_SIZE);
 
   for (const chunk of chunks) {
+    // Update both assigned_to and department_id so managers can see leads assigned to their team
     const { error } = await supabaseAdmin
       .from("leads")
       .update({
         assigned_to: input.assignTo,
+        department_id: assigneeData?.department_id || null,
         updated_at: getCurrentTimestamp(),
       })
       .in("id", chunk)
@@ -656,8 +665,10 @@ export async function getLeadPipeline(
   if (authUser.role === USER_ROLES.EMPLOYEE) {
     query = query.eq("assigned_to", authUser.id);
   } else if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
-    // Managers see only leads in their department
-    query = query.eq("department_id", authUser.departmentId);
+    // Managers see leads in their department OR leads assigned to them
+    query = query.or(
+      `department_id.eq.${authUser.departmentId},assigned_to.eq.${authUser.id}`,
+    );
   }
   // Admins see all leads in pipeline
 
@@ -701,8 +712,10 @@ export async function getWonLeads(authUser: AuthUser): Promise<
   if (authUser.role === USER_ROLES.EMPLOYEE) {
     query = query.eq("assigned_to", authUser.id);
   } else if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
-    // Managers see only won leads in their department
-    query = query.eq("department_id", authUser.departmentId);
+    // Managers see won leads in their department OR won leads assigned to them
+    query = query.or(
+      `department_id.eq.${authUser.departmentId},assigned_to.eq.${authUser.id}`,
+    );
   }
   // Admins see all won leads
 
