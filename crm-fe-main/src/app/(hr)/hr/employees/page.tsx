@@ -37,6 +37,7 @@ interface HREmployee {
   avatarUrl: string | null;
   isActive: boolean;
   createdAt: string;
+  shiftType: string | null;
 }
 
 const API_URL =
@@ -58,6 +59,7 @@ export default function HREmployeesPage() {
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [shiftFilter, setShiftFilter] = useState<string>("all");
 
   // Selected employee for detail modal
   const [selectedEmployee, setSelectedEmployee] = useState<HREmployee | null>(
@@ -141,12 +143,19 @@ export default function HREmployeesPage() {
       // Role filter
       const matchesRole = roleFilter === "all" || emp.role === roleFilter;
 
+      // Shift filter
+      const matchesShift =
+        shiftFilter === "all" ||
+        (shiftFilter === "unassigned" && !emp.shiftType) ||
+        emp.shiftType === shiftFilter;
+
       return (
         matchesSearch &&
         matchesDepartment &&
         matchesTeam &&
         matchesStatus &&
-        matchesRole
+        matchesRole &&
+        matchesShift
       );
     });
   }, [
@@ -156,6 +165,7 @@ export default function HREmployeesPage() {
     teamFilter,
     statusFilter,
     roleFilter,
+    shiftFilter,
   ]);
 
   // Check if any filters are active
@@ -163,13 +173,15 @@ export default function HREmployeesPage() {
     departmentFilter !== "all" ||
     teamFilter !== "all" ||
     statusFilter !== "all" ||
-    roleFilter !== "all";
+    roleFilter !== "all" ||
+    shiftFilter !== "all";
 
   const clearFilters = () => {
     setDepartmentFilter("all");
     setTeamFilter("all");
     setStatusFilter("all");
     setRoleFilter("all");
+    setShiftFilter("all");
   };
 
   const getInitials = (name: string) =>
@@ -307,6 +319,19 @@ export default function HREmployeesPage() {
             </SelectContent>
           </Select>
 
+          {/* Shift Filter */}
+          <Select value={shiftFilter} onValueChange={setShiftFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Shift" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Shifts</SelectItem>
+              <SelectItem value="day_shift">Day Shift</SelectItem>
+              <SelectItem value="night_shift">Night Shift</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+            </SelectContent>
+          </Select>
+
           {/* Clear Filters */}
           {hasActiveFilters && (
             <Button
@@ -329,6 +354,7 @@ export default function HREmployeesPage() {
             <TableRow>
               <TableHead>Employee</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Shift</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Team</TableHead>
               <TableHead>Job Title</TableHead>
@@ -339,7 +365,7 @@ export default function HREmployeesPage() {
           <TableBody>
             {filteredEmployees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <Users className="h-8 w-8" />
                     <p>No employees found</p>
@@ -380,6 +406,24 @@ export default function HREmployeesPage() {
                     </div>
                   </TableCell>
                   <TableCell>{getRoleBadge(emp)}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        emp.shiftType === "night_shift"
+                          ? "border-purple-500 text-purple-700"
+                          : emp.shiftType === "day_shift"
+                            ? "border-blue-500 text-blue-700"
+                            : "border-gray-300 text-gray-500"
+                      }
+                    >
+                      {emp.shiftType === "day_shift"
+                        ? "Day"
+                        : emp.shiftType === "night_shift"
+                          ? "Night"
+                          : "N/A"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <span className="text-sm text-muted-foreground">
                       {emp.departmentName || "-"}

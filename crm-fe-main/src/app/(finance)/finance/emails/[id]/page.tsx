@@ -36,7 +36,7 @@ export default function EmailRequestDetailPage() {
     mutate,
   } = useSWR<EmailRequest>(
     user && emailId ? ["email-request", emailId] : null,
-    () => emailRequestsApi.get(emailId).then((res) => res.data.data),
+    () => emailRequestsApi.get(emailId),
   );
 
   const handleApprove = async () => {

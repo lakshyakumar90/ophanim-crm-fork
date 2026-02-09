@@ -43,7 +43,7 @@ export default function RecurringScheduleDetailPage() {
     mutate,
   } = useSWR<RecurringSchedule>(
     user && scheduleId ? ["recurring-schedule", scheduleId] : null,
-    () => recurringApi.get(scheduleId).then((res) => res.data.data),
+    () => recurringApi.get(scheduleId),
   );
 
   const handlePause = async () => {

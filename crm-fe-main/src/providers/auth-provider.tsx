@@ -10,13 +10,26 @@ import {
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { authApi, tokens } from "@/lib/api";
+import {
+  syncSupabaseSession,
+  clearSupabaseSession,
+} from "@/lib/supabase-auth";
 import type { User } from "@/types";
+
+interface LoginResult {
+  requires2FA: boolean;
+  userId?: string;
+}
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  completeTwoFactorLogin: (
+    email: string,
+    password: string,
+  ) => Promise<void>;
   register: (data: any) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -48,13 +61,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const response = await authApi.login(email, password);
-    const { user: userData, tokens: tokenData } = response.data.data;
+  const login = useCallback(
+    async (email: string, password: string): Promise<LoginResult> => {
+      const response = await authApi.login(email, password);
+      const result = response.data.data;
 
-    tokens.set(tokenData.accessToken, tokenData.refreshToken);
-    setUser(userData);
-  }, []);
+      // If 2FA is required, return early — caller must handle 2FA flow
+      if (result.requires2FA) {
+        return { requires2FA: true, userId: result.userId };
+      }
+
+      // Normal login — save tokens and sync Supabase session
+      tokens.set(result.tokens.accessToken, result.tokens.refreshToken);
+      setUser(result.user);
+
+      // Sync Supabase auth session for RLS
+      try {
+        await syncSupabaseSession(email, password);
+      } catch (err) {
+        console.warn("Supabase session sync failed (app will use backend fallback):", err);
+      }
+
+      return { requires2FA: false };
+    },
+    [],
+  );
+
+  // After 2FA verification, call this to sync the Supabase session
+  const completeTwoFactorLogin = useCallback(
+    async (email: string, password: string) => {
+      try {
+        await syncSupabaseSession(email, password);
+      } catch (err) {
+        console.warn("Supabase session sync after 2FA failed:", err);
+      }
+    },
+    [],
+  );
 
   const register = useCallback(async (data: any) => {
     const response = await authApi.register(data);
@@ -62,6 +105,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     tokens.set(tokenData.accessToken, tokenData.refreshToken);
     setUser(userData);
+
+    // Sync Supabase auth session for RLS
+    if (data.email && data.password) {
+      try {
+        await syncSupabaseSession(data.email, data.password);
+      } catch (err) {
+        console.warn("Supabase session sync after register failed:", err);
+      }
+    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -72,6 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       tokens.clear();
       setUser(null);
+      // Clear Supabase session
+      await clearSupabaseSession();
       router.push("/login");
     }
   }, [router]);
@@ -125,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        completeTwoFactorLogin,
         register,
         logout,
         refreshUser,

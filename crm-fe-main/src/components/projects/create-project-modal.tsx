@@ -225,9 +225,7 @@ export function CreateProjectModal({
       usersApi
         .getProjectManagers()
         .then((res) => {
-          if (res.data.success) {
-            setProjectManagers(res.data.data || []);
-          }
+          setProjectManagers(res || []);
         })
         .catch(console.error);
 
@@ -235,36 +233,28 @@ export function CreateProjectModal({
       usersApi
         .getByJobTitle(["developer"])
         .then((res) => {
-          if (res.data.success) {
-            setDevelopers(res.data.data || []);
-          }
+          setDevelopers(res || []);
         })
         .catch(console.error);
 
       usersApi
         .getByJobTitle(["seo_specialist"])
         .then((res) => {
-          if (res.data.success) {
-            setSeoSpecialists(res.data.data || []);
-          }
+          setSeoSpecialists(res || []);
         })
         .catch(console.error);
 
       usersApi
         .getByJobTitle(["content_writer"])
         .then((res) => {
-          if (res.data.success) {
-            setContentWriters(res.data.data || []);
-          }
+          setContentWriters(res || []);
         })
         .catch(console.error);
 
       usersApi
         .getByJobTitle(["designer"])
         .then((res) => {
-          if (res.data.success) {
-            setDesigners(res.data.data || []);
-          }
+          setDesigners(res || []);
         })
         .catch(console.error);
 
@@ -272,9 +262,7 @@ export function CreateProjectModal({
       leadsApi
         .getWonLeads()
         .then((res) => {
-          if (res.data.success) {
-            setWonLeads(res.data.data || []);
-          }
+          setWonLeads(res || []);
         })
         .catch(console.error);
     }

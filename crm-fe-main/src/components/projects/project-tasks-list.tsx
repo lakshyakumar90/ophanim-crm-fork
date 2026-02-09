@@ -59,9 +59,7 @@ export function ProjectTasksList({ projectId }: { projectId: string }) {
     setIsLoading(true);
     try {
       const res = await tasksApi.list({ projectId, limit: 100 });
-      if (res.data.success) {
-        setTasks(res.data.data || []);
-      }
+      setTasks(res?.data || []);
     } catch (error) {
       console.error("Failed to fetch tasks", error);
     } finally {

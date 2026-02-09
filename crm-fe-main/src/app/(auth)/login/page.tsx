@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,8 +8,9 @@ import { z } from "zod";
 import { Loader2, Mail, Lock, LogIn, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
-import { authApi, tokens, twoFactorApi } from "@/lib/api";
+import { tokens, twoFactorApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
+import { syncSupabaseSession } from "@/lib/supabase-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -39,7 +40,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 const LoginForm = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { refreshUser } = useAuth();
+  const { login: authLogin, refreshUser, completeTwoFactorLogin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   // 2FA state
@@ -47,6 +48,18 @@ const LoginForm = () => {
   const [twoFAUserId, setTwoFAUserId] = useState<string | null>(null);
   const [twoFACode, setTwoFACode] = useState("");
   const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+  // Store credentials temporarily for Supabase session sync after 2FA
+  const [pendingCredentials, setPendingCredentials] = useState<{
+    email: string;
+    password: string;
+  } | null>(null);
+
+  // Clear sensitive credentials from memory on unmount
+  useEffect(() => {
+    return () => {
+      setPendingCredentials(null);
+    };
+  }, []);
 
   const callbackUrl = searchParams.get("callbackUrl") || "/";
 
@@ -65,23 +78,19 @@ const LoginForm = () => {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const response = await authApi.login(data.email, data.password);
-      const result = response.data.data;
+      const result = await authLogin(data.email, data.password);
 
       // Check if 2FA is required
       if (result.requires2FA) {
         setRequires2FA(true);
-        setTwoFAUserId(result.userId);
+        setTwoFAUserId(result.userId || null);
+        // Store credentials for Supabase session sync after 2FA
+        setPendingCredentials({ email: data.email, password: data.password });
         toast.info("Please enter your 2FA code");
         return;
       }
 
-      // Normal login - save tokens and redirect
-      tokens.set(result.tokens.accessToken, result.tokens.refreshToken);
-
-      // Update auth state before redirect
-      await refreshUser();
-
+      // Normal login succeeded (tokens saved by auth provider)
       toast.success("Welcome back!");
       router.push(callbackUrl);
     } catch (error: any) {
@@ -108,8 +117,16 @@ const LoginForm = () => {
       // Save tokens
       tokens.set(result.tokens.accessToken, result.tokens.refreshToken);
 
+      // Sync Supabase session with the stored credentials
+      if (pendingCredentials) {
+        completeTwoFactorLogin(
+          pendingCredentials.email,
+          pendingCredentials.password,
+        );
+        setPendingCredentials(null);
+      }
+
       // Force update auth state before redirect
-      // This is critical to prevent redirect back to login
       await refreshUser();
 
       toast.success("Welcome back!");
@@ -127,6 +144,7 @@ const LoginForm = () => {
     setRequires2FA(false);
     setTwoFAUserId(null);
     setTwoFACode("");
+    setPendingCredentials(null);
   };
 
   // 2FA Verification Step

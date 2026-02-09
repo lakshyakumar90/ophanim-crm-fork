@@ -1,6 +1,10 @@
 import api from "./api";
 import type { Project, ProjectMember, ApiResponse } from "@/types";
 
+function unwrap(res: any) {
+  return res?.data?.data ?? res?.data ?? res;
+}
+
 export interface CreateProjectInput {
   name: string;
   description?: string;
@@ -92,8 +96,14 @@ export interface ProjectResources {
 
 export const projectsApi = {
   // Standard CRUD
-  list: () => api.get<ApiResponse<Project[]>>("/projects"),
-  get: (id: string) => api.get<ApiResponse<Project>>(`/projects/${id}`),
+  list: async () => {
+    const res = await api.get<ApiResponse<Project[]>>("/projects");
+    return unwrap(res);
+  },
+  get: async (id: string) => {
+    const res = await api.get<ApiResponse<Project>>(`/projects/${id}`);
+    return unwrap(res);
+  },
   create: (data: CreateProjectInput) =>
     api.post<ApiResponse<Project>>("/projects", data),
   update: (id: string, data: UpdateProjectInput) =>
@@ -101,12 +111,22 @@ export const projectsApi = {
   delete: (id: string) => api.delete(`/projects/${id}`),
 
   // Dashboard & Analytics
-  getStats: () => api.get<ApiResponse<ProjectStats>>("/projects/stats"),
-  getIdleProjects: () => api.get<ApiResponse<Project[]>>("/projects/idle"),
-  getResources: () =>
-    api.get<ApiResponse<ProjectResources>>("/projects/resources"),
-  getByManager: (managerId: string) =>
-    api.get<ApiResponse<Project[]>>(`/projects/by-manager/${managerId}`),
+  getStats: async () => {
+    const res = await api.get<ApiResponse<ProjectStats>>("/projects/stats");
+    return unwrap(res);
+  },
+  getIdleProjects: async () => {
+    const res = await api.get<ApiResponse<Project[]>>("/projects/idle");
+    return unwrap(res);
+  },
+  getResources: async () => {
+    const res = await api.get<ApiResponse<ProjectResources>>("/projects/resources");
+    return unwrap(res);
+  },
+  getByManager: async (managerId: string) => {
+    const res = await api.get<ApiResponse<Project[]>>(`/projects/by-manager/${managerId}`);
+    return unwrap(res);
+  },
 
   // Members
   addMember: (

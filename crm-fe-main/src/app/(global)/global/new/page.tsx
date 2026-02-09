@@ -74,6 +74,7 @@ const userSchema = z.object({
   role: z.enum(["manager", "employee"]),
   departmentId: z.string().min(1, "Department is required"),
   jobTitle: z.string().min(1, "Job title is required"),
+  shiftType: z.enum(["day_shift", "night_shift"]),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -96,12 +97,14 @@ export default function NewUserPage() {
       role: "employee",
       departmentId: "",
       jobTitle: "",
+      shiftType: "day_shift",
     },
   });
 
   const currentRole = watch("role");
   const currentDepartmentId = watch("departmentId");
   const currentJobTitle = watch("jobTitle");
+  const currentShiftType = watch("shiftType");
 
   // Get department slug from ID
   const currentDepartmentSlug = useMemo(() => {
@@ -146,6 +149,7 @@ export default function NewUserPage() {
         role: data.role,
         departmentId: data.departmentId,
         jobTitle: data.jobTitle,
+        shiftType: data.shiftType,
       });
 
       toast.success("User created successfully");
@@ -340,6 +344,32 @@ export default function NewUserPage() {
                   Please select a department to see available job titles
                 </p>
               )}
+            </div>
+
+            {/* Shift Type */}
+            <div className="space-y-2">
+              <Label htmlFor="shiftType">Shift</Label>
+              <Select
+                value={currentShiftType}
+                onValueChange={(v) =>
+                  setValue("shiftType", v as "day_shift" | "night_shift")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select shift..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="day_shift">
+                    Day Shift (9 AM - 6 PM)
+                  </SelectItem>
+                  <SelectItem value="night_shift">
+                    Night Shift (7 PM - 4 AM)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Select the work shift for this user
+              </p>
             </div>
 
             {/* Info Alert */}

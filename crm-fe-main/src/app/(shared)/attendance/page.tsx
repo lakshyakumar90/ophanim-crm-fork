@@ -15,6 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -139,6 +146,7 @@ export default function AttendancePage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [shiftFilter, setShiftFilter] = useState<string>("all");
   const oneYearAgo = useMemo(() => subYears(new Date(), 1), []);
 
   const weekStartDate = useMemo(() => {
@@ -151,8 +159,7 @@ export default function AttendancePage() {
     ["attendance-weekly", weekStartDate, selectedUserId],
     () =>
       attendanceApi
-        .getWeeklyHours(selectedUserId || undefined, weekStartDate)
-        .then((res) => res.data.data),
+        .getWeeklyHours(selectedUserId || undefined, weekStartDate),
   );
 
   const { startDate, endDate } = useMemo(() => {
@@ -210,12 +217,12 @@ export default function AttendancePage() {
   // Fetch data
   const { data: todayData, isLoading: loadingToday } = useSWR(
     "attendance-today",
-    () => attendanceApi.getToday().then((res) => res.data.data),
+    () => attendanceApi.getToday(),
   );
 
   const { data: summaryData, isLoading: loadingSummary } = useSWR(
     "attendance-summary",
-    () => attendanceApi.getSummary().then((res) => res.data.data),
+    () => attendanceApi.getSummary(),
   );
 
   const { currentDepartment } = useDepartment();
@@ -226,16 +233,14 @@ export default function AttendancePage() {
       : null,
     () =>
       attendanceApi
-        .getAnalytics(startDate, endDate, currentDepartment?.id)
-        .then((res) => res.data.data),
+        .getAnalytics(startDate, endDate, currentDepartment?.id),
   );
 
   const { data: usersAttendanceData, isLoading: loadingUsers } = useSWR(
     isAdmin ? ["attendance-users", startDate, currentDepartment?.id] : null,
     () =>
       attendanceApi
-        .getUsersToday(startDate, currentDepartment?.id)
-        .then((res) => res.data.data),
+        .getUsersToday(startDate, currentDepartment?.id),
   );
 
   useEffect(() => {
@@ -270,7 +275,13 @@ export default function AttendancePage() {
     try {
       await attendanceApi.clockIn({ location: "Office" });
       toast.success("🕐 Clocked in successfully! Have a productive day!");
+      // Invalidate all relevant cache keys
       mutate("attendance-today");
+      mutate("attendance-summary");
+      if (isAdmin) {
+        mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
+        mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
+      }
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message ||
@@ -286,8 +297,13 @@ export default function AttendancePage() {
     try {
       await attendanceApi.clockOut({});
       toast.success("👋 Clocked out successfully! See you tomorrow!");
+      // Invalidate all relevant cache keys
       mutate("attendance-today");
       mutate("attendance-summary");
+      if (isAdmin) {
+        mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
+        mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
+      }
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message ||
@@ -301,7 +317,15 @@ export default function AttendancePage() {
   const today = todayData;
   const summary = summaryData;
   const analytics = analyticsData;
-  const usersAttendance = usersAttendanceData || [];
+  const allUsersAttendance = usersAttendanceData || [];
+
+  // Filter users by shift
+  const usersAttendance = useMemo(() => {
+    if (shiftFilter === "all") return allUsersAttendance;
+    return allUsersAttendance.filter(
+      (item: any) => item.user.shiftType === shiftFilter,
+    );
+  }, [allUsersAttendance, shiftFilter]);
 
   const pieData = summary
     ? [
@@ -664,6 +688,17 @@ export default function AttendancePage() {
           {/* Period Filter */}
           <div className="flex flex-wrap items-center gap-3 pt-4 border-t">
             <h2 className="text-lg font-semibold mr-4">Team Overview</h2>
+            {/* Shift Filter */}
+            <Select value={shiftFilter} onValueChange={setShiftFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by shift" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Shifts</SelectItem>
+                <SelectItem value="day_shift">Day Shift</SelectItem>
+                <SelectItem value="night_shift">Night Shift</SelectItem>
+              </SelectContent>
+            </Select>
             <Tabs
               value={dateRange}
               onValueChange={(v) => setDateRange(v as DateRangeType)}
@@ -1058,6 +1093,7 @@ export default function AttendancePage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>User</TableHead>
+                        <TableHead>Shift</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="hidden sm:table-cell">
                           Clock In
@@ -1091,6 +1127,22 @@ export default function AttendancePage() {
                                 </p>
                               </div>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                item.user.shiftType === "night_shift"
+                                  ? "border-purple-500 text-purple-700"
+                                  : "border-blue-500 text-blue-700"
+                              }
+                            >
+                              {item.user.shiftType === "day_shift"
+                                ? "Day"
+                                : item.user.shiftType === "night_shift"
+                                  ? "Night"
+                                  : "N/A"}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             <Badge

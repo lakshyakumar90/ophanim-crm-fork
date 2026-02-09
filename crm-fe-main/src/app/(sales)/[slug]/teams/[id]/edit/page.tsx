@@ -54,19 +54,18 @@ export default function EditTeamPage() {
 
   const { data: teamData, isLoading: loadingTeam } = useSWR(
     id ? `team-${id}` : null,
-    () => teamsApi.get(id as string).then((res) => res.data.data),
+    () => teamsApi.get(id as string),
   );
 
   const { data: usersData, isLoading: loadingUsers } = useSWR(
     "users-for-manager",
     () =>
       usersApi
-        .list({ role: "manager", limit: 100 })
-        .then((res) => res.data.data || []),
+        .list({ role: "manager", limit: 100 }),
   );
 
   const team = teamData;
-  const managers = usersData || [];
+  const managers = usersData?.data || [];
 
   const {
     register,

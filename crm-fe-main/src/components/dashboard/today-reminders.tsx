@@ -33,7 +33,6 @@ export function TodayReminders() {
         status: "pending",
         limit: 5,
       })
-      .then((res) => res.data),
   );
 
   const reminders = data?.data || [];

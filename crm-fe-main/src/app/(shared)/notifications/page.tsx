@@ -29,11 +29,11 @@ export default function NotificationsPage() {
   // Add auto-refresh every 30 seconds
   const { data, isLoading } = useSWR(
     "notifications",
-    () => notificationsApi.list().then((res) => res.data),
+    () => notificationsApi.list(),
     { refreshInterval: 30000 },
   );
 
-  const notifications: Notification[] = data?.data || [];
+  const notifications: Notification[] = data?.data || data || [];
 
   const handleMarkAsRead = async (id: string) => {
     try {

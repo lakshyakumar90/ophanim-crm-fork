@@ -86,7 +86,7 @@ export default function UserAttendancePage() {
   // Fetch user info
   const { data: userData, isLoading: loadingUser } = useSWR(
     userId ? ["user-detail", userId] : null,
-    () => usersApi.get(userId as string).then((res) => res.data.data),
+    () => usersApi.get(userId as string),
   );
 
   // Fetch user attendance history
@@ -98,17 +98,25 @@ export default function UserAttendancePage() {
     userId ? ["attendance-history", userId, startDate, endDate] : null,
     () =>
       attendanceApi
-        .getUserHistory(userId as string, startDate, endDate)
-        .then((res) => res.data.data),
+        .getUserHistory(userId as string, startDate, endDate),
   );
 
   // Get today's date string for fetching today's attendance
   const today = getTodayIST();
 
+  // Calculate yesterday's date for night shift users
+  const yesterday = new Date(nowIST());
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = formatIST(yesterday, "yyyy-MM-dd");
+
   // Derive today's attendance from history data
-  const todayAttendance = historyData?.records?.find(
-    (r: any) => r.date === today,
-  );
+  // For night shift users who clock in between 00:00-04:15, their attendance is on yesterday's date
+  // Priority: today's record first, then yesterday's (for night shift users)
+  const todayRecord = historyData?.records?.find((r: any) => r.date === today);
+  const yesterdayRecord = historyData?.records?.find((r: any) => r.date === yesterdayStr);
+  
+  // Prefer today's record, but if not found and user is night shift, use yesterday's
+  const todayAttendance = todayRecord || (userData?.shiftType === "night_shift" ? yesterdayRecord : null);
   const isClockedIn = !!todayAttendance?.clockInTime;
   const isClockedOut = !!todayAttendance?.clockOutTime;
 
@@ -141,7 +149,12 @@ export default function UserAttendancePage() {
         location: "Office",
       });
       toast.success(`✅ Clocked in ${user?.fullName || "user"} successfully!`);
+      // Invalidate all relevant cache keys
       mutateHistory();
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
+      mutate("attendance-today");
+      mutate("attendance-summary");
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message || "Failed to clock in user",
@@ -158,7 +171,12 @@ export default function UserAttendancePage() {
     try {
       await attendanceApi.adminClockOut(userId as string, {});
       toast.success(`✅ Clocked out ${user?.fullName || "user"} successfully!`);
+      // Invalidate all relevant cache keys
       mutateHistory();
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
+      mutate("attendance-today");
+      mutate("attendance-summary");
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message || "Failed to clock out user",
@@ -182,11 +200,11 @@ export default function UserAttendancePage() {
   // Prepare chart data
   const pieData = history?.summary
     ? [
-        { name: "Present", value: history.summary.present, color: "#22c55e" },
-        { name: "Late", value: history.summary.late, color: "#eab308" },
-        { name: "Half Day", value: history.summary.halfDay, color: "#f97316" },
-        { name: "Absent", value: history.summary.absent, color: "#ef4444" },
-        { name: "Leave", value: history.summary.leave, color: "#3b82f6" },
+        { name: "Present", value: history.summary.present ?? 0, color: "#22c55e" },
+        { name: "Late", value: history.summary.late ?? 0, color: "#eab308" },
+        { name: "Half Day", value: history.summary.halfDay ?? 0, color: "#f97316" },
+        { name: "Absent", value: history.summary.absent ?? 0, color: "#ef4444" },
+        { name: "Leave", value: history.summary.leave ?? 0, color: "#3b82f6" },
       ].filter((item) => item.value > 0)
     : [];
 
@@ -332,7 +350,7 @@ export default function UserAttendancePage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-green-600">
-                      {history.summary.present}
+                      {history.summary?.present ?? 0}
                     </p>
                     <p className="text-xs text-muted-foreground">Present</p>
                   </div>
@@ -347,7 +365,7 @@ export default function UserAttendancePage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-amber-600">
-                      {history.summary.late}
+                      {history.summary?.late ?? 0}
                     </p>
                     <p className="text-xs text-muted-foreground">Late</p>
                   </div>
@@ -362,7 +380,7 @@ export default function UserAttendancePage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-red-600">
-                      {history.summary.absent}
+                      {history.summary?.absent ?? 0}
                     </p>
                     <p className="text-xs text-muted-foreground">Absent</p>
                   </div>
@@ -377,7 +395,7 @@ export default function UserAttendancePage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold">
-                      {history.summary.totalHours}h
+                      {history.summary?.totalHours ?? 0}h
                     </p>
                     <p className="text-xs text-muted-foreground">Total Hours</p>
                   </div>
@@ -392,7 +410,7 @@ export default function UserAttendancePage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold">
-                      {history.summary.avgHours}h
+                      {history.summary?.avgHours ?? 0}h
                     </p>
                     <p className="text-xs text-muted-foreground">Avg/Day</p>
                   </div>
@@ -484,12 +502,12 @@ export default function UserAttendancePage() {
                 <Calendar className="h-4 w-4" />
                 Attendance History (Last 30 Days)
                 <Badge variant="secondary">
-                  {history.records.length} records
+                  {history.records?.length ?? 0} records
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {history.records.length === 0 ? (
+              {!history.records || history.records.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No attendance records found for this period.</p>

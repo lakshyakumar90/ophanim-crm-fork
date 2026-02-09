@@ -68,9 +68,9 @@ export default function ProjectAnalyticsPage() {
   const fetchStats = async () => {
     setIsLoading(true);
     try {
-      const res = await projectsApi.getStats();
-      if (res.data.success) {
-        setStats(res.data.data);
+      const statsData = await projectsApi.getStats();
+      if (statsData) {
+        setStats(statsData);
       }
     } catch (error) {
       console.error("Failed to fetch stats", error);

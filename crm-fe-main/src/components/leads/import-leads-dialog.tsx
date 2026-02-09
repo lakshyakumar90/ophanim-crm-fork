@@ -53,7 +53,7 @@ export function ImportLeadsDialog({
   // Fetch users for the selector
   const { data: usersData } = useSWR(
     (isAdmin || isManager) && open ? "users-for-import" : null,
-    () => usersApi.list({ limit: 500 }).then((res) => res.data),
+    () => usersApi.list({ limit: 500 }),
   );
   const users = usersData?.data || [];
 

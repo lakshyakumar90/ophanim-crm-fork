@@ -60,10 +60,10 @@ export function TeamDiscussion({ teamId, isAdmin }: TeamDiscussionProps) {
     error,
     mutate,
   } = useSWR(teamId ? `team-notes-${teamId}` : null, () =>
-    teamNotesApi.list(teamId).then((res) => res.data),
+    teamNotesApi.list(teamId),
   );
 
-  const notes: TeamNote[] = notesData?.data || [];
+  const notes: TeamNote[] = Array.isArray(notesData) ? notesData : [];
 
   const handleCreateNote = async () => {
     if (!newNote.trim()) return;
@@ -71,15 +71,16 @@ export function TeamDiscussion({ teamId, isAdmin }: TeamDiscussionProps) {
     setIsSubmitting(true);
     try {
       const response = await teamNotesApi.create(teamId, newNote);
-      const createdNote = response.data.data; // Assuming API returns data wrapped
+      const createdNote = response.data?.data || response.data;
 
       setNewNote("");
 
       // Update local cache
       mutate(
         (currentNotes: any) => {
-          if (!currentNotes) return { data: [createdNote] };
-          return { ...currentNotes, data: [createdNote, ...currentNotes.data] };
+          if (!currentNotes) return [createdNote];
+          if (Array.isArray(currentNotes)) return [createdNote, ...currentNotes];
+          return [createdNote];
         },
         { revalidate: false },
       );

@@ -240,3 +240,11 @@ export function isValidJobTitleForDepartment(
   const validTitles = getJobTitlesForDepartment(department, role);
   return validTitles.includes(jobTitle);
 }
+
+// Shift Types
+export const SHIFT_TYPES = {
+  DAY_SHIFT: "day_shift",
+  NIGHT_SHIFT: "night_shift",
+} as const;
+
+export type ShiftType = (typeof SHIFT_TYPES)[keyof typeof SHIFT_TYPES];

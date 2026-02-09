@@ -68,7 +68,7 @@ export default function RemindersPage() {
   const { data: usersData } = useSWR(
     isAdmin ? ["users-list", searchUser] : null,
     () =>
-      usersApi.list({ search: searchUser, limit: 10 }).then((res) => res.data),
+      usersApi.list({ search: searchUser, limit: 10 }),
   );
 
   const {
@@ -87,7 +87,6 @@ export default function RemindersPage() {
           sortOrder,
           status: filterStatus,
         })
-        .then((res) => res.data),
   );
 
   const reminders = remindersData?.data || [];

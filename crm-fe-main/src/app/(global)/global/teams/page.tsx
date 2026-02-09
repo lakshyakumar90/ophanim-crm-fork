@@ -50,10 +50,10 @@ export default function GlobalTeamsPage() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
 
   const { data, isLoading, error, mutate } = useSWR("teams", () =>
-    teamsApi.list().then((res) => res.data),
+    teamsApi.list(),
   );
 
-  const allTeams = data?.data || [];
+  const allTeams = (data || []) as Team[];
 
   // Filter teams by department if selected
   const teams =

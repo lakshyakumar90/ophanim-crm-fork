@@ -152,7 +152,7 @@ export default function LeadDetailPage() {
     isLoading: loadingLead,
     mutate: mutateLead,
   } = useSWR(id ? `lead-${id}` : null, () =>
-    leadsApi.get(id as string).then((res) => res.data.data),
+    leadsApi.get(id as string),
   );
 
   const {
@@ -160,19 +160,19 @@ export default function LeadDetailPage() {
     isLoading: loadingActivities,
     mutate: mutateActivities,
   } = useSWR(id ? `lead-activities-${id}` : null, () =>
-    leadsApi.getActivities(id as string).then((res) => res.data.data),
+    leadsApi.getActivities(id as string),
   );
 
   // Fetch comments
   const { data: commentsData, mutate: mutateComments } = useSWR(
     id ? `lead-comments-${id}` : null,
-    () => leadsApi.getComments(id as string).then((res) => res.data.data),
+    () => leadsApi.getComments(id as string),
   );
 
   // Fetch reminders for this lead
   const { data: remindersData, mutate: mutateReminders } = useSWR(
     id ? `lead-reminders-${id}` : null,
-    () => leadsApi.getReminders(id as string).then((res) => res.data.data),
+    () => leadsApi.getReminders(id as string),
   );
 
   // Fetch users list for admin assignment - filter to sales department only
@@ -180,12 +180,11 @@ export default function LeadDetailPage() {
     isAdmin ? "users-list-sales" : null,
     () =>
       usersApi
-        .list({ limit: 100, departmentSlug: "sales" })
-        .then((res) => res.data),
+        .list({ limit: 100, departmentSlug: "sales" }),
   );
 
   // Handle the nested data structure properly - filter to active sales employees
-  const allUsers = usersData?.data?.data || usersData?.data || [];
+  const allUsers = usersData?.data || [];
   const users = Array.isArray(allUsers)
     ? allUsers.filter(
         (u: any) =>

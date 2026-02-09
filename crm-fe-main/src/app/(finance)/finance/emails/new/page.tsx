@@ -39,18 +39,17 @@ export default function NewEmailRequestPage() {
   // Fetch invoices for dropdown
   const { data: invoicesData, isLoading: invoicesLoading } = useSWR(
     user ? "invoices-for-email" : null,
-    () => invoicesApi.list({ limit: 100 }).then((res) => res.data.data),
+    () => invoicesApi.list({ limit: 100 }),
   );
 
   // Fetch leads for dropdown
   const { data: leadsData, isLoading: leadsLoading } = useSWR(
     user ? "leads-for-email" : null,
-    () => leadsApi.list({ limit: 100 }).then((res) => res.data.data),
+    () => leadsApi.list({ limit: 100 }),
   );
 
-  // Data arrays are returned directly from res.data.data
   const invoices = Array.isArray(invoicesData) ? invoicesData : [];
-  const leads = Array.isArray(leadsData) ? leadsData : [];
+  const leads = leadsData?.data || [];
 
   // Auto-fill when invoice is selected
   const handleInvoiceChange = (id: string) => {

@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { leadsApi, usersApi } from "@/lib/api";
+import { leadsApi, usersApi, teamsApi } from "@/lib/api";
 import { UserSelector } from "@/components/shared/user-selector";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -144,6 +144,10 @@ export default function LeadsPage() {
     isAdmin || isManager ? "table" : "kanban",
   );
 
+  // Kanban global pagination (1-100, 101-200, etc.)
+  const [kanbanPage, setKanbanPage] = useState(1);
+  const KANBAN_PAGE_SIZE = 100;
+
   // Selection state for bulk operations
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
@@ -167,21 +171,30 @@ export default function LeadsPage() {
     "all" | "assigned" | "unassigned"
   >("all");
 
-  // User filter state (Admin/Manager, table view only)
+  // User filter state (Admin/Manager, both views)
   const [assignedToUserId, setAssignedToUserId] = useState<string>("all");
+
+  // Team filter state (Admin only, Kanban view)
+  const [kanbanTeamId, setKanbanTeamId] = useState<string>("all");
 
   // Fetch users for assignment (Admin only)
   const { data: usersData } = useSWR(isAdmin ? "users-list" : null, () =>
-    usersApi.list({ limit: 100 }).then((res) => res.data),
+    usersApi.list({ limit: 100 }),
   );
   const users = usersData?.data || [];
 
   // Fetch user stats for filtering (Admin/Manager with team)
   const { data: userStatsData } = useSWR(
-    (isAdmin || isManager) && viewMode === "table" ? "leads-user-stats" : null,
-    () => leadsApi.getStatsByUser().then((res) => res.data?.data),
+    isAdmin || isManager ? "leads-user-stats" : null,
+    () => leadsApi.getStatsByUser(),
   );
   const userStats = userStatsData || { users: [], unassignedCount: 0 };
+
+  // Fetch teams for filtering (Admin only)
+  const { data: teamsData } = useSWR(isAdmin ? "teams-list" : null, () =>
+    teamsApi.list(),
+  );
+  const teams = teamsData || [];
 
   const { data, isLoading, error, mutate } = useSWR(
     [
@@ -192,40 +205,40 @@ export default function LeadsPage() {
       viewMode,
       assignmentFilter,
       assignedToUserId,
+      kanbanPage,
+      kanbanTeamId,
     ],
     () =>
-      leadsApi
-        .list({
-          page,
-          limit: viewMode === "kanban" ? 500 : pageSize, // Use pageSize for table view
-          status: status !== "all" ? status : undefined,
-          assigned:
-            viewMode === "table" && assignmentFilter !== "all"
-              ? assignmentFilter
-              : viewMode === "table" && assignedToUserId === "_unassigned"
-                ? "unassigned"
-                : undefined,
-          assignedTo:
-            viewMode === "table" &&
-            assignedToUserId !== "all" &&
-            assignedToUserId !== "_unassigned"
-              ? assignedToUserId
+      leadsApi.list({
+        page: viewMode === "kanban" ? kanbanPage : page,
+        limit: viewMode === "kanban" ? KANBAN_PAGE_SIZE : pageSize,
+        status: status !== "all" ? status : undefined,
+        assigned:
+          viewMode === "table" && assignmentFilter !== "all"
+            ? assignmentFilter
+            : assignedToUserId === "_unassigned"
+              ? "unassigned"
               : undefined,
-        })
-        .then((res) => res.data),
+        assignedTo:
+          assignedToUserId !== "all" && assignedToUserId !== "_unassigned"
+            ? assignedToUserId
+            : undefined,
+        teamId:
+          viewMode === "kanban" && kanbanTeamId !== "all"
+            ? kanbanTeamId
+            : undefined,
+      }),
   );
 
   // Fetch today's reminders to highlight leads
   const { data: remindersData } = useSWR(
     ["today-reminders", new Date().toISOString().split("T")[0]],
     () =>
-      leadsApi
-        .getAllReminders({
-          date: new Date().toISOString().split("T")[0],
-          status: "pending",
-          limit: 100,
-        })
-        .then((res) => res.data),
+      leadsApi.getAllReminders({
+        date: new Date().toISOString().split("T")[0],
+        status: "pending",
+        limit: 100,
+      }),
   );
 
   const leadsWithReminders = new Set(
@@ -661,6 +674,88 @@ export default function LeadsPage() {
       {/* Kanban View with Drag and Drop */}
       {viewMode === "kanban" && (
         <DragDropContext onDragEnd={handleDragEnd}>
+          {/* Kanban Filters & Pagination */}
+          <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 bg-muted/30 rounded-lg">
+            <div className="flex flex-wrap gap-3 items-center">
+              {/* User Filter for Admin/Manager */}
+              {(isAdmin || isManager) && (
+                <Select
+                  value={assignedToUserId}
+                  onValueChange={(v) => {
+                    setAssignedToUserId(v);
+                    setKanbanPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <User className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Filter by User" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    <SelectItem value="all">All Users</SelectItem>
+                    {isAdmin && userStats.unassignedCount > 0 && (
+                      <SelectItem value="_unassigned">
+                        Unassigned ({userStats.unassignedCount})
+                      </SelectItem>
+                    )}
+                    {userStats.users.map((user: any) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.fullName} ({user.leadCount})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Team Filter for Admin */}
+              {isAdmin && (
+                <Select
+                  value={kanbanTeamId}
+                  onValueChange={(v) => {
+                    setKanbanTeamId(v);
+                    setKanbanPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <Users className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Filter by Team" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    <SelectItem value="all">All Teams</SelectItem>
+                    {teams.map((team: any) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {(kanbanPage - 1) * KANBAN_PAGE_SIZE + 1}-
+                {kanbanPage * KANBAN_PAGE_SIZE}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setKanbanPage((p) => Math.max(1, p - 1))}
+                disabled={kanbanPage === 1}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setKanbanPage((p) => p + 1)}
+                disabled={leads.length < KANBAN_PAGE_SIZE}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto pb-4">
             <div className="flex gap-4" style={{ minWidth: "1600px" }}>
               {KANBAN_STATUSES.map((statusValue) => {

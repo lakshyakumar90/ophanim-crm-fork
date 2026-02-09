@@ -16,7 +16,7 @@ export default function EditLeadPage() {
     isLoading,
     error,
   } = useSWR(id ? `lead-${id}` : null, () =>
-    leadsApi.get(id as string).then((res) => res.data.data)
+    leadsApi.get(id as string)
   );
 
   if (isLoading) {

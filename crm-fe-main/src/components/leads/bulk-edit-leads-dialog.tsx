@@ -66,11 +66,11 @@ export function BulkEditLeadsDialog({
   // Fetch users for assignment dropdown
   const { data: usersData, isLoading: loadingUsers } = useSWR(
     open ? "users-list" : null,
-    () => usersApi.list({ limit: 100 }).then((res) => res.data)
+    () => usersApi.list({ limit: 100 }),
   );
 
   // Handle the nested data structure properly
-  const users = usersData?.data?.data || usersData?.data || [];
+  const users = usersData?.data || [];
 
   const resetForm = () => {
     setStatus("");

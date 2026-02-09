@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { USER_ROLES, ALL_JOB_TITLES } from "../config/constants.js";
+import { USER_ROLES, ALL_JOB_TITLES, SHIFT_TYPES } from "../config/constants.js";
 
 // Common UUID param
 export const uuidParamSchema = z.object({
@@ -17,6 +17,7 @@ export const createUserSchema = z.object({
   teamId: z.string().uuid().optional().nullable(),
   managerId: z.string().uuid().optional().nullable(),
   phone: z.string().max(20).optional().nullable(),
+  shiftType: z.enum([SHIFT_TYPES.DAY_SHIFT, SHIFT_TYPES.NIGHT_SHIFT]).optional(),
 });
 
 // Job title enum values - categorized by role
@@ -63,6 +64,7 @@ export const updateUserSchema = z.object({
   is2faEnabled: z.boolean().optional(),
   notificationPreferences: z.record(z.string(), z.boolean()).optional(),
   jobTitle: z.enum(JOB_TITLES).optional().nullable(),
+  shiftType: z.enum([SHIFT_TYPES.DAY_SHIFT, SHIFT_TYPES.NIGHT_SHIFT]).optional(),
 });
 
 // Update profile (for own profile) - Users can only update phone, avatar, and preferences

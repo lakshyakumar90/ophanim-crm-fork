@@ -445,7 +445,7 @@ function GlobalSidebar({
   // Fetch unread notification count for badge - use same key as header for shared cache
   const { data: unreadData } = useSWR(
     user ? "notifications-unread-count" : null,
-    () => notificationsApi.getUnreadCount().then((res) => res.data.data),
+    () => notificationsApi.getUnreadCount(),
     { refreshInterval: 30000 }, // Refresh every 30 seconds
   );
   const unreadCount = unreadData?.count || 0;
@@ -456,8 +456,7 @@ function GlobalSidebar({
     user ? ["sidebar-reminders-count", today] : null,
     () =>
       leadsApi
-        .getAllReminders({ date: today, status: "pending", limit: 100 })
-        .then((res) => res.data),
+        .getAllReminders({ date: today, status: "pending", limit: 100 }),
     { refreshInterval: 60000 }, // Refresh every minute
   );
   const remindersCount = remindersData?.data?.length || 0;
@@ -689,7 +688,7 @@ export function Sidebar() {
   const [globalCollapsed, setGlobalCollapsed] = useState(false);
 
   return (
-    <aside className="flex h-screen shadow-sm transition-all duration-300">
+    <aside className="flex h-screen shadow-sm transition-all duration-300 overflow-hidden">
       <GlobalSidebar
         collapsed={globalCollapsed}
         setCollapsed={setGlobalCollapsed}

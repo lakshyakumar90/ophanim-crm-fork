@@ -46,12 +46,12 @@ export default function TeamDetailPage() {
 
   const { data: teamData, isLoading: loadingTeam } = useSWR(
     id ? `team-${id}` : null,
-    () => teamsApi.get(id as string).then((res) => res.data.data),
+    () => teamsApi.get(id as string),
   );
 
   const { data: membersData, isLoading: loadingMembers } = useSWR(
     id ? `team-members-${id}` : null,
-    () => teamsApi.getMembers(id as string).then((res) => res.data.data),
+    () => teamsApi.getMembers(id as string),
   );
 
   const team = teamData;

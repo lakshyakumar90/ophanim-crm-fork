@@ -32,7 +32,7 @@ export function Header() {
   // Fetch unread count - use same key as sidebar for shared cache
   const { data: unreadData, mutate } = useSWR(
     user ? "notifications-unread-count" : null,
-    () => notificationsApi.getUnreadCount().then((res) => res.data.data),
+    () => notificationsApi.getUnreadCount(),
     { refreshInterval: 30000 }, // Refresh every 30 seconds to stay in sync
   );
 

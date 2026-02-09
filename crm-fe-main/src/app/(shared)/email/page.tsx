@@ -42,16 +42,16 @@ export default function EmailComposePage() {
 
   // Check if email is configured
   const { data: emailInfo, isLoading: loadingInfo } = useSWR("email-info", () =>
-    emailApi.getInfo().then((res) => res.data.data)
+    emailApi.getInfo()
   );
 
   // Fetch leads with email
   const { data: leadsData, isLoading: loadingLeads } = useSWR(
     "leads-for-email",
-    () => leadsApi.list({ limit: 500 }).then((res) => res.data.data)
+    () => leadsApi.list({ limit: 500 }),
   );
 
-  const leads = leadsData || [];
+  const leads = leadsData?.data || [];
   const isConfigured = emailInfo?.isConfigured;
   const maxPerBatch = emailInfo?.maxEmailsPerBatch || 50;
 

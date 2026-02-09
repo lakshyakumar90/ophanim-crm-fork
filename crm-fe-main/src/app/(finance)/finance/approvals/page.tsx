@@ -40,7 +40,6 @@ export default function ApprovalsPage() {
           type: activeTab !== "all" ? activeTab : undefined,
           limit: 50,
         })
-        .then((res) => res.data.data),
   );
 
   const handleRefresh = async () => {

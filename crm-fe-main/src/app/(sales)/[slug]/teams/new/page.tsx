@@ -55,10 +55,10 @@ export default function NewTeamPage() {
       try {
         setLoading(true);
         // 1. Fetch departments to find the ID from the slug
-        const deptsRes = await departmentsApi.list();
+        const departments = await departmentsApi.list();
         // Try to match slug to department name or a slug field if it exists
         // Converting slug to title case for better matching (e.g. "sales" -> "Sales")
-        const dept = deptsRes.data.data.find(
+        const dept = departments.find(
           (d: any) =>
             d.slug === slug || d.name.toLowerCase() === slug.toLowerCase(),
         );
@@ -66,11 +66,11 @@ export default function NewTeamPage() {
         if (dept) {
           setDepartment(dept);
           // 2. Fetch managers for this department
-          const usersRes = await usersApi.list({
+          const usersResult = await usersApi.list({
             role: "manager",
             departmentId: dept.id,
           });
-          setManagers(usersRes.data.data);
+          setManagers(usersResult?.data || usersResult || []);
         } else {
           toast.error("Department not found");
         }

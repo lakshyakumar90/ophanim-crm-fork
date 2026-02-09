@@ -56,7 +56,6 @@ export default function PaymentsPage() {
           payment_mode: modeFilter !== "all" ? modeFilter : undefined,
           limit: 50,
         })
-        .then((res) => res.data.data),
   );
 
   const handleRefresh = async () => {

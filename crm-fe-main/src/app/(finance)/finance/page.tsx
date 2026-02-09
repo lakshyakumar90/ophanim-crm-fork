@@ -29,15 +29,14 @@ export default function FinanceDashboardPage() {
 
   const { data, isLoading, error, mutate } = useSWR(
     user ? "finance-dashboard" : null,
-    () => financeDashboardApi.get().then((res) => res.data.data),
+    () => financeDashboardApi.get(),
   );
 
   const { data: recentActivity } = useSWR(
     user ? "finance-activity" : null,
     () =>
       financeDashboardApi
-        .getActivity(undefined, 8)
-        .then((res) => res.data.data),
+        .getActivity(undefined, 8),
   );
 
   const handleRefresh = async () => {

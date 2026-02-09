@@ -42,9 +42,9 @@ export default function NewTeamPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Fetch departments
-  const { data: departmentsData } = useSWR("departments", () =>
-    departmentsApi.list().then((res) => res.data.data),
-  );
+  const { data: departmentsData } = useSWR("departments", async () => {
+    return await departmentsApi.list();
+  });
 
   // Fetch managers (users with manager role) - filtered by selected department
   const { data: usersData } = useSWR(
@@ -55,11 +55,10 @@ export default function NewTeamPage() {
           role: "manager",
           departmentId: formData.departmentId || undefined,
         })
-        .then((res) => res.data.data),
   );
 
   const departments = departmentsData || [];
-  const managers = usersData || [];
+  const managers = usersData?.data || usersData || [];
 
   const validate = () => {
     const newErrors: Record<string, string> = {};

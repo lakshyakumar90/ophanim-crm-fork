@@ -50,12 +50,17 @@ export const attendanceListQuerySchema = z.object({
 
 // Attendance rules
 export const attendanceRulesSchema = z.object({
+  shiftType: z.enum(["day_shift", "night_shift"]).optional(),
   workStartTime: z
     .string()
     .regex(/^\d{2}:\d{2}$/, "Time must be in HH:MM format"),
   workEndTime: z
     .string()
     .regex(/^\d{2}:\d{2}$/, "Time must be in HH:MM format"),
+  autoLogoutTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "Time must be in HH:MM format")
+    .optional(),
   lateThresholdMinutes: z.number().int().min(0).max(120).default(15),
   halfDayHours: z.number().min(1).max(12).default(4),
   fullDayHours: z.number().min(1).max(24).default(8),

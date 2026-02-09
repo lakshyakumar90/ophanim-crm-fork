@@ -11,7 +11,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { usePathname, useRouter } from "next/navigation";
 import { Department } from "@/types";
-import { departmentsApi } from "@/lib/departments-api";
+import { departmentsApi } from "@/lib/api";
 
 interface DepartmentContextType {
   currentDepartment: Department | null;

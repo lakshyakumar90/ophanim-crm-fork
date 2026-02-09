@@ -81,9 +81,9 @@ export function TeamMembersForm() {
   const fetchTeams = async () => {
     try {
       const res = await teamsApi.list();
-      if (res.data.success) {
+      const allTeams = Array.isArray(res) ? res : [];
+      if (allTeams.length > 0) {
         // For managers, filter to only their managed teams
-        const allTeams = res.data.data || [];
         if (user?.role === "manager") {
           const managedTeams = allTeams.filter(
             (t: Team) => t.id === user?.teamId,
@@ -103,9 +103,9 @@ export function TeamMembersForm() {
   const fetchTeamMembers = async (teamId: string) => {
     try {
       const res = await teamsApi.get(teamId);
-      if (res.data.success) {
-        setSelectedTeam(res.data.data);
-        setMembers(res.data.data.members || []);
+      if (res) {
+        setSelectedTeam(res);
+        setMembers(res.members || []);
       }
     } catch (error) {
       console.error("Failed to fetch team members:", error);
@@ -114,16 +114,14 @@ export function TeamMembersForm() {
 
   const fetchAvailableUsers = async () => {
     try {
-      const res = await usersApi.list();
-      if (res.data.success) {
-        const allUsers = res.data.data || [];
-        // Filter out users already in the team
-        const memberIds = members.map((m) => m.id);
-        const available = allUsers.filter(
-          (u: TeamMember) => !memberIds.includes(u.id),
-        );
-        setAvailableUsers(available);
-      }
+      const result = await usersApi.list();
+      const allUsers = result?.data || result || [];
+      // Filter out users already in the team
+      const memberIds = members.map((m) => m.id);
+      const available = allUsers.filter(
+        (u: TeamMember) => !memberIds.includes(u.id),
+      );
+      setAvailableUsers(available);
     } catch (error) {
       console.error("Failed to fetch users:", error);
     }

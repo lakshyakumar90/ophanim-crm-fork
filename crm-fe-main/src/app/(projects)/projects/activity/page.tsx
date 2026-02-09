@@ -170,7 +170,6 @@ export default function ProjectActivityPage() {
           resourceType: resourceType !== "all" ? resourceType : undefined,
           departmentId: departmentId || undefined, // Filter by the user's department
         })
-        .then((res) => res.data),
   );
 
   // NOTE: Stats might fail if the user is not technically an "admin".

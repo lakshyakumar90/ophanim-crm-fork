@@ -55,7 +55,7 @@ export default function EmailSettingsForm() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data, isLoading, mutate } = useSWR("email-settings", () =>
-    emailApi.getSettings().then((res) => res.data.data),
+    emailApi.getSettings(),
   );
 
   const settings = data;

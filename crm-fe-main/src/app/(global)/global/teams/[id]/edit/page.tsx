@@ -46,13 +46,13 @@ export default function EditTeamPage() {
   // Fetch team data
   const { data: teamData, isLoading: loadingTeam } = useSWR(
     id ? `team-${id}` : null,
-    () => teamsApi.get(id as string).then((res) => res.data.data),
+    () => teamsApi.get(id as string),
   );
 
   // Fetch departments
-  const { data: departmentsData } = useSWR("departments", () =>
-    departmentsApi.list().then((res) => res.data.data),
-  );
+  const { data: departmentsData } = useSWR("departments", async () => {
+    return await departmentsApi.list();
+  });
 
   // Fetch managers (users with manager role) - filtered by selected department
   const { data: usersData } = useSWR(
@@ -63,11 +63,10 @@ export default function EditTeamPage() {
           role: "manager",
           departmentId: formData.departmentId || undefined,
         })
-        .then((res) => res.data.data),
   );
 
   const departments = departmentsData || [];
-  const managers = usersData || [];
+  const managers = usersData?.data || usersData || [];
 
   // Populate form when team data loads
   useEffect(() => {

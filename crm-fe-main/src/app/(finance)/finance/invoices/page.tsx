@@ -69,7 +69,6 @@ export default function InvoicesPage() {
           search: search || undefined,
           limit: 50,
         })
-        .then((res) => res.data.data),
   );
 
   const handleRefresh = async () => {

@@ -69,19 +69,15 @@ export default function NewProjectTaskPage() {
   // Data Fetching
   const { data: usersData, isLoading: loadingUsers } = useSWR(
     "users-list",
-    () => usersApi.list().then((res) => res.data),
+    () => usersApi.list(),
   );
 
   const { data: projectsData } = useSWR("projects-list", () =>
-    projectsApi.list().then((res) => res.data),
+    projectsApi.list(),
   );
 
   // Handle nested data logic
-  const users = Array.isArray(usersData?.data)
-    ? usersData.data
-    : Array.isArray(usersData)
-      ? usersData
-      : [];
+  const users = usersData?.data || [];
   const projects = Array.isArray(projectsData) ? projectsData : [];
 
   const {

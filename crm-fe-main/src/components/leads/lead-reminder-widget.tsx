@@ -71,7 +71,7 @@ export function LeadReminderWidget({ leadId }: LeadReminderWidgetProps) {
 
   const { data: reminders, mutate } = useSWR(
     leadId ? `lead-reminders-${leadId}` : null,
-    () => leadsApi.getReminders(leadId).then((res) => res.data.data),
+    () => leadsApi.getReminders(leadId),
     {
       refreshInterval: 0, // No polling
       revalidateOnFocus: false,
@@ -450,7 +450,7 @@ export function SetReminderButton({ leadId }: SetReminderButtonProps) {
   const [reminderNote, setReminderNote] = useState("");
 
   const { mutate } = useSWR(leadId ? `lead-reminders-${leadId}` : null, () =>
-    leadsApi.getReminders(leadId).then((res) => res.data.data),
+    leadsApi.getReminders(leadId),
   );
 
   const handleCreate = async () => {

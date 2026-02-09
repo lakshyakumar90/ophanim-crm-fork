@@ -47,9 +47,11 @@ export default function TeamsPage() {
     isLoading: isTeamsLoading,
     error,
     mutate,
-  } = useSWR("teams", () => teamsApi.list().then((res) => res.data));
+  } = useSWR("teams", () =>
+    teamsApi.list(),
+  );
 
-  const allTeams: Team[] = data?.data || [];
+  const allTeams: Team[] = (data || []) as Team[];
 
   // Filter teams by current department
   const teams = currentDepartment

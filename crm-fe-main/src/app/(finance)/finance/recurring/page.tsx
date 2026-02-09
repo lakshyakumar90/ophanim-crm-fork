@@ -51,7 +51,7 @@ export default function RecurringSchedulesPage() {
 
   const { data, isLoading, mutate } = useSWR(
     user ? "recurring-schedules" : null,
-    () => recurringApi.list({ limit: 50 }).then((res) => res.data.data),
+    () => recurringApi.list({ limit: 50 }),
   );
 
   const handleRefresh = async () => {

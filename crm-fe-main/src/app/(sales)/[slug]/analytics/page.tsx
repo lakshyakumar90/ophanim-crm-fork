@@ -68,12 +68,12 @@ export default function AnalyticsPage() {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [teamsRes, usersRes] = await Promise.all([
+        const [teamsResult, usersResult] = await Promise.all([
           teamsApi.list(),
           usersApi.list({ limit: 1000 }), // Get all users for selector
         ]);
-        setTeams(teamsRes.data.data || []);
-        setUsers(usersRes.data.data || []);
+        setTeams(Array.isArray(teamsResult) ? teamsResult : []);
+        setUsers(usersResult?.data || usersResult || []);
       } catch (error) {
         toast.error("Failed to load filter data");
       }

@@ -32,14 +32,14 @@ export default function UserDetailPage() {
 
   const { data, isLoading, error } = useSWR(
     userId ? ["user", userId] : null,
-    () => usersApi.get(userId).then((res) => res.data.data),
+    () => usersApi.get(userId),
   );
 
   // Fetch user activities
   const { data: activitiesData, isLoading: activitiesLoading } = useSWR(
     userId && isAdmin ? ["user-activities", userId] : null,
     () =>
-      activitiesApi.list({ userId, limit: 50 }).then((res) => res.data.data),
+      activitiesApi.list({ userId, limit: 50 }).then((res) => res?.data || []),
   );
 
   if (!isAdmin) {
@@ -156,6 +156,13 @@ export default function UserDetailPage() {
                       ? `${user.departmentName} ${user.role}`
                       : user.role}
                 </span>
+                {user.shiftType && (
+                  <Badge variant="outline" className="ml-2">
+                    {user.shiftType === "day_shift"
+                      ? "Day Shift"
+                      : "Night Shift"}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -215,6 +222,19 @@ export default function UserDetailPage() {
                     {user.lastLogin
                       ? format(new Date(user.lastLogin), "PPP 'at' p")
                       : "Never"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Shift</p>
+                  <p className="font-medium">
+                    {user.shiftType === "day_shift"
+                      ? "Day Shift (9 AM - 6 PM)"
+                      : user.shiftType === "night_shift"
+                        ? "Night Shift (7 PM - 4 AM)"
+                        : "Not Set"}
                   </p>
                 </div>
               </div>

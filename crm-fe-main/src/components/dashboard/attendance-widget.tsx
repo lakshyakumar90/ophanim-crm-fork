@@ -21,7 +21,7 @@ export function AttendanceWidget() {
 
   const { data } = useSWR(
     "attendance-today",
-    () => attendanceApi.getToday().then((res) => res.data.data),
+    () => attendanceApi.getToday(),
     { refreshInterval: 0 }, // No polling
   );
 

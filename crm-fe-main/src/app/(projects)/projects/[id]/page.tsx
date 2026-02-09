@@ -99,9 +99,9 @@ export default function ProjectDetailsPage() {
       const token = localStorage.getItem("crm_access_token");
 
       // Fetch project details
-      const projectRes = await projectsApi.get(params.id as string);
-      if (projectRes.data.success) {
-        setProject(projectRes.data.data);
+      const projectData = await projectsApi.get(params.id as string);
+      if (projectData) {
+        setProject(projectData);
       }
 
       // Fetch dashboard stats
@@ -677,9 +677,9 @@ function AddMemberDialog({
 
   useEffect(() => {
     if (open && !resources) {
-      projectsApi.getResources().then((res) => {
-        if (res.data.success) {
-          setResources(res.data.data);
+      projectsApi.getResources().then((data) => {
+        if (data) {
+          setResources(data);
         }
       });
     }

@@ -18,6 +18,7 @@ export interface HREmployeeRecord {
   avatarUrl: string | null;
   isActive: boolean;
   createdAt: string;
+  shiftType: string | null;
 }
 
 // HR Analytics data
@@ -62,6 +63,7 @@ export async function getEmployeeDirectory(
       avatar_url,
       is_active,
       created_at,
+      shift_type,
       teams:team_id (
         id,
         name,
@@ -103,6 +105,7 @@ export async function getEmployeeDirectory(
       avatarUrl: user.avatar_url,
       isActive: user.is_active,
       createdAt: user.created_at,
+      shiftType: user.shift_type || null,
     };
   });
 }
@@ -126,6 +129,7 @@ export async function getEmployeeById(
       avatar_url,
       is_active,
       created_at,
+      shift_type,
       teams:team_id (
         id,
         name,
@@ -158,6 +162,7 @@ export async function getEmployeeById(
     avatarUrl: user.avatar_url,
     isActive: user.is_active,
     createdAt: user.created_at,
+    shiftType: user.shift_type || null,
   };
 }
 

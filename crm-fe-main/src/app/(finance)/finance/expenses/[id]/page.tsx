@@ -32,7 +32,7 @@ export default function ExpenseDetailPage() {
     isLoading,
     mutate,
   } = useSWR<Expense>(user && expenseId ? ["expense", expenseId] : null, () =>
-    expensesApi.get(expenseId).then((res) => res.data.data),
+    expensesApi.get(expenseId),
   );
 
   const handleApprove = async () => {

@@ -93,31 +93,27 @@ export default function NewTaskPage() {
   // Data Fetching
   const { data: usersData, isLoading: loadingUsers } = useSWR(
     isManager || isHR ? "users-list" : null,
-    () => usersApi.list().then((res) => res.data),
+    () => usersApi.list(),
   );
 
   const { data: leadsData } = useSWR(
     isSalesOrFinance ? "leads-list" : null,
-    () => leadsApi.list({ limit: 100 }).then((res) => res.data), // Limit to avoid massive load, ideally autocomplete
+    () => leadsApi.list({ limit: 100 }),
   );
 
   const { data: projectsData } = useSWR(
     canSelectProject ? "projects-list" : null,
-    () => projectsApi.list().then((res) => res.data),
+    () => projectsApi.list(),
   );
 
   const { data: teamsData } = useSWR(isHR ? "teams-list" : null, () =>
-    teamsApi.list().then((res) => res.data),
+    teamsApi.list(),
   );
 
   // Handle nested data logic
-  const users = Array.isArray(usersData?.data)
-    ? usersData.data
-    : Array.isArray(usersData)
-      ? usersData
-      : [];
+  const users = usersData?.data || [];
   const leads = leadsData?.data || [];
-  const projects = Array.isArray(projectsData) ? projectsData : []; // projectsApi.list usually returns array directly? Need to check
+  const projects = Array.isArray(projectsData) ? projectsData : [];
   const teams = Array.isArray(teamsData) ? teamsData : [];
 
   const {

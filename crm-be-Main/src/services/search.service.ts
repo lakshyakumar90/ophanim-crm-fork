@@ -18,6 +18,30 @@ interface SearchFilters {
 }
 
 /**
+ * Get all team member IDs for a manager (includes the manager themselves)
+ * Used for team-based search filtering
+ */
+async function getTeamMemberIds(
+  managerId: string,
+  teamId: string,
+): Promise<string[]> {
+  const { data: teamMembers } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("is_active", true);
+
+  const memberIds = (teamMembers || []).map((u: any) => u.id);
+
+  // Ensure manager is included
+  if (!memberIds.includes(managerId)) {
+    memberIds.push(managerId);
+  }
+
+  return memberIds;
+}
+
+/**
  * Global search across all entities
  * OPTIMIZED: Uses PostgreSQL full-text search with tsvector for fast results
  * Falls back to ILIKE if full-text search is not available
@@ -54,6 +78,7 @@ async function tryFullTextSearch(
       p_user_role: user.role,
       p_user_id: user.id,
       p_department_id: user.departmentId || null,
+      p_team_id: user.teamId || null,
       p_limit: 15,
     });
 
@@ -143,8 +168,10 @@ async function traditionalSearch(
 
       if (user.role === USER_ROLES.EMPLOYEE) {
         leadQuery = leadQuery.eq("assigned_to", user.id);
-      } else if (user.role === USER_ROLES.MANAGER && user.departmentId) {
-        leadQuery = leadQuery.eq("department_id", user.departmentId);
+      } else if (user.role === USER_ROLES.MANAGER && user.teamId) {
+        // Manager sees their leads + leads assigned to their team members
+        const teamMemberIds = await getTeamMemberIds(user.id, user.teamId);
+        leadQuery = leadQuery.in("assigned_to", teamMemberIds);
       }
 
       if (validStartDate) {
@@ -182,8 +209,10 @@ async function traditionalSearch(
 
       if (user.role === USER_ROLES.EMPLOYEE) {
         taskQuery = taskQuery.eq("assigned_to", user.id);
-      } else if (user.role === USER_ROLES.MANAGER && user.departmentId) {
-        taskQuery = taskQuery.eq("department_id", user.departmentId);
+      } else if (user.role === USER_ROLES.MANAGER && user.teamId) {
+        // Manager sees tasks assigned to themselves + their team members
+        const teamMemberIds = await getTeamMemberIds(user.id, user.teamId);
+        taskQuery = taskQuery.in("assigned_to", teamMemberIds);
       }
 
       if (validStartDate) {

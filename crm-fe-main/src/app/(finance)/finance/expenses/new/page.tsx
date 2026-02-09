@@ -40,7 +40,7 @@ export default function NewExpensePage() {
   // Fetch expense categories
   const { data: categoriesData } = useSWR(
     user ? "expense-categories" : null,
-    () => expenseCategoriesApi.list().then((res) => res.data.data),
+    () => expenseCategoriesApi.list(),
   );
 
   const categories = categoriesData || [];

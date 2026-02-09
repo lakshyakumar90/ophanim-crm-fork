@@ -36,7 +36,7 @@ export default function AddMemberPage() {
   // Fetch team data
   const { data: teamData, isLoading: loadingTeam } = useSWR(
     id ? `team-${id}` : null,
-    () => teamsApi.get(id as string).then((res) => res.data.data),
+    () => teamsApi.get(id as string),
   );
 
   // Fetch users (employees) - filtered by team's department
@@ -53,10 +53,9 @@ export default function AddMemberPage() {
           // If we want users who can join this team, they should ideally not be in another team if 1-1 mapping.
           // But our system allows moving users.
         })
-        .then((res) => res.data.data),
   );
 
-  const availableUsers = usersData || [];
+  const availableUsers = usersData?.data || usersData || [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

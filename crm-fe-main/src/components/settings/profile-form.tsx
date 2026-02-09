@@ -219,6 +219,23 @@ export function ProfileForm() {
                 className="uppercase bg-slate-50"
               />
             </div>
+            <div className="space-y-2">
+              <Label>Shift</Label>
+              <Input
+                value={
+                  user?.shiftType === "day_shift"
+                    ? "Day Shift (9 AM - 6 PM)"
+                    : user?.shiftType === "night_shift"
+                      ? "Night Shift (7 PM - 4 AM)"
+                      : "Not Set"
+                }
+                disabled
+                className="bg-slate-50"
+              />
+              <p className="text-xs text-slate-500">
+                Contact admin to change your shift
+              </p>
+            </div>
           </div>
 
           <div className="flex justify-end">

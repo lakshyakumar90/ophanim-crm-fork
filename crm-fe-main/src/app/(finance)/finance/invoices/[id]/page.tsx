@@ -84,7 +84,7 @@ export default function InvoiceDetailPage() {
     isLoading,
     mutate,
   } = useSWR<Invoice>(user && invoiceId ? ["invoice", invoiceId] : null, () =>
-    invoicesApi.get(invoiceId).then((res) => res.data.data),
+    invoicesApi.get(invoiceId),
   );
 
   const handleApprove = async () => {

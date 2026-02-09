@@ -1,4 +1,5 @@
 import jwt, { type SignOptions } from "jsonwebtoken";
+import { createClient } from "@supabase/supabase-js";
 import { config } from "../config/env.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { ApiError } from "../utils/responses.js";
@@ -31,6 +32,18 @@ import type {
   RefreshTokenPayload,
 } from "../types/api.types.js";
 import type { UserRole } from "../config/constants.js";
+
+/**
+ * Create a disposable Supabase client for password verification.
+ * This prevents signInWithPassword() from polluting the shared
+ * supabaseAdmin singleton's auth state (which would downgrade it
+ * from service_role to an authenticated user session).
+ */
+function createAuthVerifyClient() {
+  return createClient(config.supabase.url, config.supabase.anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 /**
  * Generate access token
@@ -96,13 +109,17 @@ function getAccessTokenExpiresIn(): number {
  * Login user
  */
 export async function login(input: LoginInput): Promise<LoginResponse> {
-  // Get user by email (including password hash from auth)
-  const { data: authUser, error: authError } = await (
-    supabaseAdmin.auth as any
-  ).admin.listUsers();
+  // Verify credentials via Supabase Auth (disposable client to avoid polluting supabaseAdmin)
+  const { error: authError } = await createAuthVerifyClient().auth.signInWithPassword({
+    email: input.email.toLowerCase(),
+    password: input.password,
+  });
 
-  // For simplicity, we'll use a users table with password hash
-  // In production, you might use Supabase Auth directly
+  if (authError) {
+    throw new ApiError(ERROR_CODES.AUTH_INVALID_CREDENTIALS);
+  }
+
+  // Get user profile from users table
   const { data: user, error } = await supabaseAdmin
     .from("users")
     .select("*, departments(slug, name)")
@@ -117,13 +134,6 @@ export async function login(input: LoginInput): Promise<LoginResponse> {
   if (!user.is_active) {
     throw new ApiError(ERROR_CODES.AUTH_ACCOUNT_DISABLED);
   }
-
-  // For this implementation, we'll need a password_hash field
-  // or use Supabase Auth. Here we'll assume password is stored separately
-  // You would typically use: await comparePassword(input.password, user.password_hash)
-
-  // Note: In a real implementation, you'd integrate with Supabase Auth
-  // This is a simplified version for demonstration
 
   // Check if 2FA is enabled
   if (user.is_2fa_enabled && user.two_factor_secret) {
@@ -179,6 +189,7 @@ export async function login(input: LoginInput): Promise<LoginResponse> {
       departmentName: Array.isArray(user.departments)
         ? user.departments[0]?.name
         : (user.departments as any)?.name,
+      shiftType: user.shift_type || null,
     },
     tokens: {
       accessToken,
@@ -275,6 +286,7 @@ export async function register(
       department_id: input.departmentId || null,
       phone: input.phone || null,
       job_title: input.jobTitle || null,
+      shift_type: input.shiftType || "day_shift",
       is_active: true,
     })
     .select()
@@ -309,6 +321,7 @@ export async function register(
       avatarUrl: user.avatar_url,
       themePreference: user.theme_preference,
       primaryColor: user.primary_color,
+      shiftType: user.shift_type || null,
     },
     tokens: {
       accessToken,
@@ -456,9 +469,31 @@ export async function changePassword(
   userId: string,
   input: ChangePasswordInput,
 ): Promise<void> {
-  // Get user from Supabase Auth would be done here
-  // For now, we'll update via admin API
+  // Get user email to verify current password
+  const { data: userRecord, error: userError } = await supabaseAdmin
+    .from("users")
+    .select("email")
+    .eq("id", userId)
+    .single();
 
+  if (userError || !userRecord) {
+    throw new ApiError(ERROR_CODES.NOT_FOUND, "User not found");
+  }
+
+  // Verify current password via Supabase Auth (disposable client to avoid polluting supabaseAdmin)
+  const { error: verifyError } = await createAuthVerifyClient().auth.signInWithPassword({
+    email: userRecord.email,
+    password: input.currentPassword,
+  });
+
+  if (verifyError) {
+    throw new ApiError(
+      ERROR_CODES.AUTH_PASSWORD_MISMATCH,
+      "Current password is incorrect",
+    );
+  }
+
+  // Update password via admin API
   const { error } = await (supabaseAdmin.auth as any).admin.updateUserById(
     userId,
     {
@@ -595,6 +630,9 @@ export async function verifyOTPAndChangePassword(
  * Get current user info
  */
 export async function getCurrentUser(userId: string) {
+  // First try with shift_type (requires migration 032)
+  let userData: any = null;
+
   const { data: user, error } = await supabaseAdmin
     .from("users")
     .select(
@@ -613,37 +651,69 @@ export async function getCurrentUser(userId: string) {
       created_at,
       theme_preference,
       primary_color,
-      is_2fa_enabled
+      is_2fa_enabled,
+      shift_type
     `,
     )
     .eq("id", userId)
     .single();
 
-  if (error || !user) {
-    throw new ApiError(ERROR_CODES.NOT_FOUND, "User not found");
+  if (!error && user) {
+    userData = user;
+  } else {
+    // Fallback: query without shift_type (column may not exist yet)
+    const { data: fallbackUser, error: fallbackError } = await supabaseAdmin
+      .from("users")
+      .select(
+        `
+        id,
+        email,
+        full_name,
+        role,
+        team_id,
+        department_id,
+        departments(slug, name),
+        phone,
+        avatar_url,
+        is_active,
+        last_login,
+        created_at,
+        theme_preference,
+        primary_color,
+        is_2fa_enabled
+      `,
+      )
+      .eq("id", userId)
+      .single();
+
+    if (fallbackError || !fallbackUser) {
+      throw new ApiError(ERROR_CODES.NOT_FOUND, "User not found");
+    }
+    userData = fallbackUser;
   }
 
   return {
-    id: user.id,
-    email: user.email,
-    fullName: user.full_name,
-    role: user.role,
-    teamId: user.team_id,
-    phone: user.phone,
-    avatarUrl: user.avatar_url,
-    isActive: user.is_active,
-    lastLogin: user.last_login,
-    createdAt: user.created_at,
-    themePreference: user.theme_preference,
-    primaryColor: user.primary_color,
-    is2faEnabled: user.is_2fa_enabled || false,
-    departmentId: user.department_id,
-    departmentSlug: Array.isArray(user.departments)
-      ? user.departments[0]?.slug
-      : (user.departments as any)?.slug,
-    departmentName: Array.isArray(user.departments)
-      ? user.departments[0]?.name
-      : (user.departments as any)?.name,
+    id: userData.id,
+    email: userData.email,
+    fullName: userData.full_name,
+    role: userData.role,
+    teamId: userData.team_id,
+    phone: userData.phone,
+    avatarUrl: userData.avatar_url,
+    isActive: userData.is_active,
+    lastLogin: userData.last_login,
+    createdAt: userData.created_at,
+    themePreference: userData.theme_preference,
+    primaryColor: userData.primary_color,
+    is2faEnabled: userData.is_2fa_enabled || false,
+    departmentId: userData.department_id,
+    departmentSlug: Array.isArray(userData.departments)
+      ? userData.departments[0]?.slug
+      : (userData.departments as any)?.slug,
+    departmentName: Array.isArray(userData.departments)
+      ? userData.departments[0]?.name
+      : (userData.departments as any)?.name,
+    shiftType: userData.shift_type || null,
   };
 }
 
@@ -850,6 +920,7 @@ export async function login2FA(
       avatarUrl: user.avatar_url,
       themePreference: user.theme_preference,
       primaryColor: user.primary_color,
+      shiftType: user.shift_type || null,
     },
     tokens: {
       accessToken,

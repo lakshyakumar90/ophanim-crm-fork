@@ -66,7 +66,7 @@ export default function EditTaskPage() {
   // Fetch task details
   const { data: taskData, isLoading: loadingTask } = useSWR(
     id ? `task-${id}` : null,
-    () => tasksApi.get(id as string).then((res) => res.data.data),
+    () => tasksApi.get(id as string),
   );
 
   const task = taskData as Task;
@@ -74,15 +74,11 @@ export default function EditTaskPage() {
   // Only fetch users list for managers/admins
   const { data: usersData, isLoading: loadingUsers } = useSWR(
     isManager ? "users-list" : null,
-    () => usersApi.list().then((res) => res.data),
+    () => usersApi.list(),
   );
 
   // Handle nested data structure
-  const users = Array.isArray(usersData?.data)
-    ? usersData.data
-    : Array.isArray(usersData)
-      ? usersData
-      : [];
+  const users = usersData?.data || [];
 
   const {
     register,

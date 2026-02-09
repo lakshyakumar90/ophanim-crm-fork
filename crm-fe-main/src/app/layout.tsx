@@ -24,17 +24,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="h-full overflow-hidden">
       <body
-        className={`${dmSans.variable} font-sans antialiased`}
+        className={`${dmSans.variable} font-sans antialiased h-full overflow-hidden`}
         suppressHydrationWarning
       >
         <ThemeProvider defaultTheme="system">
           <AuthProvider>
             <DepartmentProvider>
               <SWRProvider>
-                {children}
-                <Toaster />
+                <div className="h-full overflow-hidden">
+                  {children}
+                  <Toaster />
+                </div>
               </SWRProvider>
             </DepartmentProvider>
           </AuthProvider>

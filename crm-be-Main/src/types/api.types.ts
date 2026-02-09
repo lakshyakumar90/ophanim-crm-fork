@@ -178,6 +178,7 @@ export interface LoginResponse {
     departmentId?: string | null;
     departmentSlug?: string;
     departmentName?: string;
+    shiftType?: string | null;
   } | null;
   tokens: {
     accessToken: string;

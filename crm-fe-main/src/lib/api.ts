@@ -3,6 +3,7 @@ import axios, {
   AxiosInstance,
   InternalAxiosRequestConfig,
 } from "axios";
+import * as sq from "./supabase-queries";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
@@ -113,7 +114,6 @@ api.interceptors.response.use(
         const { accessToken, refreshToken: newRefreshToken } =
           response.data.data;
 
-        console.log(response);
         tokens.set(accessToken, newRefreshToken);
 
         processQueue(null, accessToken);
@@ -134,7 +134,17 @@ api.interceptors.response.use(
   },
 );
 
-// API methods
+// =====================================================
+// Helper: unwrap backend API response for fallback
+// =====================================================
+function unwrap(res: any) {
+  return res?.data?.data ?? res?.data ?? res;
+}
+
+// =====================================================
+// AUTH API (always through backend)
+// =====================================================
+
 export const authApi = {
   login: (email: string, password: string) =>
     api.post("/auth/login", { email, password }),
@@ -146,6 +156,7 @@ export const authApi = {
     role?: string;
     departmentId?: string | null;
     jobTitle?: string | null;
+    shiftType?: string;
   }) => api.post("/auth/register", data),
 
   logout: () => api.post("/auth/logout"),
@@ -159,14 +170,46 @@ export const authApi = {
     api.post("/auth/change-password", { currentPassword, newPassword }),
 };
 
+// =====================================================
+// DEPARTMENTS API (Supabase direct reads)
+// =====================================================
+
 export const departmentsApi = {
-  list: () => api.get("/departments"),
+  list: async () => {
+    try {
+      return await sq.getDepartments();
+    } catch (error) {
+      console.error("Supabase departments read failed, falling back to API", error);
+      const res = await api.get("/departments");
+      return unwrap(res) || [];
+    }
+  },
   get: (id: string) => api.get(`/departments/${id}`),
 };
 
+// =====================================================
+// USERS API (Supabase direct reads, backend for writes)
+// =====================================================
+
 export const usersApi = {
-  list: (params?: Record<string, unknown>) => api.get("/users", { params }),
-  get: (id: string) => api.get(`/users/${id}`),
+  list: async (params?: Record<string, unknown>) => {
+    try {
+      return await sq.getUsers(params as any);
+    } catch (error) {
+      console.error("Supabase users read failed, falling back to API", error);
+      const res = await api.get("/users", { params });
+      return unwrap(res);
+    }
+  },
+  get: async (id: string) => {
+    try {
+      return await sq.getUserById(id);
+    } catch (error) {
+      console.error("Supabase user read failed, falling back to API", error);
+      const res = await api.get(`/users/${id}`);
+      return unwrap(res);
+    }
+  },
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/users/${id}`, data),
   activate: (id: string) => api.patch(`/users/${id}/activate`),
@@ -184,17 +227,55 @@ export const usersApi = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  // Project team assignment helpers
-  getProjectManagers: () => api.get("/users/project-managers"),
-  getByJobTitle: (titles: string[]) =>
-    api.get("/users/by-job-title", { params: { titles: titles.join(",") } }),
-  getJobTitles: (roleType?: "employee" | "manager") =>
-    api.get("/users/job-titles", { params: { roleType } }),
+  getProjectManagers: async () => {
+    try {
+      return await sq.getProjectManagers();
+    } catch (error) {
+      console.error("Supabase project managers read failed, falling back to API", error);
+      const res = await api.get("/users/project-managers");
+      return unwrap(res);
+    }
+  },
+  getByJobTitle: async (titles: string[]) => {
+    try {
+      return await sq.getUsersByJobTitle(titles);
+    } catch (error) {
+      console.error("Supabase job title read failed, falling back to API", error);
+      const res = await api.get("/users/by-job-title", {
+        params: { titles: titles.join(",") },
+      });
+      return unwrap(res);
+    }
+  },
+  getJobTitles: async (roleType?: "employee" | "manager") => {
+    try {
+      return await sq.getJobTitles(roleType);
+    } catch (error) {
+      console.error("Supabase job titles read failed, falling back to API", error);
+      const res = await api.get("/users/job-titles", { params: { roleType } });
+      return unwrap(res);
+    }
+  },
 };
 
+// =====================================================
+// TEAMS API (Supabase direct reads, backend for writes)
+// =====================================================
+
 export const teamsApi = {
-  list: () => api.get("/teams"),
-  get: (id: string) => api.get(`/teams/${id}`),
+  list: async () => {
+    try {
+      return await sq.getTeams();
+    } catch (error) {
+      console.error("Supabase teams read failed, falling back to API", error);
+      const res = await api.get("/teams");
+      return unwrap(res) || [];
+    }
+  },
+  get: async (id: string) => {
+    const res = await api.get(`/teams/${id}`);
+    return unwrap(res);
+  },
   create: (data: {
     name: string;
     managerId: string;
@@ -204,15 +285,30 @@ export const teamsApi = {
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/teams/${id}`, data),
   delete: (id: string) => api.delete(`/teams/${id}`),
-  getMembers: (id: string) => api.get(`/teams/${id}/members`),
+  getMembers: async (id: string) => {
+    const res = await api.get(`/teams/${id}/members`);
+    return unwrap(res);
+  },
   addMember: (teamId: string, userId: string) =>
     api.post(`/teams/${teamId}/members`, { userId }),
   removeMember: (teamId: string, userId: string) =>
     api.delete(`/teams/${teamId}/members/${userId}`),
 };
 
+// =====================================================
+// TEAM NOTES API (Supabase direct reads, backend for writes)
+// =====================================================
+
 export const teamNotesApi = {
-  list: (teamId: string) => api.get(`/teams/${teamId}/notes`),
+  list: async (teamId: string) => {
+    try {
+      return await sq.getTeamNotes(teamId);
+    } catch (error) {
+      console.error("Supabase team notes read failed, falling back to API", error);
+      const res = await api.get(`/teams/${teamId}/notes`);
+      return unwrap(res) || [];
+    }
+  },
   create: (teamId: string, content: string) =>
     api.post(`/teams/${teamId}/notes`, { content }),
   update: (noteId: string, content: string) =>
@@ -220,38 +316,88 @@ export const teamNotesApi = {
   delete: (noteId: string) => api.delete(`/teams/notes/${noteId}`),
 };
 
+// =====================================================
+// LEADS API (Supabase direct reads, backend for writes)
+// =====================================================
+
 export const leadsApi = {
-  list: (params?: Record<string, unknown>) => api.get("/leads", { params }),
-  get: (id: string) => api.get(`/leads/${id}`),
+  list: async (params?: Record<string, unknown>) => {
+    try {
+      return await sq.getLeads(params as any);
+    } catch (error) {
+      console.error("Supabase leads read failed, falling back to API", error);
+      const res = await api.get("/leads", { params });
+      return unwrap(res);
+    }
+  },
+  get: async (id: string) => {
+    try {
+      return await sq.getLeadById(id);
+    } catch (error) {
+      console.error("Supabase lead read failed, falling back to API", error);
+      const res = await api.get(`/leads/${id}`);
+      return unwrap(res);
+    }
+  },
   create: (data: Record<string, unknown>) => api.post("/leads", data),
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/leads/${id}`, data),
   delete: (id: string) => api.delete(`/leads/${id}`),
   assign: (id: string, assignTo: string, reason?: string) =>
     api.post(`/leads/${id}/assign`, { assignTo, reason }),
-  getPipeline: () => api.get("/leads/pipeline"),
-  getWonLeads: () => api.get("/leads/won"),
+  getPipeline: async () => {
+    try {
+      return await sq.getLeadPipeline();
+    } catch (error) {
+      console.error("Supabase pipeline read failed, falling back to API", error);
+      const res = await api.get("/leads/pipeline");
+      return unwrap(res);
+    }
+  },
+  getWonLeads: async () => {
+    try {
+      return await sq.getWonLeads();
+    } catch (error) {
+      console.error("Supabase won leads read failed, falling back to API", error);
+      const res = await api.get("/leads/won");
+      return unwrap(res);
+    }
+  },
   bulkAssign: (ids: string[], assignTo: string) =>
     api.post("/leads/bulk-assign", { ids, assignTo }),
   bulkUpdate: (ids: string[], data: Record<string, unknown>) =>
     api.post("/leads/bulk-update", { ids, data }),
   bulkDelete: (leadIds: string[]) =>
     api.post("/leads/bulk-delete", { leadIds }),
-  getActivities: (id: string) => api.get(`/leads/${id}/activities`),
+  getActivities: async (id: string) => {
+    try {
+      return await sq.getLeadActivities(id);
+    } catch (error) {
+      console.error("Supabase lead activities read failed, falling back to API", error);
+      const res = await api.get(`/leads/${id}/activities`);
+      return unwrap(res);
+    }
+  },
   addActivity: (id: string, data: Record<string, unknown>) =>
     api.post(`/leads/${id}/activities`, data),
-  // Status change
   updateStatus: (id: string, status: string, reason?: string) =>
     api.patch(`/leads/${id}/status`, { status, reason }),
-  // Comments
-  getComments: (id: string) => api.get(`/leads/${id}/comments`),
+  getComments: async (id: string) => {
+    try {
+      return await sq.getLeadComments(id);
+    } catch (error) {
+      console.error("Supabase lead comments read failed, falling back to API", error);
+      const res = await api.get(`/leads/${id}/comments`);
+      return unwrap(res);
+    }
+  },
   addComment: (id: string, content: string) =>
     api.post(`/leads/${id}/comments`, { content }),
   updateComment: (leadId: string, commentId: string, content: string) =>
     api.put(`/leads/${leadId}/comments/${commentId}`, { content }),
   deleteComment: (leadId: string, commentId: string) =>
     api.delete(`/leads/${leadId}/comments/${commentId}`),
-  getAllReminders: (params?: {
+  getAllReminders: async (params?: {
     page?: number;
     limit?: number;
     userId?: string;
@@ -259,36 +405,115 @@ export const leadsApi = {
     sortOrder?: "asc" | "desc";
     status?: "pending" | "sent" | "all";
     date?: string;
-  }) => api.get("/leads/reminders/all", { params }),
-  getReminders: (id: string) => api.get(`/leads/${id}/reminders`),
+  }) => {
+    try {
+      return await sq.getAllReminders(params);
+    } catch (error) {
+      console.error("Supabase reminders read failed, falling back to API", error);
+      const res = await api.get("/leads/reminders/all", { params });
+      return unwrap(res);
+    }
+  },
+  getReminders: async (id: string) => {
+    try {
+      return await sq.getLeadReminders(id);
+    } catch (error) {
+      console.error("Supabase lead reminders read failed, falling back to API", error);
+      const res = await api.get(`/leads/${id}/reminders`);
+      return unwrap(res);
+    }
+  },
   createReminder: (id: string, reminderAt: string, note?: string) =>
     api.post(`/leads/${id}/reminders`, { reminderAt, note }),
   deleteReminder: (leadId: string, reminderId: string) =>
     api.delete(`/leads/${leadId}/reminders/${reminderId}`),
   markReminderDone: (reminderId: string) =>
     api.patch(`/leads/reminders/${reminderId}/done`),
-  // Stats for filtering
-  getStatsByUser: () => api.get("/leads/stats/by-user"),
+  getStatsByUser: async () => {
+    try {
+      return await sq.getLeadStatsByUser();
+    } catch (error) {
+      console.error("Supabase lead stats read failed, falling back to API", error);
+      const res = await api.get("/leads/stats/by-user");
+      return unwrap(res);
+    }
+  },
 };
 
+// =====================================================
+// TASKS API (Supabase direct reads, backend for writes)
+// =====================================================
+
 export const tasksApi = {
-  list: (params?: Record<string, unknown>) => api.get("/tasks", { params }),
-  get: (id: string) => api.get(`/tasks/${id}`),
+  list: async (params?: Record<string, unknown>) => {
+    try {
+      return await sq.getTasks(params as any);
+    } catch (error) {
+      console.error("Supabase tasks read failed, falling back to API", error);
+      const res = await api.get("/tasks", { params });
+      return unwrap(res);
+    }
+  },
+  get: async (id: string) => {
+    try {
+      return await sq.getTaskById(id);
+    } catch (error) {
+      console.error("Supabase task read failed, falling back to API", error);
+      const res = await api.get(`/tasks/${id}`);
+      return unwrap(res);
+    }
+  },
   create: (data: Record<string, unknown>) => api.post("/tasks", data),
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/tasks/${id}`, data),
   delete: (id: string) => api.delete(`/tasks/${id}`),
   reassign: (id: string, assignTo: string) =>
     api.post(`/tasks/${id}/reassign`, { assignTo }),
-  getSummary: () => api.get("/tasks/summary"),
-  getComments: (id: string) => api.get(`/tasks/${id}/comments`),
+  getSummary: async () => {
+    try {
+      return await sq.getTaskSummary();
+    } catch (error) {
+      console.error("Supabase task summary read failed, falling back to API", error);
+      const res = await api.get("/tasks/summary");
+      return unwrap(res);
+    }
+  },
+  getComments: async (id: string) => {
+    try {
+      return await sq.getTaskComments(id);
+    } catch (error) {
+      console.error("Supabase task comments read failed, falling back to API", error);
+      const res = await api.get(`/tasks/${id}/comments`);
+      return unwrap(res);
+    }
+  },
   addComment: (id: string, commentText: string) =>
     api.post(`/tasks/${id}/comments`, { commentText }),
 };
 
+// =====================================================
+// PROJECTS API (Supabase direct reads, backend for writes)
+// =====================================================
+
 export const projectsApi = {
-  list: () => api.get("/projects"),
-  get: (id: string) => api.get(`/projects/${id}`),
+  list: async () => {
+    try {
+      return await sq.getProjects();
+    } catch (error) {
+      console.error("Supabase projects read failed, falling back to API", error);
+      const res = await api.get("/projects");
+      return unwrap(res);
+    }
+  },
+  get: async (id: string) => {
+    try {
+      return await sq.getProjectById(id);
+    } catch (error) {
+      console.error("Supabase project read failed, falling back to API", error);
+      const res = await api.get(`/projects/${id}`);
+      return unwrap(res);
+    }
+  },
   create: (data: Record<string, unknown>) => api.post("/projects", data),
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/projects/${id}`, data),
@@ -299,40 +524,25 @@ export const projectsApi = {
     api.delete(`/projects/${projectId}/members/${userId}`),
 };
 
+// =====================================================
+// ATTENDANCE API (Supabase direct reads for history, backend for clock-in/out)
+// =====================================================
+
 export const attendanceApi = {
+  // Writes - always through backend
   clockIn: (data?: { location?: string; notes?: string }) =>
     api.post("/attendance/clock-in", data || {}),
   clockOut: (data?: { breakDuration?: number; notes?: string }) =>
     api.post("/attendance/clock-out", data || {}),
-  getToday: () => api.get("/attendance/today"),
-  getSummary: (month?: number, year?: number) =>
-    api.get("/attendance/summary", { params: { month, year } }),
-  list: (params?: Record<string, unknown>) =>
-    api.get("/attendance", { params }),
   createManual: (data: Record<string, unknown>) =>
     api.post("/attendance/manual", data),
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/attendance/${id}`, data),
-  getRules: () => api.get("/attendance/rules"),
   updateRules: (data: Record<string, unknown>) =>
     api.put("/attendance/rules", data),
-  getHolidays: (year?: number) =>
-    api.get("/attendance/holidays", { params: { year } }),
   createHoliday: (data: { name: string; date: string; isOptional?: boolean }) =>
     api.post("/attendance/holidays", data),
   deleteHoliday: (id: string) => api.delete(`/attendance/holidays/${id}`),
-  // New endpoints for admin dashboard
-  getAnalytics: (startDate?: string, endDate?: string, departmentId?: string) =>
-    api.get("/attendance/analytics", {
-      params: { startDate, endDate, departmentId },
-    }),
-  getUsersToday: (date?: string, departmentId?: string) =>
-    api.get("/attendance/users-today", { params: { date, departmentId } }),
-  getUserHistory: (userId: string, startDate?: string, endDate?: string) =>
-    api.get(`/attendance/user/${userId}/history`, {
-      params: { startDate, endDate },
-    }),
-  // Admin clock in/out for any user (bypasses restrictions)
   adminClockIn: (
     userId: string,
     data?: { location?: string; notes?: string },
@@ -341,36 +551,159 @@ export const attendanceApi = {
     userId: string,
     data?: { breakDuration?: number; notes?: string },
   ) => api.post(`/attendance/admin/clock-out/${userId}`, data || {}),
-  // Weekly hours chart
-  getWeeklyHours: (userId?: string, weekStart?: string) =>
-    api.get("/attendance/weekly-hours", { params: { userId, weekStart } }),
+
+  // Reads - Supabase direct with backend fallback
+  getToday: async () => {
+    const res = await api.get("/attendance/today");
+    return unwrap(res);
+  },
+  getSummary: async (month?: number, year?: number) => {
+    // Keep through backend since it involves shift-aware logic
+    const res = await api.get("/attendance/summary", {
+      params: { month, year },
+    });
+    return unwrap(res);
+  },
+  list: async (params?: Record<string, unknown>) => {
+    try {
+      return await sq.getAttendanceList(params as any);
+    } catch (error) {
+      console.error("Supabase attendance list read failed, falling back to API", error);
+      const res = await api.get("/attendance", { params });
+      return unwrap(res);
+    }
+  },
+  getRules: async (shiftType?: string) => {
+    try {
+      return await sq.getAttendanceRules(shiftType);
+    } catch (error) {
+      console.error("Supabase rules read failed, falling back to API", error);
+      const res = await api.get("/attendance/rules");
+      return unwrap(res);
+    }
+  },
+  getHolidays: async (year?: number) => {
+    try {
+      return await sq.getHolidays(year);
+    } catch (error) {
+      console.error("Supabase holidays read failed, falling back to API", error);
+      const res = await api.get("/attendance/holidays", {
+        params: { year },
+      });
+      return unwrap(res);
+    }
+  },
+  getAnalytics: async (startDate?: string, endDate?: string, departmentId?: string) => {
+    const res = await api.get("/attendance/analytics", {
+      params: { startDate, endDate, departmentId },
+    });
+    return unwrap(res);
+  },
+  getUsersToday: async (date?: string, departmentId?: string) => {
+    try {
+      return await sq.getUsersAttendanceToday(date, departmentId);
+    } catch (error) {
+      console.error("Supabase users today read failed, falling back to API", error);
+      const res = await api.get("/attendance/users-today", {
+        params: { date, departmentId },
+      });
+      return unwrap(res);
+    }
+  },
+  getUserHistory: async (userId: string, startDate?: string, endDate?: string) => {
+    try {
+      return await sq.getUserAttendanceHistory(userId, startDate, endDate);
+    } catch (error) {
+      console.error("Supabase user history read failed, falling back to API", error);
+      const res = await api.get(`/attendance/user/${userId}/history`, {
+        params: { startDate, endDate },
+      });
+      return unwrap(res);
+    }
+  },
+  getWeeklyHours: async (userId?: string, weekStart?: string) => {
+    try {
+      return await sq.getWeeklyHours(userId, weekStart);
+    } catch (error) {
+      console.error("Supabase weekly hours read failed, falling back to API", error);
+      const res = await api.get("/attendance/weekly-hours", {
+        params: { userId, weekStart },
+      });
+      return unwrap(res);
+    }
+  },
 };
 
+// =====================================================
+// NOTIFICATIONS API (Supabase direct reads, backend for writes)
+// =====================================================
+
 export const notificationsApi = {
-  list: (params?: { page?: number; limit?: number; unreadOnly?: string }) =>
-    api.get("/notifications", { params }),
-  getUnreadCount: () => api.get("/notifications/unread-count"),
+  list: async (params?: { page?: number; limit?: number; unreadOnly?: string }) => {
+    try {
+      return await sq.getNotifications({
+        page: params?.page,
+        limit: params?.limit,
+        unreadOnly: params?.unreadOnly === "true",
+      });
+    } catch (error) {
+      console.error("Supabase notifications read failed, falling back to API", error);
+      const res = await api.get("/notifications", { params });
+      return unwrap(res);
+    }
+  },
+  getUnreadCount: async () => {
+    try {
+      return await sq.getUnreadNotificationCount();
+    } catch (error) {
+      console.error("Supabase unread count read failed, falling back to API", error);
+      const res = await api.get("/notifications/unread-count");
+      return unwrap(res);
+    }
+  },
   markAsRead: (id: string) => api.post(`/notifications/${id}/read`),
   markAllAsRead: () => api.post("/notifications/read-all"),
   delete: (id: string) => api.delete(`/notifications/${id}`),
-  getPreferences: () => api.get("/notifications/preferences"),
+  getPreferences: async () => {
+    const res = await api.get("/notifications/preferences");
+    return unwrap(res);
+  },
   updatePreferences: (data: Record<string, boolean>) =>
     api.put("/notifications/preferences", data),
 };
 
+// =====================================================
+// DASHBOARD API (stays on backend - complex aggregation logic)
+// =====================================================
+
 export const dashboardApi = {
-  get: (departmentId?: string) =>
-    api.get("/dashboard", { params: { departmentId } }),
-  getAdmin: () => api.get("/dashboard/admin"),
-  getLeadAnalytics: (startDate?: string, endDate?: string) =>
-    api.get("/dashboard/lead-analytics", { params: { startDate, endDate } }),
-  getUserPerformance: (userId: string, startDate?: string, endDate?: string) =>
-    api.get(`/dashboard/user-performance/${userId}`, {
+  get: async (departmentId?: string) => {
+    const res = await api.get("/dashboard", { params: { departmentId } });
+    return unwrap(res);
+  },
+  getAdmin: async () => {
+    const res = await api.get("/dashboard/admin");
+    return unwrap(res);
+  },
+  getLeadAnalytics: async (startDate?: string, endDate?: string) => {
+    const res = await api.get("/dashboard/lead-analytics", { params: { startDate, endDate } });
+    return unwrap(res);
+  },
+  getUserPerformance: async (userId: string, startDate?: string, endDate?: string) => {
+    const res = await api.get(`/dashboard/user-performance/${userId}`, {
       params: { startDate, endDate },
-    }),
-  getMyPerformance: (startDate?: string, endDate?: string) =>
-    api.get("/dashboard/my-performance", { params: { startDate, endDate } }),
+    });
+    return unwrap(res);
+  },
+  getMyPerformance: async (startDate?: string, endDate?: string) => {
+    const res = await api.get("/dashboard/my-performance", { params: { startDate, endDate } });
+    return unwrap(res);
+  },
 };
+
+// =====================================================
+// CSV API (always through backend)
+// =====================================================
 
 export const csvApi = {
   getTemplate: () => api.get("/csv/leads/template", { responseType: "blob" }),
@@ -380,9 +713,12 @@ export const csvApi = {
     api.get("/csv/leads/export", { params, responseType: "blob" }),
 };
 
-// Activity logs API (admin only)
+// =====================================================
+// ACTIVITY LOGS API (Supabase direct reads, admin only)
+// =====================================================
+
 export const activitiesApi = {
-  list: (params?: {
+  list: async (params?: {
     page?: number;
     limit?: number;
     userId?: string;
@@ -393,21 +729,35 @@ export const activitiesApi = {
     endDate?: string;
     departmentId?: string;
     includeAuth?: boolean;
-  }) => api.get("/activities", { params }),
-  getLeadActivities: (params?: {
+  }) => {
+    try {
+      return await sq.getActivityLogs(params);
+    } catch (error) {
+      console.error("Supabase activities read failed, falling back to API", error);
+      const res = await api.get("/activities", { params });
+      return unwrap(res);
+    }
+  },
+  getLeadActivities: async (params?: {
     page?: number;
     limit?: number;
     startDate?: string;
     endDate?: string;
-  }) => api.get("/activities/leads", { params }),
+  }) => {
+    try {
+      return await sq.getLeadActivitiesLog(params);
+    } catch (error) {
+      console.error("Supabase lead activities read failed, falling back to API", error);
+      const res = await api.get("/activities/leads", { params });
+      return unwrap(res);
+    }
+  },
   getStats: async (params?: {
     departmentId?: string;
     resourceType?: string;
   }) => {
-    const response = await api.get("/activities/stats", {
-      params,
-    });
-    return response.data.data;
+    const response = await api.get("/activities/stats", { params });
+    return unwrap(response);
   },
   getAnalytics: async (params?: {
     startDate?: string;
@@ -418,11 +768,14 @@ export const activitiesApi = {
     departmentId?: string;
   }) => {
     const response = await api.get("/activities/analytics", { params });
-    return response.data.data;
+    return unwrap(response);
   },
 };
 
-// API methods for settings
+// =====================================================
+// SETTINGS API (always through backend)
+// =====================================================
+
 export const settingsApi = {
   changePassword: async (data: any) => {
     const response = await api.post("/auth/change-password", data);
@@ -456,7 +809,10 @@ export const settingsApi = {
   },
 };
 
-// 2FA login (no auth required)
+// =====================================================
+// 2FA LOGIN API (no auth required)
+// =====================================================
+
 export const twoFactorApi = {
   login: async (userId: string, token: string) => {
     const response = await api.post("/auth/login/2fa", { userId, token });
@@ -464,10 +820,36 @@ export const twoFactorApi = {
   },
 };
 
-// Email API
+// =====================================================
+// EMAIL API (Supabase direct reads for settings/history, backend for sends)
+// =====================================================
+
 export const emailApi = {
-  // User's own settings
-  getSettings: () => api.get("/email/settings"),
+  // Reads via Supabase
+  getSettings: async () => {
+    try {
+      return await sq.getEmailSettings();
+    } catch (error) {
+      console.error("Supabase email settings read failed, falling back to API", error);
+      const res = await api.get("/email/settings");
+      return unwrap(res);
+    }
+  },
+  getHistory: async (params?: { limit?: number; offset?: number; leadId?: string }) => {
+    try {
+      return await sq.getEmailHistory(params);
+    } catch (error) {
+      console.error("Supabase email history read failed, falling back to API", error);
+      const res = await api.get("/email/history", { params });
+      return unwrap(res);
+    }
+  },
+  getInfo: async () => {
+    const res = await api.get("/email/info");
+    return unwrap(res);
+  },
+
+  // Writes - always through backend
   saveSettings: (data: {
     emailType: "smtp" | "gmail";
     smtpHost: string;
@@ -480,8 +862,10 @@ export const emailApi = {
   testSettings: () => api.post("/email/settings/test"),
 
   // Admin: Manage any user's settings
-  getUserSettings: (userId: string) =>
-    api.get(`/email/settings/user/${userId}`),
+  getUserSettings: async (userId: string) => {
+    const res = await api.get(`/email/settings/user/${userId}`);
+    return unwrap(res);
+  },
   saveUserSettings: (
     userId: string,
     data: {
@@ -517,13 +901,6 @@ export const emailApi = {
       leadId?: string;
     }>,
   ) => api.post("/email/send-bulk", { emails }),
-
-  // History
-  getHistory: (params?: { limit?: number; offset?: number; leadId?: string }) =>
-    api.get("/email/history", { params }),
-
-  // Info
-  getInfo: () => api.get("/email/info"),
 };
 
 export default api;

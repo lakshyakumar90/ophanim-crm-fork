@@ -23,6 +23,7 @@ export interface User {
   departmentName?: string | null;
   departmentSlug?: string | null;
   is2faEnabled?: boolean;
+  shiftType?: "day_shift" | "night_shift" | null;
 }
 
 export interface AuthTokens {

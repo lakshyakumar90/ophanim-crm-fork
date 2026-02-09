@@ -67,7 +67,6 @@ export default function EmailRequestsPage() {
           status: statusFilter !== "all" ? statusFilter : undefined,
           limit: 50,
         })
-        .then((res) => res.data.data),
   );
 
   const handleRefresh = async () => {

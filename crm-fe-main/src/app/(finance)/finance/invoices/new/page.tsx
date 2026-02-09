@@ -55,11 +55,10 @@ export default function NewInvoicePage() {
   // Fetch leads for dropdown
   const { data: leadsData, isLoading: leadsLoading } = useSWR(
     user ? "leads-list" : null,
-    () => leadsApi.list({ limit: 100 }).then((res) => res.data.data),
+    () => leadsApi.list({ limit: 100 }),
   );
 
-  // leadsData IS the array directly (from res.data.data)
-  const leads = Array.isArray(leadsData) ? leadsData : [];
+  const leads = leadsData?.data || [];
 
   // Auto-fill client info when lead is selected
   const handleLeadChange = (id: string) => {

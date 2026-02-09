@@ -82,6 +82,7 @@ const editUserSchema = z.object({
   departmentId: z.string().optional(),
   isActive: z.boolean(),
   jobTitle: z.string().optional(),
+  shiftType: z.enum(["day_shift", "night_shift"]).optional(),
 });
 
 type EditUserFormData = z.infer<typeof editUserSchema>;
@@ -117,18 +118,16 @@ export default function EditUserPage() {
     isLoading: isLoadingUser,
     mutate,
   } = useSWR(userId ? ["user", userId] : null, () =>
-    usersApi.get(userId).then((res) => res.data.data),
+    usersApi.get(userId),
   );
 
   // Fetch teams for dropdown
-  const { data: teamsData } = useSWR("teams", () =>
-    teamsApi.list().then((res) => res.data.data),
-  );
+  const { data: teamsData } = useSWR("teams", () => teamsApi.list());
 
   // Fetch user email settings
   const { data: emailSettingsData, mutate: mutateEmailSettings } = useSWR(
     userId ? ["user-email-settings", userId] : null,
-    () => emailApi.getUserSettings(userId).then((res) => res.data.data),
+    () => emailApi.getUserSettings(userId),
   );
 
   const teams = Array.isArray(teamsData) ? teamsData : [];
@@ -162,6 +161,7 @@ export default function EditUserPage() {
           departmentId: userData.departmentId || "",
           isActive: userData.isActive ?? true,
           jobTitle: userData.jobTitle || "",
+          shiftType: (userData.shiftType as "day_shift" | "night_shift") || "day_shift",
         }
       : undefined,
   });
@@ -170,6 +170,7 @@ export default function EditUserPage() {
   const currentRole = watch("role");
   const currentDepartmentId = watch("departmentId");
   const currentJobTitle = watch("jobTitle");
+  const currentShiftType = watch("shiftType");
 
   // Get department slug from ID
   const currentDepartmentSlug = useMemo(() => {
@@ -261,6 +262,7 @@ export default function EditUserPage() {
         isActive: data.isActive,
         jobTitle:
           data.jobTitle && data.jobTitle !== "none" ? data.jobTitle : null,
+        shiftType: data.shiftType || "day_shift",
       });
       toast.success("User updated successfully");
       mutate();
@@ -505,6 +507,28 @@ export default function EditUserPage() {
                 </p>
               </div>
             )}
+
+            {/* Shift Type */}
+            <div className="space-y-2">
+              <Label htmlFor="shiftType">Shift</Label>
+              <Select
+                value={currentShiftType || "day_shift"}
+                onValueChange={(v) =>
+                  setValue("shiftType", v as "day_shift" | "night_shift")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select shift..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="day_shift">Day Shift (9 AM - 6 PM)</SelectItem>
+                  <SelectItem value="night_shift">Night Shift (7 PM - 4 AM)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Select the work shift for this user
+              </p>
+            </div>
 
             <div className="flex items-center justify-between rounded-lg border p-4">
               <div className="space-y-0.5">

@@ -54,7 +54,6 @@ export default function TasksPage() {
         limit: 10,
         status: status !== "all" ? status : undefined,
       })
-      .then((res) => res.data)
   );
 
   const tasks = data?.data || [];

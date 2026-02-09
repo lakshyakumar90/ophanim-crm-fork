@@ -108,13 +108,13 @@ export default function ProjectResourcesPage() {
           ]);
 
         setMembers({
-          developer: devRes.data.success ? devRes.data.data : [],
-          seo_specialist: seoRes.data.success ? seoRes.data.data : [],
-          content_writer: contentRes.data.success ? contentRes.data.data : [],
-          designer: designRes.data.success ? designRes.data.data : [],
+          developer: Array.isArray(devRes) ? devRes : [],
+          seo_specialist: Array.isArray(seoRes) ? seoRes : [],
+          content_writer: Array.isArray(contentRes) ? contentRes : [],
+          designer: Array.isArray(designRes) ? designRes : [],
         });
 
-        setProjects(projectsRes.data.success ? projectsRes.data.data : []);
+        setProjects(Array.isArray(projectsRes) ? projectsRes : []);
       } catch (error) {
         console.error("Failed to fetch data", error);
       } finally {

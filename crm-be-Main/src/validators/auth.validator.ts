@@ -56,6 +56,7 @@ export const registerSchema = z.object({
   departmentId: z.string().uuid("Department is required for non-admin users"),
   phone: z.string().optional().nullable(),
   jobTitle: z.enum(ALL_JOB_TITLES).optional().nullable(),
+  shiftType: z.enum(["day_shift", "night_shift"]).default("day_shift").optional(),
 });
 
 // Refresh token

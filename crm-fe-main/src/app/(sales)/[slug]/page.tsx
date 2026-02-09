@@ -41,13 +41,12 @@ export default function DashboardPage() {
 
   const { data, isLoading, error, mutate } = useSWR(
     user ? ["dashboard", currentDepartment?.id || "sales"] : null,
-    () => dashboardApi.get(currentDepartment?.id).then((res) => res.data.data),
+    () => dashboardApi.get(currentDepartment?.id),
   );
 
   const { data: recentLeadsData } = useSWR(user ? "recent-leads" : null, () =>
     leadsApi
-      .list({ limit: 5, sortBy: "updated_at", sortOrder: "desc" })
-      .then((res) => res.data.data),
+      .list({ limit: 5, sortBy: "updated_at", sortOrder: "desc" }),
   );
 
   const handleRefresh = async () => {
@@ -193,7 +192,7 @@ export default function DashboardPage() {
 
         {/* Activity Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RecentLeadsList leads={recentLeadsData || []} />
+          <RecentLeadsList leads={recentLeadsData?.data || []} />
           <ActivityFeed activities={data?.recentActivity || []} />
         </div>
 
@@ -337,7 +336,7 @@ export default function DashboardPage() {
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <LeadPipelineChart data={data?.leads?.pipeline || {}} />
-              <RecentLeadsList leads={recentLeadsData || []} />
+              <RecentLeadsList leads={recentLeadsData?.data || []} />
             </div>
           </>
         )}
@@ -416,7 +415,7 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <LeadPipelineChart data={data?.leads?.pipeline || {}} />
-            <RecentLeadsList leads={recentLeadsData || []} />
+            <RecentLeadsList leads={recentLeadsData?.data || []} />
           </div>
         </>
       )}

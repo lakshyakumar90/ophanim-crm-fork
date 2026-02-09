@@ -52,12 +52,12 @@ export default function TaskDetailPage() {
 
   const { data: taskData, isLoading: loadingTask } = useSWR(
     id ? `task-${id}` : null,
-    () => tasksApi.get(id as string).then((res) => res.data.data),
+    () => tasksApi.get(id as string),
   );
 
   const { data: commentsData, isLoading: loadingComments } = useSWR(
     id ? `task-comments-${id}` : null,
-    () => tasksApi.getComments(id as string).then((res) => res.data.data),
+    () => tasksApi.getComments(id as string),
   );
 
   const task = taskData as Task;

@@ -1,5 +1,9 @@
 import api from "./api";
 
+function unwrap(res: any) {
+  return res?.data?.data ?? res?.data ?? res;
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -195,10 +199,15 @@ export interface FinanceDashboard {
 // ============================================
 
 export const invoicesApi = {
-  list: (params?: Record<string, unknown>) =>
-    api.get("/finance/invoices", { params }),
+  list: async (params?: Record<string, unknown>) => {
+    const res = await api.get("/finance/invoices", { params });
+    return unwrap(res);
+  },
 
-  get: (id: string) => api.get(`/finance/invoices/${id}`),
+  get: async (id: string) => {
+    const res = await api.get(`/finance/invoices/${id}`);
+    return unwrap(res);
+  },
 
   create: (data: {
     lead_id?: string;
@@ -236,11 +245,15 @@ export const invoicesApi = {
 // ============================================
 
 export const paymentsApi = {
-  list: (params?: Record<string, unknown>) =>
-    api.get("/finance/payments", { params }),
+  list: async (params?: Record<string, unknown>) => {
+    const res = await api.get("/finance/payments", { params });
+    return unwrap(res);
+  },
 
-  getForInvoice: (invoiceId: string) =>
-    api.get(`/finance/invoices/${invoiceId}/payments`),
+  getForInvoice: async (invoiceId: string) => {
+    const res = await api.get(`/finance/invoices/${invoiceId}/payments`);
+    return unwrap(res);
+  },
 
   record: (
     invoiceId: string,
@@ -269,10 +282,15 @@ export const paymentsApi = {
 // ============================================
 
 export const expensesApi = {
-  list: (params?: Record<string, unknown>) =>
-    api.get("/finance/expenses", { params }),
+  list: async (params?: Record<string, unknown>) => {
+    const res = await api.get("/finance/expenses", { params });
+    return unwrap(res);
+  },
 
-  get: (id: string) => api.get(`/finance/expenses/${id}`),
+  get: async (id: string) => {
+    const res = await api.get(`/finance/expenses/${id}`);
+    return unwrap(res);
+  },
 
   submit: (data: {
     category_id: string;
@@ -299,10 +317,12 @@ export const expensesApi = {
 // ============================================
 
 export const expenseCategoriesApi = {
-  list: (activeOnly: boolean = true) =>
-    api.get("/finance/expense-categories", {
+  list: async (activeOnly: boolean = true) => {
+    const res = await api.get("/finance/expense-categories", {
       params: { active_only: activeOnly },
-    }),
+    });
+    return unwrap(res);
+  },
 
   create: (data: {
     name: string;
@@ -319,11 +339,15 @@ export const expenseCategoriesApi = {
 // ============================================
 
 export const approvalsApi = {
-  list: (params?: { type?: string; limit?: number; offset?: number }) =>
-    api.get("/finance/approvals", { params }),
+  list: async (params?: { type?: string; limit?: number; offset?: number }) => {
+    const res = await api.get("/finance/approvals", { params });
+    return unwrap(res);
+  },
 
-  getCount: (type?: string) =>
-    api.get("/finance/approvals/count", { params: { type } }),
+  getCount: async (type?: string) => {
+    const res = await api.get("/finance/approvals/count", { params: { type } });
+    return unwrap(res);
+  },
 
   bulkApprove: (approvalIds: string[]) =>
     api.post("/finance/approvals/bulk-approve", { approval_ids: approvalIds }),
@@ -334,10 +358,15 @@ export const approvalsApi = {
 // ============================================
 
 export const emailRequestsApi = {
-  list: (params?: Record<string, unknown>) =>
-    api.get("/finance/email-requests", { params }),
+  list: async (params?: Record<string, unknown>) => {
+    const res = await api.get("/finance/email-requests", { params });
+    return unwrap(res);
+  },
 
-  get: (id: string) => api.get(`/finance/email-requests/${id}`),
+  get: async (id: string) => {
+    const res = await api.get(`/finance/email-requests/${id}`);
+    return unwrap(res);
+  },
 
   create: (data: {
     email_type: "invoice" | "payment_reminder" | "receipt" | "custom";
@@ -373,10 +402,15 @@ export const emailRequestsApi = {
 // ============================================
 
 export const recurringApi = {
-  list: (params?: Record<string, unknown>) =>
-    api.get("/finance/recurring", { params }),
+  list: async (params?: Record<string, unknown>) => {
+    const res = await api.get("/finance/recurring", { params });
+    return unwrap(res);
+  },
 
-  get: (id: string) => api.get(`/finance/recurring/${id}`),
+  get: async (id: string) => {
+    const res = await api.get(`/finance/recurring/${id}`);
+    return unwrap(res);
+  },
 
   create: (data: {
     name: string;
@@ -411,28 +445,38 @@ export const recurringApi = {
 // ============================================
 
 export const financeDashboardApi = {
-  get: (departmentId?: string) =>
-    api.get("/finance/dashboard", { params: { department_id: departmentId } }),
+  get: async (departmentId?: string) => {
+    const res = await api.get("/finance/dashboard", { params: { department_id: departmentId } });
+    return unwrap(res);
+  },
 
-  getRevenueTrend: (departmentId?: string) =>
-    api.get("/finance/dashboard/revenue-trend", {
+  getRevenueTrend: async (departmentId?: string) => {
+    const res = await api.get("/finance/dashboard/revenue-trend", {
       params: { department_id: departmentId },
-    }),
+    });
+    return unwrap(res);
+  },
 
-  getInvoiceStatus: (departmentId?: string) =>
-    api.get("/finance/dashboard/invoice-status", {
+  getInvoiceStatus: async (departmentId?: string) => {
+    const res = await api.get("/finance/dashboard/invoice-status", {
       params: { department_id: departmentId },
-    }),
+    });
+    return unwrap(res);
+  },
 
-  getOutstandingClients: (departmentId?: string, limit?: number) =>
-    api.get("/finance/dashboard/outstanding-clients", {
+  getOutstandingClients: async (departmentId?: string, limit?: number) => {
+    const res = await api.get("/finance/dashboard/outstanding-clients", {
       params: { department_id: departmentId, limit },
-    }),
+    });
+    return unwrap(res);
+  },
 
-  getActivity: (departmentId?: string, limit?: number) =>
-    api.get("/finance/dashboard/activity", {
+  getActivity: async (departmentId?: string, limit?: number) => {
+    const res = await api.get("/finance/dashboard/activity", {
       params: { department_id: departmentId, limit },
-    }),
+    });
+    return unwrap(res);
+  },
 };
 
 // ============================================
@@ -440,10 +484,12 @@ export const financeDashboardApi = {
 // ============================================
 
 export const financeAnalyticsApi = {
-  get: (departmentId?: string) =>
-    api.get("/finance/analytics", {
+  get: async (departmentId?: string) => {
+    const res = await api.get("/finance/analytics", {
       params: { department_id: departmentId },
-    }),
+    });
+    return unwrap(res);
+  },
 };
 
 // ============================================
@@ -451,8 +497,10 @@ export const financeAnalyticsApi = {
 // ============================================
 
 export const scheduledEmailsApi = {
-  list: (params?: { limit?: number; offset?: number }) =>
-    api.get("/finance/scheduled-emails", { params }),
+  list: async (params?: { limit?: number; offset?: number }) => {
+    const res = await api.get("/finance/scheduled-emails", { params });
+    return unwrap(res);
+  },
 
   cancel: (id: string) => api.post(`/finance/scheduled-emails/${id}/cancel`),
 

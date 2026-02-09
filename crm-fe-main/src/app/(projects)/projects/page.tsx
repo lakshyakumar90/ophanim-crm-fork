@@ -63,26 +63,22 @@ export default function ProjectsPage() {
   const fetchProjects = async () => {
     setIsLoading(true);
     try {
-      const [projectsRes, statsRes] = await Promise.all([
+      const [projectsData, statsData] = await Promise.all([
         projectsApi.list(),
         projectsApi.getStats(),
       ]);
 
-      if (projectsRes.data.success) {
-        setProjects(
-          Array.isArray(projectsRes.data.data) ? projectsRes.data.data : [],
-        );
-      }
-      if (statsRes.data.success) {
-        setStats(statsRes.data.data);
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
+      if (statsData) {
+        setStats(statsData);
       }
 
       // Fetch idle projects only for admin
       if (isAdmin) {
         try {
-          const idleRes = await projectsApi.getIdleProjects();
-          if (idleRes.data.success) {
-            setIdleProjects(idleRes.data.data);
+          const idleData = await projectsApi.getIdleProjects();
+          if (Array.isArray(idleData)) {
+            setIdleProjects(idleData);
           }
         } catch {
           // Idle projects endpoint might fail for non-admin

@@ -79,10 +79,9 @@ export default function ProjectTasksPage() {
   const fetchTasks = async () => {
     setIsLoading(true);
     try {
-      const res = await tasksApi.list({ limit: 200 });
-      if (res.data.success) {
-        setTasks(res.data.data || []);
-      }
+      const tasksResult = await tasksApi.list({ limit: 200 });
+      const tasksList = tasksResult?.data || tasksResult || [];
+      setTasks(Array.isArray(tasksList) ? tasksList : []);
     } catch (error) {
       console.error("Failed to fetch tasks", error);
     } finally {

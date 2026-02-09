@@ -179,7 +179,6 @@ export default function ActivityPage() {
           resourceType: resourceType !== "all" ? resourceType : undefined,
           departmentId: currentDepartment?.id,
         })
-        .then((res) => res.data),
   );
 
   const { data: statsData } = useSWR(

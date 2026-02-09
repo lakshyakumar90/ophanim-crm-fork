@@ -40,6 +40,7 @@ interface UserRecord {
   departmentName?: string | null;
   departmentSlug?: string | null;
   jobTitle?: string | null;
+  shiftType?: string | null;
 }
 
 // Type for user row from database
@@ -62,6 +63,7 @@ interface UserRow {
   created_at: string;
   updated_at: string;
   job_title: string | null;
+  shift_type: string | null;
   team?: {
     department_id: string;
     department?: { name: string; slug: string };
@@ -99,6 +101,7 @@ function mapUserRowToRecord(u: UserRow): UserRecord {
     departmentName,
     departmentSlug,
     jobTitle: u.job_title || null,
+    shiftType: u.shift_type || null,
   };
 }
 
@@ -274,6 +277,8 @@ export async function updateUser(
     updateData["is_2fa_enabled"] = input.is2faEnabled;
   if (input.notificationPreferences !== undefined)
     updateData["notification_preferences"] = input.notificationPreferences;
+  if (input.shiftType !== undefined)
+    updateData["shift_type"] = input.shiftType;
 
   updateData["updated_at"] = getTimestampIST();
 

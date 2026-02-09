@@ -91,7 +91,6 @@ export default function UsersPage() {
               ? jobTitleFilter
               : undefined,
         })
-        .then((res) => res.data),
   );
 
   const users = data?.data || [];

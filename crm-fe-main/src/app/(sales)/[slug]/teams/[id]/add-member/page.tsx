@@ -65,7 +65,7 @@ export default function AddMemberPage() {
   // Fetch current team members to exclude them
   const { data: teamMembersData } = useSWR(
     teamId ? `team-members-${teamId}` : null,
-    () => teamsApi.getMembers(teamId).then((res) => res.data.data),
+    () => teamsApi.getMembers(teamId),
   );
 
   // Fetch managers separately
@@ -73,8 +73,7 @@ export default function AddMemberPage() {
     "managers-list",
     () =>
       usersApi
-        .list({ role: "manager", limit: 100 })
-        .then((res) => res.data.data),
+        .list({ role: "manager", limit: 100 }),
   );
 
   // Fetch employees separately
@@ -82,8 +81,7 @@ export default function AddMemberPage() {
     "employees-list",
     () =>
       usersApi
-        .list({ role: "employee", limit: 500 })
-        .then((res) => res.data.data),
+        .list({ role: "employee", limit: 500 }),
   );
 
   const teamMembers = teamMembersData || [];
@@ -94,12 +92,14 @@ export default function AddMemberPage() {
 
   // Filter out already added managers
   const availableManagers = useMemo(() => {
-    return (managersData || []).filter((m: any) => !teamMemberIds.has(m.id));
+    const managers = managersData?.data || [];
+    return managers.filter((m: any) => !teamMemberIds.has(m.id));
   }, [managersData, teamMemberIds]);
 
   // Filter out already added employees
   const availableEmployees = useMemo(() => {
-    return (employeesData || []).filter((e: any) => !teamMemberIds.has(e.id));
+    const employees = employeesData?.data || [];
+    return employees.filter((e: any) => !teamMemberIds.has(e.id));
   }, [employeesData, teamMemberIds]);
 
   // Filter employees based on debounced search query

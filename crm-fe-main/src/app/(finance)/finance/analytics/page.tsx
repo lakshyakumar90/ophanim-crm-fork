@@ -76,7 +76,7 @@ export default function FinanceAnalyticsPage() {
 
   const { data, isLoading, error, mutate } = useSWR(
     user && user.role !== "employee" ? "finance-analytics" : null,
-    () => financeAnalyticsApi.get().then((res) => res.data.data),
+    () => financeAnalyticsApi.get(),
   );
 
   const handleRefresh = async () => {
