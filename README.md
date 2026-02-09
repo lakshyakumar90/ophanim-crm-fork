@@ -1,2 +1,4 @@
 # Ophanim CRM
 
+- Kanban View
+
