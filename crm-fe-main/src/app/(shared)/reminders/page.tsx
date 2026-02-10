@@ -3,9 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { format, isSameDay } from "date-fns";
-import { useAuth, useIsAdmin } from "@/providers/auth-provider";
+import { format } from "date-fns";
+import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { leadsApi, usersApi } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -52,6 +53,8 @@ import { Badge } from "@/components/ui/badge";
 export default function RemindersPage() {
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
+  const isManager = useIsManager();
+  const showOwnerColumn = isAdmin || isManager;
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [sortBy, setSortBy] = useState("reminder_at");
@@ -67,8 +70,7 @@ export default function RemindersPage() {
   // Fetch users for admin filter
   const { data: usersData } = useSWR(
     isAdmin ? ["users-list", searchUser] : null,
-    () =>
-      usersApi.list({ search: searchUser, limit: 10 }),
+    () => usersApi.list({ search: searchUser, limit: 10 }),
   );
 
   const {
@@ -78,20 +80,32 @@ export default function RemindersPage() {
   } = useSWR(
     ["reminders", page, limit, selectedUserId, sortBy, sortOrder, filterStatus],
     () =>
-      leadsApi
-        .getAllReminders({
-          page,
-          limit,
-          userId: selectedUserId,
-          sortBy,
-          sortOrder,
-          status: filterStatus,
-        })
+      leadsApi.getAllReminders({
+        page,
+        limit,
+        userId: selectedUserId,
+        sortBy,
+        sortOrder,
+        status: filterStatus,
+      }),
   );
 
   const reminders = remindersData?.data || [];
   const meta = remindersData?.meta;
   console.log(reminders);
+
+  const getReminderLeadId = (reminder: any): string | undefined =>
+    reminder?.leadId || reminder?.lead_id || reminder?.lead?.id || reminder?.leads?.id;
+
+  const getReminderLeadName = (reminder: any): string =>
+    reminder?.lead?.leadName ||
+    reminder?.lead?.lead_name ||
+    reminder?.leads?.leadName ||
+    reminder?.leads?.lead_name ||
+    "Unknown Lead";
+
+  const getReminderAt = (reminder: any): string =>
+    reminder?.reminderAt || reminder?.reminder_at;
 
   const handleDelete = async (leadId: string, reminderId: string) => {
     const originalData = remindersData;
@@ -114,6 +128,31 @@ export default function RemindersPage() {
     } catch (error) {
       toast.error("Failed to delete reminder");
       // Revert optimization on error
+      mutate(originalData, { revalidate: false });
+    }
+  };
+
+  const handleMarkDone = async (reminderId: string) => {
+    const originalData = remindersData;
+
+    // Optimistic update - remove from pending list
+    mutate(
+      (currentData: any) => {
+        if (!currentData) return currentData;
+        return {
+          ...currentData,
+          data: currentData.data.filter((r: any) => r.id !== reminderId),
+        };
+      },
+      { revalidate: false },
+    );
+
+    try {
+      await leadsApi.markReminderDone(reminderId);
+      toast.success("Reminder marked as done");
+      mutate(); // Revalidate
+    } catch (error) {
+      toast.error("Failed to mark reminder as done");
       mutate(originalData, { revalidate: false });
     }
   };
@@ -146,8 +185,8 @@ export default function RemindersPage() {
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="sent">Sent</SelectItem>
+              <SelectItem value="pending">Pending (Not Done)</SelectItem>
+              <SelectItem value="sent">Completed (Done)</SelectItem>
               <SelectItem value="all">All Status</SelectItem>
             </SelectContent>
           </Select>
@@ -228,7 +267,7 @@ export default function RemindersPage() {
                 <TableHead>Reminder</TableHead>
                 <TableHead>Lead</TableHead>
                 <TableHead>Due Date</TableHead>
-                {isAdmin && <TableHead>User</TableHead>}
+                {showOwnerColumn && <TableHead>Owner</TableHead>}
                 <TableHead className="w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -236,7 +275,7 @@ export default function RemindersPage() {
               {isLoading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={isAdmin ? 5 : 4}
+                    colSpan={showOwnerColumn ? 5 : 4}
                     className="text-center py-8"
                   >
                     Loading...
@@ -245,7 +284,7 @@ export default function RemindersPage() {
               ) : reminders.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={isAdmin ? 5 : 4}
+                    colSpan={showOwnerColumn ? 5 : 4}
                     className="text-center py-8 text-muted-foreground"
                   >
                     No reminders found
@@ -253,20 +292,37 @@ export default function RemindersPage() {
                 </TableRow>
               ) : (
                 reminders.map((reminder: any) => {
-                  const isToday = isSameDay(
-                    new Date(reminder.reminderAt),
-                    new Date(),
+                  const reminderAt = getReminderAt(reminder);
+                  const leadId = getReminderLeadId(reminder);
+                  const leadName = getReminderLeadName(reminder);
+                  const canOpenLead = Boolean(
+                    leadId &&
+                      leadName &&
+                      leadName.toLowerCase() !== "unknown lead",
                   );
+                  const isPending = !reminder.isDone;
+                  const isOverdue =
+                    isPending && new Date(reminderAt) < new Date();
                   return (
                     <TableRow
                       key={reminder.id}
-                      className={
-                        isToday
-                          ? "bg-amber-50/50 hover:bg-amber-100/50 border-l-2 border-l-amber-500"
-                          : ""
-                      }
+                      className={cn(
+                        isOverdue
+                          ? "bg-red-50/50 hover:bg-red-100/50"
+                          : isPending
+                            ? "bg-green-50/50 hover:bg-green-100/50"
+                            : "",
+                      )}
                     >
-                      <TableCell>
+                      <TableCell
+                        className={cn(
+                          isOverdue
+                            ? "border-l-2 border-l-red-500"
+                            : isPending
+                              ? "border-l-2 border-l-green-500"
+                              : "",
+                        )}
+                      >
                         <div
                           className="max-w-[300px] truncate"
                           title={reminder.note}
@@ -275,38 +331,42 @@ export default function RemindersPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Link
-                          href={`/${user?.departmentSlug || "sales"}/leads/${
-                            reminder.leadId
-                          }`}
-                          className="font-medium hover:underline hover:text-primary transition-colors"
-                        >
-                          {reminder.lead?.leadName || "Unknown Lead"}
-                        </Link>
+                        {canOpenLead ? (
+                          <Link
+                            href={`/${user?.departmentSlug || "sales"}/leads/${leadId}`}
+                            className="font-medium hover:underline hover:text-primary transition-colors"
+                          >
+                            {leadName}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-muted-foreground">
+                            {leadName}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
                           <span
                             className={
-                              new Date(reminder.reminderAt) < new Date() &&
-                              !reminder.isSent
+                              new Date(reminderAt) < new Date() &&
+                              !reminder.isDone
                                 ? "text-red-500 font-bold"
                                 : ""
                             }
                           >
-                            {format(new Date(reminder.reminderAt), "PPP p")}
+                            {format(new Date(reminderAt), "PPP p")}
                           </span>
-                          {reminder.isSent && (
+                          {reminder.isDone && (
                             <Badge
                               variant="secondary"
                               className="w-fit mt-1 text-[10px]"
                             >
-                              Sent
+                              Done
                             </Badge>
                           )}
                         </div>
                       </TableCell>
-                      {isAdmin && (
+                      {showOwnerColumn && (
                         <TableCell>
                           {reminder.user ? (
                             <div className="flex items-center gap-2">
@@ -326,16 +386,28 @@ export default function RemindersPage() {
                         </TableCell>
                       )}
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                          onClick={() =>
-                            handleDelete(reminder.leadId, reminder.id)
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {!reminder.isDone && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                              title="Mark as done"
+                              onClick={() => handleMarkDone(reminder.id)}
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => leadId && handleDelete(leadId, reminder.id)}
+                            disabled={!leadId}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

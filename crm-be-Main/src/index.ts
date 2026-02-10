@@ -34,6 +34,7 @@ import projectsRoutes from "./routes/projects.routes.js";
 import hrRoutes from "./routes/hr.routes.js";
 import cronRoutes from "./routes/cron.routes.js";
 import internalRoutes from "./routes/internal.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 
 // Create Express app
 const app: Application = express();
@@ -103,6 +104,7 @@ app.use(`${API_PREFIX}/projects`, projectsRoutes);
 app.use(`${API_PREFIX}/hr`, hrRoutes);
 app.use(`${API_PREFIX}/cron`, cronRoutes);
 app.use(`${API_PREFIX}/internal`, internalRoutes);
+app.use(`${API_PREFIX}/admin`, adminRoutes);
 
 // 404 handler
 app.use(notFoundMiddleware);
@@ -115,10 +117,16 @@ const PORT = config.server.port;
 
 // Check if running in Vercel serverless environment
 if (!process.env.VERCEL) {
-  // Import and start reminder service
-  import("./services/reminder.service.js").then(({ startReminderService }) => {
-    startReminderService();
-  });
+  if (config.workers.enableReminderWorker) {
+    // Import and start reminder service only when explicitly enabled.
+    import("./services/reminder.service.js").then(
+      ({ startReminderService }) => {
+        startReminderService();
+      },
+    );
+  } else {
+    logger.info("Reminder worker disabled (ENABLE_REMINDER_WORKER=false)");
+  }
 
   const server = app.listen(PORT, () => {
     logger.info(`🚀 CRM Backend server running on port ${PORT}`);

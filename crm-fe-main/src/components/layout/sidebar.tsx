@@ -450,13 +450,10 @@ function GlobalSidebar({
   );
   const unreadCount = unreadData?.count || 0;
 
-  // Fetch today's pending reminders count
-  const today = new Date().toISOString().split("T")[0];
+  // Fetch active reminders count (not-done reminders, including overdue)
   const { data: remindersData } = useSWR(
-    user ? ["sidebar-reminders-count", today] : null,
-    () =>
-      leadsApi
-        .getAllReminders({ date: today, status: "pending", limit: 100 }),
+    user ? ["sidebar-reminders-count"] : null,
+    () => leadsApi.getAllReminders({ status: "pending", limit: 100 }),
     { refreshInterval: 60000 }, // Refresh every minute
   );
   const remindersCount = remindersData?.data?.length || 0;

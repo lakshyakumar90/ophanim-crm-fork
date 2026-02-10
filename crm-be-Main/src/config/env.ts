@@ -40,6 +40,9 @@ const envSchema = z.object({
 
   // Bulk Operations
   BULK_OPERATION_LIMIT: z.string().default("500"),
+
+  // Background Workers
+  ENABLE_REMINDER_WORKER: z.string().default("false"),
 });
 
 // Parse and validate environment variables
@@ -90,4 +93,7 @@ export const config = {
     maxRequests: parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
   },
   bulkOperationLimit: parseInt(env.BULK_OPERATION_LIMIT, 10),
+  workers: {
+    enableReminderWorker: env.ENABLE_REMINDER_WORKER === "true",
+  },
 } as const;

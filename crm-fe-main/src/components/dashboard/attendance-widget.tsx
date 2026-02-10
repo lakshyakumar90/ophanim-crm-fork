@@ -3,28 +3,23 @@
 import { useState, useEffect } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { attendanceApi } from "@/lib/api";
+import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Clock, LogIn, LogOut, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import {
-  formatStoredTime,
-  parseStoredIST,
-  nowISTAsUTC,
-  nowIST,
-  formatIST,
-} from "@/lib/date-utils";
+import { formatStoredTime, parseStoredIST, nowISTAsUTC, nowIST, formatIST } from "@/lib/date-utils";
 
 export function AttendanceWidget() {
   const { mutate } = useSWRConfig();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [workingTime, setWorkingTime] = useState("");
 
   const { data } = useSWR(
-    "attendance-today",
+    isAuthenticated && user ? ["attendance-today", user.id] : null,
     () => attendanceApi.getToday(),
     { refreshInterval: 0 }, // No polling
   );
-
   const attendance = data;
 
   // ... (rest of code)
@@ -34,7 +29,8 @@ export function AttendanceWidget() {
   // Handle both snake_case and camelCase from API
   const clockOutTime = attendance?.clock_out_time || attendance?.clockOutTime;
   const clockInTimeRaw = attendance?.clock_in_time || attendance?.clockInTime;
-  const isClockedIn = attendance && !clockOutTime;
+  const hasClockIn = Boolean(clockInTimeRaw);
+  const isClockedIn = hasClockIn && !clockOutTime;
   const clockInTime = clockInTimeRaw ? parseStoredIST(clockInTimeRaw) : null;
 
   // Real-time working duration update
@@ -70,8 +66,8 @@ export function AttendanceWidget() {
       await attendanceApi.clockIn();
       toast.success("Clocked in successfully!");
       // Invalidate the global SWR cache for attendance
-      mutate("attendance-today");
-      mutate("attendance-summary");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
     } catch (error: any) {
       toast.error(error.response?.data?.error?.message || "Failed to clock in");
     } finally {
@@ -85,8 +81,8 @@ export function AttendanceWidget() {
       await attendanceApi.clockOut();
       toast.success("Clocked out successfully!");
       // Invalidate the global SWR cache for attendance
-      mutate("attendance-today");
-      mutate("attendance-summary");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message || "Failed to clock out",
@@ -113,7 +109,9 @@ export function AttendanceWidget() {
               variant="ghost"
               size="icon"
               className="h-6 w-6 text-muted-foreground hover:bg-muted"
-              onClick={() => mutate("attendance-today")}
+              onClick={() =>
+                mutate((key) => Array.isArray(key) && key[0] === "attendance-today")
+              }
               title="Refresh"
             >
               <RefreshCw className="h-3 w-3" />
@@ -152,27 +150,33 @@ export function AttendanceWidget() {
         )}
 
         {!clockOutTime && (
-          <Button
-            onClick={isClockedIn ? handleClockOut : handleClockIn}
-            disabled={isProcessing}
-            className={
-              isClockedIn
-                ? "bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white"
-                : "bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white"
-            }
-          >
-            {isClockedIn ? (
-              <>
-                <LogOut className="w-4 h-4 mr-2" />
-                Check Out
-              </>
-            ) : (
-              <>
-                <LogIn className="w-4 h-4 mr-2" />
-                Check In
-              </>
-            )}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              onClick={isClockedIn ? handleClockOut : handleClockIn}
+              disabled={
+                isProcessing ||
+                isLoading ||
+                !isAuthenticated
+              }
+              className={
+                isClockedIn
+                  ? "bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white"
+                  : "bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white"
+              }
+            >
+              {isClockedIn ? (
+                <>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Check Out
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Check In
+                </>
+              )}
+            </Button>
+          </div>
         )}
       </div>
     </div>

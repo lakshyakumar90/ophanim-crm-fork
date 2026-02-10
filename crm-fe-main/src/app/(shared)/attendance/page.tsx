@@ -6,7 +6,7 @@ import useSWR, { mutate } from "swr";
 import { attendanceApi } from "@/lib/api";
 import { getInitials } from "@/lib/utils";
 import { toast } from "sonner";
-import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
+import { useAuth, useIsAdmin } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,9 +113,8 @@ const statusIcons: Record<string, string> = {
 
 export default function AttendancePage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const isAdmin = useIsAdmin();
-  const isManager = useIsManager();
   const [isClockingIn, setIsClockingIn] = useState(false);
   const [isClockingOut, setIsClockingOut] = useState(false);
   const [workingTime, setWorkingTime] = useState<string>("");
@@ -149,14 +148,20 @@ export default function AttendancePage() {
   const [shiftFilter, setShiftFilter] = useState<string>("all");
   const oneYearAgo = useMemo(() => subYears(new Date(), 1), []);
 
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [authLoading, isAuthenticated, router]);
+
   const weekStartDate = useMemo(() => {
-    const today = new Date();
+    const today = nowIST();
     const targetDate = addWeeks(today, weekOffset);
-    return startOfWeek(targetDate, { weekStartsOn: 1 }).toISOString();
+    return format(startOfWeek(targetDate, { weekStartsOn: 1 }), "yyyy-MM-dd");
   }, [weekOffset]);
 
   const { data: weeklyHoursData, isLoading: loadingWeeklyHours } = useSWR(
-    ["attendance-weekly", weekStartDate, selectedUserId],
+    isAuthenticated ? ["attendance-weekly", weekStartDate, selectedUserId] : null,
     () =>
       attendanceApi
         .getWeeklyHours(selectedUserId || undefined, weekStartDate),
@@ -216,19 +221,26 @@ export default function AttendancePage() {
 
   // Fetch data
   const { data: todayData, isLoading: loadingToday } = useSWR(
-    "attendance-today",
+    isAuthenticated && user ? ["attendance-today", user.id] : null,
     () => attendanceApi.getToday(),
   );
 
   const { data: summaryData, isLoading: loadingSummary } = useSWR(
-    "attendance-summary",
+    isAuthenticated && user ? ["attendance-summary", user.id] : null,
     () => attendanceApi.getSummary(),
+  );
+
+  const { data: shiftRule } = useSWR(
+    isAuthenticated && user
+      ? ["attendance-rule", user.shiftType || "day_shift"]
+      : null,
+    () => attendanceApi.getRules(user?.shiftType || "day_shift"),
   );
 
   const { currentDepartment } = useDepartment();
 
   const { data: analyticsData, isLoading: loadingAnalytics } = useSWR(
-    isAdmin
+    isAuthenticated && isAdmin
       ? ["attendance-analytics", startDate, endDate, currentDepartment?.id]
       : null,
     () =>
@@ -237,7 +249,9 @@ export default function AttendancePage() {
   );
 
   const { data: usersAttendanceData, isLoading: loadingUsers } = useSWR(
-    isAdmin ? ["attendance-users", startDate, currentDepartment?.id] : null,
+    isAuthenticated && isAdmin
+      ? ["attendance-users", startDate, currentDepartment?.id]
+      : null,
     () =>
       attendanceApi
         .getUsersToday(startDate, currentDepartment?.id),
@@ -276,8 +290,8 @@ export default function AttendancePage() {
       await attendanceApi.clockIn({ location: "Office" });
       toast.success("🕐 Clocked in successfully! Have a productive day!");
       // Invalidate all relevant cache keys
-      mutate("attendance-today");
-      mutate("attendance-summary");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
       if (isAdmin) {
         mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
         mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
@@ -298,8 +312,8 @@ export default function AttendancePage() {
       await attendanceApi.clockOut({});
       toast.success("👋 Clocked out successfully! See you tomorrow!");
       // Invalidate all relevant cache keys
-      mutate("attendance-today");
-      mutate("attendance-summary");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
       if (isAdmin) {
         mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
         mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
@@ -315,6 +329,10 @@ export default function AttendancePage() {
   };
 
   const today = todayData;
+  const hasClockIn = Boolean(today?.clockInTime);
+  const hasClockOut = Boolean(today?.clockOutTime);
+  const hasOpenSession = hasClockIn && !hasClockOut;
+  const canShowClockIn = !hasClockIn;
   const summary = summaryData;
   const analytics = analyticsData;
   const allUsersAttendance = usersAttendanceData || [];
@@ -326,6 +344,84 @@ export default function AttendancePage() {
       (item: any) => item.user.shiftType === shiftFilter,
     );
   }, [allUsersAttendance, shiftFilter]);
+
+  const weeklyTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: readonly any[];
+    label?: string | number;
+  }) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0]?.payload;
+    return (
+      <div className="rounded-md border bg-background p-2 shadow-md text-xs">
+        <p className="font-semibold">{label}</p>
+        <p className="text-muted-foreground">
+          Date: {row?.date ? format(new Date(row.date), "MMM d, yyyy") : "-"}
+        </p>
+        <p>Hours: {typeof row?.hours === "number" ? `${row.hours}h` : "0h"}</p>
+        <p>
+          Clock In:{" "}
+          {row?.clockInTime ? formatStoredTime(row.clockInTime) : "--:--"}
+        </p>
+        <p>
+          Clock Out:{" "}
+          {row?.clockOutTime ? formatStoredTime(row.clockOutTime) : "--:--"}
+        </p>
+      </div>
+    );
+  };
+
+  const shiftWindow = useMemo(() => {
+    if (!user) return null;
+    const shiftType = user.shiftType || "day_shift";
+    const startRaw =
+      shiftRule?.workStartTime ||
+      (shiftType === "night_shift" ? "19:00" : "09:00");
+    const endRaw =
+      shiftRule?.workEndTime || (shiftType === "night_shift" ? "04:15" : "18:15");
+    const [startHour = "00", startMinute = "00"] = String(startRaw).split(":");
+    const [endHour = "00", endMinute = "00"] = String(endRaw).split(":");
+
+    const now = nowIST();
+    const currentHour = parseInt(formatIST(now, "HH"));
+    const currentMinute = parseInt(formatIST(now, "mm"));
+    const isNightEarlyMorning =
+      shiftType === "night_shift" &&
+      (currentHour < 4 || (currentHour === 4 && currentMinute <= 15));
+
+    const shiftDate = new Date(now);
+    if (isNightEarlyMorning) {
+      shiftDate.setDate(shiftDate.getDate() - 1);
+    }
+    // Must use IST date formatting; local timezone formatting can shift day boundary.
+    const shiftDateStr = formatIST(shiftDate, "yyyy-MM-dd");
+    const shiftStart = new Date(
+      `${shiftDateStr}T${startHour.padStart(2, "0")}:${startMinute.padStart(2, "0")}:00+05:30`,
+    );
+
+    const startMinutes = parseInt(startHour, 10) * 60 + parseInt(startMinute, 10);
+    const endMinutes = parseInt(endHour, 10) * 60 + parseInt(endMinute, 10);
+    const crossesMidnight = endMinutes <= startMinutes;
+    const shiftEnd = new Date(
+      `${shiftDateStr}T${endHour.padStart(2, "0")}:${endMinute.padStart(2, "0")}:00+05:30`,
+    );
+    if (crossesMidnight) {
+      shiftEnd.setDate(shiftEnd.getDate() + 1);
+    }
+    return { shiftType, shiftStart, shiftEnd };
+  }, [shiftRule, user]);
+  if (authLoading || !isAuthenticated || !user) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    );
+  }
 
   const pieData = summary
     ? [
@@ -381,27 +477,38 @@ export default function AttendancePage() {
               <p className="text-blue-200 text-sm mt-1">
                 {user?.fullName && `Welcome, ${user.fullName.split(" ")[0]}!`}
               </p>
+              {shiftWindow && (
+                <p className="text-blue-200 text-xs mt-1">
+                  {shiftWindow.shiftType === "night_shift"
+                    ? "Night Shift"
+                    : "Day Shift"}{" "}
+                  {formatIST(shiftWindow.shiftStart, "h:mm a")} -{" "}
+                  {formatIST(shiftWindow.shiftEnd, "h:mm a")} IST
+                </p>
+              )}
             </div>
 
             {loadingToday ? (
               <Skeleton className="h-12 w-40 bg-white/20" />
-            ) : !today ? (
-              <Button
-                size="lg"
-                variant="secondary"
-                onClick={handleClockIn}
-                disabled={isClockingIn}
-                className="px-8 shadow-lg"
-              >
-                <LogIn className="mr-2 h-5 w-5" />
-                {isClockingIn ? "Clocking in..." : "Clock In"}
-              </Button>
-            ) : !today.clockOutTime ? (
+            ) : canShowClockIn ? (
+              <div className="flex flex-col items-end gap-2">
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  onClick={handleClockIn}
+                  disabled={isClockingIn}
+                  className="px-8 shadow-lg"
+                >
+                  <LogIn className="mr-2 h-5 w-5" />
+                  {isClockingIn ? "Clocking in..." : "Clock In"}
+                </Button>
+              </div>
+            ) : hasOpenSession ? (
               <div className="flex items-center gap-4">
                 <div className="text-center bg-white/10 rounded-lg px-4 py-2">
                   <p className="text-sm text-blue-100">Clocked in</p>
                   <p className="font-bold text-lg">
-                    {formatStoredTime(today.clockInTime)}
+                    {today?.clockInTime ? formatStoredTime(today.clockInTime) : "--:--"}
                   </p>
                 </div>
                 {workingTime && (
@@ -453,7 +560,7 @@ export default function AttendancePage() {
                   <LogIn className="h-5 w-5 mx-auto text-green-500 mb-1" />
                   <p className="text-xs text-muted-foreground">Clock In</p>
                   <p className="font-semibold">
-                    {formatStoredTime(today.clockInTime)}
+                    {today.clockInTime ? formatStoredTime(today.clockInTime) : "--:--"}
                   </p>
                 </div>
                 <div className="text-center">
@@ -643,17 +750,7 @@ export default function AttendancePage() {
                   tickFormatter={(value) => `${value}h`}
                   domain={[0, 12]}
                 />
-                <Tooltip
-                  formatter={(value) => [`${value ?? 0} hours`, "Hours"]}
-                  labelFormatter={(label) => {
-                    const dayData = weeklyHoursData.find(
-                      (d: any) => d.day === label,
-                    );
-                    return dayData
-                      ? `${label} (${format(new Date(dayData.date), "MMM d")})`
-                      : label;
-                  }}
-                />
+                <Tooltip content={weeklyTooltip} />
                 <Bar dataKey="hours" radius={[4, 4, 0, 0]} fill="#3b82f6">
                   {weeklyHoursData.map((entry: any, index: number) => (
                     <Cell
@@ -666,7 +763,7 @@ export default function AttendancePage() {
             </ResponsiveContainer>
           ) : (
             <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
-              No data for this week
+              No working-hour data for this week
             </div>
           )}
           <div className="flex items-center justify-center gap-4 mt-2 text-xs text-muted-foreground">
@@ -1064,7 +1161,9 @@ export default function AttendancePage() {
                   Team Attendance
                   {!loadingUsers && (
                     <Badge variant="secondary">
-                      {usersAttendance.length} users
+                      {allUsersAttendance.length} users
+                      {shiftFilter !== "all" &&
+                        ` (${usersAttendance.length} filtered)`}
                     </Badge>
                   )}
                 </CardTitle>

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 // Clock in
 export const clockInSchema = z.object({
+  userId: z.string().uuid("Invalid user ID").optional(),
   location: z.string().max(200).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
 });

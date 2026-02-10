@@ -407,16 +407,96 @@ export const leadsApi = {
     date?: string;
   }) => {
     try {
-      return await sq.getAllReminders(params);
+      const sqRes = await sq.getAllReminders(params);
+      const rows = sqRes?.data || [];
+      const hasMissingLeadInfo = rows.some((r: any) => {
+        const leadId = r?.leadId || r?.lead_id;
+        const leadName =
+          r?.lead?.leadName ||
+          r?.lead?.lead_name ||
+          r?.leads?.leadName ||
+          r?.leads?.lead_name;
+        return Boolean(leadId) && !leadName;
+      });
+
+      if (!hasMissingLeadInfo) {
+        return sqRes;
+      }
+
+      // Supabase can return reminders without joined lead details under some role policies.
+      // Fall back to backend (service role) to resolve lead names consistently.
+      const res = await api.get("/leads/reminders/all", { params });
+      const payload = unwrap(res);
+      if (Array.isArray(payload)) {
+        const page = params?.page || 1;
+        const limit = params?.limit || payload.length || 1;
+        return {
+          data: payload,
+          meta: {
+            total: payload.length,
+            page,
+            limit,
+            totalPages: Math.max(1, Math.ceil(payload.length / limit)),
+            hasPrevPage: page > 1,
+            hasNextPage: page * limit < payload.length,
+          },
+        };
+      }
+      if (payload && Array.isArray(payload.data)) {
+        return payload;
+      }
+      return sqRes;
     } catch (error) {
       console.error("Supabase reminders read failed, falling back to API", error);
       const res = await api.get("/leads/reminders/all", { params });
-      return unwrap(res);
+      const payload = unwrap(res);
+      if (Array.isArray(payload)) {
+        const page = params?.page || 1;
+        const limit = params?.limit || payload.length || 1;
+        return {
+          data: payload,
+          meta: {
+            total: payload.length,
+            page,
+            limit,
+            totalPages: Math.max(1, Math.ceil(payload.length / limit)),
+            hasPrevPage: page > 1,
+            hasNextPage: page * limit < payload.length,
+          },
+        };
+      }
+      if (payload && Array.isArray(payload.data)) {
+        return payload;
+      }
+      return {
+        data: [],
+        meta: {
+          total: 0,
+          page: params?.page || 1,
+          limit: params?.limit || 20,
+          totalPages: 0,
+          hasPrevPage: false,
+          hasNextPage: false,
+        },
+      };
     }
   },
   getReminders: async (id: string) => {
     try {
-      return await sq.getLeadReminders(id);
+      const sqRes = await sq.getLeadReminders(id);
+      const hasMissingLeadInfo = (sqRes || []).some((r: any) => {
+        const leadId = r?.leadId || r?.lead_id;
+        const leadName =
+          r?.lead?.leadName ||
+          r?.lead?.lead_name ||
+          r?.leads?.leadName ||
+          r?.leads?.lead_name;
+        return Boolean(leadId) && !leadName;
+      });
+      if (!hasMissingLeadInfo) return sqRes;
+
+      const res = await api.get(`/leads/${id}/reminders`);
+      return unwrap(res);
     } catch (error) {
       console.error("Supabase lead reminders read failed, falling back to API", error);
       const res = await api.get(`/leads/${id}/reminders`);
@@ -530,7 +610,7 @@ export const projectsApi = {
 
 export const attendanceApi = {
   // Writes - always through backend
-  clockIn: (data?: { location?: string; notes?: string }) =>
+  clockIn: (data?: { userId?: string; location?: string; notes?: string }) =>
     api.post("/attendance/clock-in", data || {}),
   clockOut: (data?: { breakDuration?: number; notes?: string }) =>
     api.post("/attendance/clock-out", data || {}),
@@ -551,10 +631,16 @@ export const attendanceApi = {
     userId: string,
     data?: { breakDuration?: number; notes?: string },
   ) => api.post(`/attendance/admin/clock-out/${userId}`, data || {}),
+  adminRestoreAttendance: (attendanceId: string) =>
+    api.post(`/admin/restore-attendance/${attendanceId}`),
 
   // Reads - Supabase direct with backend fallback
   getToday: async () => {
     const res = await api.get("/attendance/today");
+    return unwrap(res);
+  },
+  getShiftStatus: async () => {
+    const res = await api.get("/attendance/shift-status");
     return unwrap(res);
   },
   getSummary: async (month?: number, year?: number) => {
@@ -600,15 +686,10 @@ export const attendanceApi = {
     return unwrap(res);
   },
   getUsersToday: async (date?: string, departmentId?: string) => {
-    try {
-      return await sq.getUsersAttendanceToday(date, departmentId);
-    } catch (error) {
-      console.error("Supabase users today read failed, falling back to API", error);
-      const res = await api.get("/attendance/users-today", {
-        params: { date, departmentId },
-      });
-      return unwrap(res);
-    }
+    const res = await api.get("/attendance/users-today", {
+      params: { date, departmentId },
+    });
+    return unwrap(res);
   },
   getUserHistory: async (userId: string, startDate?: string, endDate?: string) => {
     try {
@@ -622,15 +703,12 @@ export const attendanceApi = {
     }
   },
   getWeeklyHours: async (userId?: string, weekStart?: string) => {
-    try {
-      return await sq.getWeeklyHours(userId, weekStart);
-    } catch (error) {
-      console.error("Supabase weekly hours read failed, falling back to API", error);
-      const res = await api.get("/attendance/weekly-hours", {
-        params: { userId, weekStart },
-      });
-      return unwrap(res);
-    }
+    // Keep through backend since frontend chart expects normalized 7-day shape
+    // with { day, date, hours, isWeekend }.
+    const res = await api.get("/attendance/weekly-hours", {
+      params: { userId, weekStart },
+    });
+    return unwrap(res);
   },
 };
 

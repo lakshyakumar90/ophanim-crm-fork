@@ -78,6 +78,83 @@ import {
 import { formatInTimeZone } from "date-fns-tz";
 
 const IST_TIMEZONE = "Asia/Kolkata";
+const AUTO_LOGOUT_GRACE_MINUTES = 15;
+const CLOCK_IN_EARLY_WINDOW_MINUTES = 15;
+const CLOCK_IN_LATE_WINDOW_MINUTES = 120;
+const SHIFT_DURATION_MINUTES = 9 * 60;
+
+function parseTimeToHHMM(value: string | null | undefined, fallback: string): string {
+  const raw = (value || fallback).trim();
+  const [h = "00", m = "00"] = raw.split(":");
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+}
+
+function parseMinutes(hhmm: string): number {
+  const [h = "0", m = "0"] = hhmm.split(":");
+  return parseInt(h, 10) * 60 + parseInt(m, 10);
+}
+
+function getShiftDateTimes(
+  effectiveDate: string,
+  shiftType: string,
+  rules?: {
+    work_start_time?: string | null;
+    work_end_time?: string | null;
+  } | null,
+): { shiftStart: Date; shiftEnd: Date; autoLogoutAt: Date } {
+  const fallbackStart = shiftType === SHIFT_TYPES.NIGHT_SHIFT ? "19:00" : "09:00";
+  const fallbackEnd = shiftType === SHIFT_TYPES.NIGHT_SHIFT ? "04:00" : "18:00";
+  const startHHMM = parseTimeToHHMM(rules?.work_start_time, fallbackStart);
+  const endHHMM = parseTimeToHHMM(rules?.work_end_time, fallbackEnd);
+
+  const shiftStart = new Date(`${effectiveDate}T${startHHMM}:00+05:30`);
+  const shiftEndBase = new Date(`${effectiveDate}T${endHHMM}:00+05:30`);
+  const startMinutes = parseMinutes(startHHMM);
+  const endMinutes = parseMinutes(endHHMM);
+  const crossesMidnight = endMinutes <= startMinutes;
+  const shiftEnd = new Date(
+    shiftEndBase.getTime() + (crossesMidnight ? 24 * 60 * 60 * 1000 : 0),
+  );
+  const autoLogoutAt = new Date(
+    shiftEnd.getTime() + AUTO_LOGOUT_GRACE_MINUTES * 60 * 1000,
+  );
+  return { shiftStart, shiftEnd, autoLogoutAt };
+}
+
+function evaluateClockInWindow(now: Date, shiftStart: Date): { status: string } {
+  const allowedFrom = new Date(
+    shiftStart.getTime() - CLOCK_IN_EARLY_WINDOW_MINUTES * 60 * 1000,
+  );
+  const allowedUntil = new Date(
+    shiftStart.getTime() + CLOCK_IN_LATE_WINDOW_MINUTES * 60 * 1000,
+  );
+
+  if (now < allowedFrom || now > allowedUntil) {
+    const allowedFromLabel = formatInTimeZone(
+      allowedFrom,
+      IST_TIMEZONE,
+      "yyyy-MM-dd HH:mm",
+    );
+    const allowedUntilLabel = formatInTimeZone(
+      allowedUntil,
+      IST_TIMEZONE,
+      "yyyy-MM-dd HH:mm",
+    );
+
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      `Clock-in is allowed only between ${allowedFromLabel} and ${allowedUntilLabel} IST`,
+    );
+  }
+
+  return {
+    status: now > shiftStart ? "late" : "present",
+  };
+}
+
+function calculateAutoLogoutTime(clockInTime: Date): Date {
+  return new Date(clockInTime.getTime() + SHIFT_DURATION_MINUTES * 60 * 1000);
+}
 
 /**
  * Get today's date string in IST
@@ -125,7 +202,7 @@ async function getAttendanceRulesForShift(
 
 /**
  * Get effective attendance date based on shift type and current time
- * For night shift users between 00:00-04:15, use yesterday's date
+ * For night shift users between 00:00-04:00, use yesterday's date
  */
 function getEffectiveAttendanceDate(
   shiftType: string,
@@ -139,9 +216,9 @@ function getEffectiveAttendanceDate(
     formatInTimeZone(currentTime, IST_TIMEZONE, "mm"),
   );
 
-  // For night shift, if current time is between 00:00 and 04:15, use yesterday's date
+  // For night shift, if current time is between 00:00 and 04:00, use yesterday's date
   if (shiftType === SHIFT_TYPES.NIGHT_SHIFT) {
-    if (currentHour < 4 || (currentHour === 4 && currentMin <= 15)) {
+    if (currentHour < 4 || (currentHour === 4 && currentMin === 0)) {
       const yesterday = new Date(currentTime);
       yesterday.setDate(yesterday.getDate() - 1);
       return formatInTimeZone(yesterday, IST_TIMEZONE, "yyyy-MM-dd");
@@ -164,6 +241,21 @@ export async function clockIn(
   // Get user's shift type
   const shiftType = await getUserShiftType(userId);
 
+  // Guard: user cannot start a new session while one is active
+  const { data: activeSession } = await supabaseAdmin
+    .from("attendance")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("session_status", "ACTIVE")
+    .maybeSingle();
+
+  if (activeSession) {
+    throw new ApiError(
+      ERROR_CODES.ALREADY_EXISTS,
+      "Active attendance session already exists",
+    );
+  }
+
   // Get effective attendance date (yesterday for night shift if between 00:00-04:15)
   const effectiveDate = getEffectiveAttendanceDate(shiftType, now);
 
@@ -184,47 +276,16 @@ export async function clockIn(
 
   // Get attendance rules for this shift type
   const rules = await getAttendanceRulesForShift(shiftType);
+  const { shiftStart } = getShiftDateTimes(
+    effectiveDate,
+    shiftType,
+    rules,
+  );
 
-  // Determine status based on clock-in time
-  let status = "present";
-  if (rules) {
-    const workStartTime = rules.work_start_time as string;
-    const lateThreshold = (rules.late_threshold_minutes as number) || 15;
+  const { status } = evaluateClockInWindow(now, shiftStart);
 
-    // Use effective date for expected start calculation to ensure consistency
-    const expectedStartDateStr = effectiveDate;
-    // Ensure workStartTime is in HH:MM format (remove seconds if present)
-    const timeParts = workStartTime.split(":");
-    const formattedTime = `${timeParts[0]}:${timeParts[1]}`;
-    const expectedStartStr = `${expectedStartDateStr}T${formattedTime}:00+05:30`;
-    const expectedStart = new Date(expectedStartStr);
-
-    // Validate that expectedStart is a valid date
-    if (isNaN(expectedStart.getTime())) {
-      // If date parsing failed, log error but continue with "present" status
-      console.error(`Invalid expected start date: ${expectedStartStr}`);
-    } else {
-      const lateBy = (now.getTime() - expectedStart.getTime()) / 60000;
-      if (lateBy >= lateThreshold) {
-        status = "late";
-      }
-    }
-  }
-
-  // Calculate shift_end_time based on shift type
-  // Day shift: Same day at 18:15 IST
-  // Night shift: Next day at 04:15 IST
-  let shiftEndTime: string;
-  if (shiftType === SHIFT_TYPES.NIGHT_SHIFT) {
-    // Night shift ends next day at 04:15 IST
-    const nextDay = new Date(now);
-    nextDay.setDate(nextDay.getDate() + 1);
-    const nextDayStr = formatInTimeZone(nextDay, IST_TIMEZONE, "yyyy-MM-dd");
-    shiftEndTime = `${nextDayStr}T04:15:00+05:30`;
-  } else {
-    // Day shift ends same day at 18:15 IST
-    shiftEndTime = `${effectiveDate}T18:15:00+05:30`;
-  }
+  const autoLogoutAt = calculateAutoLogoutTime(now);
+  const autoLogoutISO = autoLogoutAt.toISOString();
 
   const { data, error } = await supabaseAdmin
     .from("attendance")
@@ -232,12 +293,16 @@ export async function clockIn(
       user_id: userId,
       date: effectiveDate,
       clock_in_time: nowISO,
-      shift_end_time: shiftEndTime,
+      shift_end_time: autoLogoutISO,
+      auto_logout_time: autoLogoutISO,
+      logout_time: null,
+      session_status: "ACTIVE",
+      logout_type: null,
       status,
       location: input.location,
       notes: input.notes,
       break_duration: 0,
-    })
+    } as any)
     .select()
     .single();
 
@@ -256,6 +321,13 @@ export async function clockIn(
       time: nowISO,
       status,
       shift_type: shiftType,
+      shift_start_time: formatInTimeZone(
+        shiftStart,
+        IST_TIMEZONE,
+        "yyyy-MM-dd'T'HH:mm:ssXXX",
+      ),
+      shift_end_time: autoLogoutISO,
+      auto_logout_at: autoLogoutISO,
     },
     created_at: getTimestampIST(),
   });
@@ -286,7 +358,7 @@ export async function clockOut(
     .select("*")
     .eq("user_id", userId)
     .eq("date", effectiveDate)
-    .is("clock_out_time", null)
+    .eq("session_status", "ACTIVE")
     .single();
 
   // For night shift, always check the alternate date as fallback
@@ -308,7 +380,7 @@ export async function clockOut(
       .select("*")
       .eq("user_id", userId)
       .eq("date", alternateDate)
-      .is("clock_out_time", null)
+      .eq("session_status", "ACTIVE")
       .single();
     if (altRecord) {
       existing = altRecord;
@@ -321,7 +393,7 @@ export async function clockOut(
       .from("attendance")
       .select("*")
       .eq("user_id", userId)
-      .is("clock_out_time", null)
+      .eq("session_status", "ACTIVE")
       .order("clock_in_time", { ascending: false })
       .limit(1)
       .single();
@@ -375,12 +447,15 @@ export async function clockOut(
     .from("attendance")
     .update({
       clock_out_time: nowISO,
+      logout_time: nowISO,
+      session_status: "COMPLETED",
+      logout_type: "MANUAL",
       total_hours: totalHours,
       break_duration: breakDuration,
       status,
       notes: updateNotes,
       updated_at: getCurrentTimestamp(),
-    })
+    } as any)
     .eq("id", existing.id)
     .select()
     .single();
@@ -434,7 +509,8 @@ export async function getMyTodayAttendance(
     return mapAttendanceRowToRecord(attendanceData as unknown as AttendanceRow);
   }
 
-  // For night shift, always check the alternate date as fallback
+  // For night shift, check alternate date only for an active session.
+  // This prevents yesterday's completed record from appearing as today's attendance.
   if (shiftType === SHIFT_TYPES.NIGHT_SHIFT) {
     const today = formatInTimeZone(now, IST_TIMEZONE, "yyyy-MM-dd");
     const yesterday = new Date(now);
@@ -451,6 +527,7 @@ export async function getMyTodayAttendance(
       .select("*")
       .eq("user_id", userId)
       .eq("date", alternateDate)
+      .or("session_status.eq.ACTIVE,clock_out_time.is.null")
       .single();
 
     if (altData) {
@@ -459,6 +536,63 @@ export async function getMyTodayAttendance(
   }
 
   return null;
+}
+
+export async function getMyShiftStatus(userId: string) {
+  const now = new Date();
+
+  const { data: openRecord } = await supabaseAdmin
+    .from("attendance")
+    .select(
+      "id, date, status, clock_in_time, shift_end_time, auto_logout_time, clock_out_time, session_status",
+    )
+    .eq("user_id", userId)
+    .eq("session_status", "ACTIVE")
+    .order("clock_in_time", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!openRecord) {
+    return {
+      isClockedIn: false,
+      status: "Not Clocked In",
+      attendanceStatus: null,
+      clockInTime: null,
+      autoLogoutTime: null,
+      remainingMinutes: 0,
+      remainingTime: "00:00:00",
+    };
+  }
+
+  const clockIn = new Date(openRecord.clock_in_time);
+  const autoLogout = (openRecord as any).auto_logout_time
+    ? new Date((openRecord as any).auto_logout_time)
+    : openRecord.shift_end_time
+      ? new Date(openRecord.shift_end_time)
+    : calculateAutoLogoutTime(clockIn);
+
+  const remainingMs = Math.max(0, autoLogout.getTime() - now.getTime());
+  const remainingMinutes = Math.ceil(remainingMs / 60000);
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600)
+    .toString()
+    .padStart(2, "0");
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = Math.floor(totalSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+
+  return {
+    isClockedIn: true,
+    status: remainingMs > 0 ? "Active" : "Auto Logout Due",
+    attendanceStatus: openRecord.status,
+    clockInTime: openRecord.clock_in_time,
+    autoLogoutTime: autoLogout.toISOString(),
+    remainingMinutes,
+    remainingTime: `${hours}:${minutes}:${seconds}`,
+  };
 }
 
 /**
@@ -1140,7 +1274,6 @@ export async function adminClockIn(
 
   // Get attendance rules for this shift type
   const rules = await getAttendanceRulesForShift(shiftType);
-
   // Determine status based on clock-in time
   let status = "present";
   if (rules) {
@@ -1167,51 +1300,35 @@ export async function adminClockIn(
     }
   }
 
-  let data;
-  let error;
+  const autoLogoutAt = calculateAutoLogoutTime(now);
+  const autoLogoutISO = autoLogoutAt.toISOString();
 
   if (existing) {
-    // Update existing record - reset clock in time and clear clock out
-    const result = await supabaseAdmin
-      .from("attendance")
-      .update({
-        clock_in_time: nowISO,
-        clock_out_time: null,
-        total_hours: null,
-        status,
-        location: input.location ?? existing.location,
-        notes: input.notes
-          ? existing.notes
-            ? `${existing.notes}\n[Admin Override] ${input.notes}`
-            : `[Admin Override] ${input.notes}`
-          : existing.notes,
-        updated_at: getCurrentTimestamp(),
-      })
-      .eq("id", existing.id)
-      .select()
-      .single();
-
-    data = result.data;
-    error = result.error;
-  } else {
-    // Create new record
-    const result = await supabaseAdmin
-      .from("attendance")
-      .insert({
-        user_id: targetUserId,
-        date: effectiveDate,
-        clock_in_time: nowISO,
-        status,
-        location: input.location,
-        notes: input.notes ? `[Admin Override] ${input.notes}` : null,
-        break_duration: 0,
-      })
-      .select()
-      .single();
-
-    data = result.data;
-    error = result.error;
+    throw new ApiError(
+      ERROR_CODES.ALREADY_EXISTS,
+      "Attendance already exists for this date. Use restore endpoint for accidental logout.",
+    );
   }
+
+  // Create new record
+  const { data, error } = await supabaseAdmin
+    .from("attendance")
+    .insert({
+      user_id: targetUserId,
+      date: effectiveDate,
+      clock_in_time: nowISO,
+      shift_end_time: autoLogoutISO,
+      auto_logout_time: autoLogoutISO,
+      logout_time: null,
+      session_status: "ACTIVE",
+      logout_type: null,
+      status,
+      location: input.location,
+      notes: input.notes ? `[Admin Override] ${input.notes}` : null,
+      break_duration: 0,
+    } as any)
+    .select()
+    .single();
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
@@ -1327,12 +1444,15 @@ export async function adminClockOut(
     .from("attendance")
     .update({
       clock_out_time: nowISO,
+      logout_time: nowISO,
+      session_status: "COMPLETED",
+      logout_type: "ADMIN_FORCE",
       total_hours: totalHours,
       break_duration: breakDuration,
       status,
       notes: updateNotes,
       updated_at: getCurrentTimestamp(),
-    })
+    } as any)
     .eq("id", existing.id)
     .select()
     .single();
@@ -1342,6 +1462,66 @@ export async function adminClockOut(
   }
 
   // Attendance tracked in attendance table
+
+  return mapAttendanceRowToRecord(data as unknown as AttendanceRow);
+}
+
+export async function restoreAttendanceByAdmin(
+  attendanceId: string,
+  adminId: string,
+): Promise<AttendanceRecord> {
+  const nowISO = getTimestampIST();
+
+  const { data: attendance, error: findError } = await supabaseAdmin
+    .from("attendance")
+    .select("*")
+    .eq("id", attendanceId)
+    .single();
+
+  if (findError || !attendance) {
+    throw ApiError.notFound("Attendance record");
+  }
+
+  const autoLogoutTime = (attendance as any).auto_logout_time;
+  if (!autoLogoutTime) {
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      "Attendance record has no auto logout time",
+    );
+  }
+
+  if (new Date(nowISO).getTime() >= new Date(autoLogoutTime).getTime()) {
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      "Shift already completed. Restore is not allowed.",
+    );
+  }
+
+  if ((attendance as any).session_status !== "COMPLETED") {
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      "Only completed attendance can be restored",
+    );
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("attendance")
+    .update({
+      session_status: "ACTIVE",
+      logout_time: null,
+      clock_out_time: null,
+      logout_type: null,
+      restored_by_admin_id: adminId,
+      restored_at: nowISO,
+      updated_at: getCurrentTimestamp(),
+    } as any)
+    .eq("id", attendanceId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error?.message);
+  }
 
   return mapAttendanceRowToRecord(data as unknown as AttendanceRow);
 }
@@ -1368,6 +1548,8 @@ export async function getWeeklyHours(userId: string, weekStartDate: string) {
       date: dateStr,
       hours: 0,
       isWeekend: i >= 5, // Saturday (5) and Sunday (6)
+      clockInTime: null as string | null,
+      clockOutTime: null as string | null,
     });
   }
 
@@ -1378,7 +1560,7 @@ export async function getWeeklyHours(userId: string, weekStartDate: string) {
 
   const { data, error } = await supabaseAdmin
     .from("attendance")
-    .select("date, total_hours")
+    .select("date, total_hours, clock_in_time, clock_out_time")
     .eq("user_id", userId)
     .gte("date", weekStartDate)
     .lte("date", endDateStr);
@@ -1389,10 +1571,19 @@ export async function getWeeklyHours(userId: string, weekStartDate: string) {
 
   // Map hours to corresponding days
   for (const record of data || []) {
-    const r = record as { date: string; total_hours: number | null };
+    const r = record as {
+      date: string;
+      total_hours: number | null;
+      clock_in_time: string | null;
+      clock_out_time: string | null;
+    };
     const dayIndex = days.findIndex((d) => d.date === r.date);
-    if (dayIndex !== -1 && r.total_hours) {
-      days[dayIndex]!.hours = Math.round(r.total_hours * 100) / 100;
+    if (dayIndex !== -1) {
+      if (r.total_hours) {
+        days[dayIndex]!.hours = Math.round(r.total_hours * 100) / 100;
+      }
+      days[dayIndex]!.clockInTime = r.clock_in_time;
+      days[dayIndex]!.clockOutTime = r.clock_out_time;
     }
   }
 
@@ -1403,175 +1594,18 @@ export async function getWeeklyHours(userId: string, weekStartDate: string) {
  * Auto-logout users who forgot to clock out at the end of their shift
  * Called by cron job every 5 minutes
  */
-export async function autoLogoutShiftUsers(): Promise<{
-  dayShiftCount: number;
-  nightShiftCount: number;
-  errors: string[];
-}> {
-  const now = new Date();
-  const nowISO = getTimestampIST();
-  const currentHour = parseInt(formatInTimeZone(now, IST_TIMEZONE, "HH"));
-  const currentMin = parseInt(formatInTimeZone(now, IST_TIMEZONE, "mm"));
-  const currentTimeMinutes = currentHour * 60 + currentMin;
+export async function bulkAutoLogoutDueSessions(): Promise<number> {
+  const { data, error } = await supabaseAdmin.rpc(
+    "bulk_auto_logout_due_attendance",
+  );
 
-  let dayShiftCount = 0;
-  let nightShiftCount = 0;
-  const errors: string[] = [];
-
-  // Day shift auto-logout: 18:15 IST (1115 minutes)
-  if (currentTimeMinutes >= 1115 && currentTimeMinutes < 1200) {
-    // Get day shift rules
-    const dayRules = await getAttendanceRulesForShift(SHIFT_TYPES.DAY_SHIFT);
-    if (dayRules) {
-      const today = getTodayDateString();
-
-      // Find all day-shift users with open attendance records for today
-      const { data: dayShiftUsers } = await supabaseAdmin
-        .from("users")
-        .select("id, shift_type")
-        .eq("shift_type", SHIFT_TYPES.DAY_SHIFT)
-        .eq("is_active", true);
-
-      if (dayShiftUsers && dayShiftUsers.length > 0) {
-        const userIds = dayShiftUsers.map((u: any) => u.id);
-
-        // Get open attendance records
-        const { data: openRecords } = await supabaseAdmin
-          .from("attendance")
-          .select("*")
-          .eq("date", today)
-          .in("user_id", userIds)
-          .is("clock_out_time", null);
-
-        if (openRecords && openRecords.length > 0) {
-          for (const record of openRecords) {
-            try {
-              const clockIn = new Date(record.clock_in_time);
-              const clockOut = new Date(nowISO);
-              const breakDuration = record.break_duration || 0;
-              const totalMinutes =
-                (clockOut.getTime() - clockIn.getTime()) / 60000 -
-                breakDuration;
-              const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
-
-              // Determine status
-              const halfDayHours = (dayRules.half_day_hours as number) || 4;
-              const fullDayHours = (dayRules.full_day_hours as number) || 8;
-              let status = record.status;
-              if (totalHours < halfDayHours) {
-                status = "half_day";
-              } else if (totalHours >= fullDayHours) {
-                status = record.status === "late" ? "late" : "present";
-              }
-
-              const autoNote = `[Auto] Shift ended at ${dayRules.work_end_time || "18:00"} - auto clock out at ${dayRules.auto_logout_time || "18:15"}`;
-              const updateNotes = record.notes
-                ? `${record.notes}\n${autoNote}`
-                : autoNote;
-
-              await supabaseAdmin
-                .from("attendance")
-                .update({
-                  clock_out_time: nowISO,
-                  total_hours: totalHours,
-                  status,
-                  notes: updateNotes,
-                  updated_at: getCurrentTimestamp(),
-                })
-                .eq("id", record.id);
-
-              dayShiftCount++;
-            } catch (error: any) {
-              errors.push(`Day shift user ${record.user_id}: ${error.message}`);
-            }
-          }
-        }
-      }
-    }
+  if (error) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  // Night shift auto-logout: 04:15 IST (255 minutes) to 05:00 IST (300 minutes)
-  if (currentTimeMinutes >= 255 && currentTimeMinutes < 300) {
-    // Get night shift rules
-    const nightRules = await getAttendanceRulesForShift(
-      SHIFT_TYPES.NIGHT_SHIFT,
-    );
-    if (nightRules) {
-      // For night shift, the attendance date is yesterday
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = formatInTimeZone(
-        yesterday,
-        IST_TIMEZONE,
-        "yyyy-MM-dd",
-      );
-
-      // Find all night-shift users with open attendance records for yesterday
-      const { data: nightShiftUsers } = await supabaseAdmin
-        .from("users")
-        .select("id, shift_type")
-        .eq("shift_type", SHIFT_TYPES.NIGHT_SHIFT)
-        .eq("is_active", true);
-
-      if (nightShiftUsers && nightShiftUsers.length > 0) {
-        const userIds = nightShiftUsers.map((u: any) => u.id);
-
-        // Get open attendance records for yesterday
-        const { data: openRecords } = await supabaseAdmin
-          .from("attendance")
-          .select("*")
-          .eq("date", yesterdayStr)
-          .in("user_id", userIds)
-          .is("clock_out_time", null);
-
-        if (openRecords && openRecords.length > 0) {
-          for (const record of openRecords) {
-            try {
-              const clockIn = new Date(record.clock_in_time);
-              const clockOut = new Date(nowISO);
-              const breakDuration = record.break_duration || 0;
-              const totalMinutes =
-                (clockOut.getTime() - clockIn.getTime()) / 60000 -
-                breakDuration;
-              const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
-
-              // Determine status
-              const halfDayHours = (nightRules.half_day_hours as number) || 4;
-              const fullDayHours = (nightRules.full_day_hours as number) || 9;
-              let status = record.status;
-              if (totalHours < halfDayHours) {
-                status = "half_day";
-              } else if (totalHours >= fullDayHours) {
-                status = record.status === "late" ? "late" : "present";
-              }
-
-              const autoNote = `[Auto] Shift ended at ${nightRules.work_end_time || "04:00"} - auto clock out at ${nightRules.auto_logout_time || "04:15"}`;
-              const updateNotes = record.notes
-                ? `${record.notes}\n${autoNote}`
-                : autoNote;
-
-              await supabaseAdmin
-                .from("attendance")
-                .update({
-                  clock_out_time: nowISO,
-                  total_hours: totalHours,
-                  status,
-                  notes: updateNotes,
-                  updated_at: getCurrentTimestamp(),
-                })
-                .eq("id", record.id);
-
-              nightShiftCount++;
-            } catch (error: any) {
-              errors.push(
-                `Night shift user ${record.user_id}: ${error.message}`,
-              );
-            }
-          }
-        }
-      }
-    }
+  if (typeof data === "number") {
+    return data;
   }
 
-  return { dayShiftCount, nightShiftCount, errors };
+  return 0;
 }

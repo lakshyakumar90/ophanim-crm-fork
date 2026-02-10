@@ -3,23 +3,34 @@ import {
   processLeadReminders,
   processTaskReminders,
 } from "../services/reminder.service.js";
-import { autoLogoutShiftUsers } from "../services/attendance.service.js";
+import { bulkAutoLogoutDueSessions } from "../services/attendance.service.js";
 
 const router: Router = Router();
 
+const autoLogoutMonitor = {
+  lastRunAt: null as string | null,
+  lastSuccessAt: null as string | null,
+  lastLoggedOutCount: 0,
+  lastError: null as string | null,
+  lastDurationMs: 0,
+};
+
 /**
  * Verify cron request authorization.
- * If CRON_SECRET is set (locally or on Vercel), always enforce it.
+ * CRON_SECRET is mandatory and enforced for every cron request.
  * Returns true if authorized, false otherwise.
  */
 function verifyCronAuth(req: Request, res: Response): boolean {
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers.authorization;
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      res.status(401).json({ error: "Unauthorized" });
-      return false;
-    }
+  if (!cronSecret) {
+    res.status(500).json({ error: "CRON_SECRET is not configured" });
+    return false;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    res.status(401).json({ error: "Unauthorized" });
+    return false;
   }
   return true;
 }
@@ -62,32 +73,47 @@ router.get("/reminders", async (req, res) => {
 router.get("/auto-logout", async (req, res) => {
   if (!verifyCronAuth(req, res)) return;
 
+  const startedAt = Date.now();
+  autoLogoutMonitor.lastRunAt = new Date().toISOString();
+
   try {
     console.log("[Cron] Starting auto-logout processing...");
 
-    const result = await autoLogoutShiftUsers();
-
-    console.log(
-      `[Cron] Auto-logout completed: ${result.dayShiftCount} day shift, ${result.nightShiftCount} night shift`,
-    );
-
-    if (result.errors.length > 0) {
-      console.error("[Cron] Auto-logout errors:", result.errors);
-    }
+    const loggedOutCount = await bulkAutoLogoutDueSessions();
+    console.log(`[Cron] Auto-logout completed: ${loggedOutCount} sessions`);
+    autoLogoutMonitor.lastSuccessAt = new Date().toISOString();
+    autoLogoutMonitor.lastLoggedOutCount = loggedOutCount;
+    autoLogoutMonitor.lastError = null;
+    autoLogoutMonitor.lastDurationMs = Date.now() - startedAt;
 
     return res.status(200).json({
       success: true,
-      message: "Auto-logout processed successfully",
-      data: result,
-      timestamp: new Date().toISOString(),
+      loggedOutCount,
     });
   } catch (error) {
     console.error("[Cron] Error processing auto-logout:", error);
+    autoLogoutMonitor.lastError =
+      error instanceof Error ? error.message : "Unknown error";
+    autoLogoutMonitor.lastDurationMs = Date.now() - startedAt;
     return res.status(500).json({
       success: false,
       error: "Failed to process auto-logout",
     });
   }
+});
+
+/**
+ * GET /api/v1/cron/auto-logout/status
+ * Monitoring endpoint for last auto-logout run.
+ */
+router.get("/auto-logout/status", async (req, res) => {
+  if (!verifyCronAuth(req, res)) return;
+
+  return res.status(200).json({
+    success: true,
+    data: autoLogoutMonitor,
+    now: new Date().toISOString(),
+  });
 });
 
 export default router;

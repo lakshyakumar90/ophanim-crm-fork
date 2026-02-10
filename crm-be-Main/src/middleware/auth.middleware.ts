@@ -89,8 +89,14 @@ export async function authenticate(
       departmentId: user.department_id,
     };
 
-    // Lazy auto-logout check: if user has open attendance with shift ended, auto-logout
-    await checkAndAutoLogout(user.id);
+    // Safety fallback: close overdue sessions and reject this request
+    const autoLoggedOut = await checkAndAutoLogout(user.id);
+    if (autoLoggedOut) {
+      throw new ApiError(
+        ERROR_CODES.UNAUTHORIZED,
+        "Session expired due to auto-logout",
+      );
+    }
 
     next();
   } catch (error) {
@@ -101,28 +107,27 @@ export async function authenticate(
 
 /**
  * Lazy auto-logout check - called on each authenticated request
- * If user has an open attendance record with passed shift_end_time, log them out
+ * If user has an ACTIVE session where auto_logout_time has passed, complete it.
  */
-async function checkAndAutoLogout(userId: string): Promise<void> {
+async function checkAndAutoLogout(userId: string): Promise<boolean> {
   try {
     const now = new Date().toISOString();
 
-    // Find open attendance with passed shift_end_time
+    // Find open attendance where auto-logout time has passed
     const { data: openRecord } = await supabaseAdmin
       .from("attendance")
       .select(
-        "id, clock_in_time, shift_end_time, break_duration, status, notes",
+        "id, clock_in_time, auto_logout_time, break_duration, status, notes, session_status",
       )
       .eq("user_id", userId)
-      .is("clock_out_time", null)
-      .not("shift_end_time", "is", null)
-      .lte("shift_end_time", now)
+      .eq("session_status", "ACTIVE")
+      .not("auto_logout_time", "is", null)
+      .lte("auto_logout_time", now)
       .single();
 
-    if (!openRecord) return;
+    if (!openRecord) return false;
 
-    // Auto-logout using shift_end_time as clock_out_time
-    const clockOutTime = openRecord.shift_end_time;
+    const clockOutTime = openRecord.auto_logout_time;
     const clockIn = new Date(openRecord.clock_in_time);
     const clockOut = new Date(clockOutTime);
     const breakDuration = openRecord.break_duration || 0;
@@ -134,7 +139,7 @@ async function checkAndAutoLogout(userId: string): Promise<void> {
     // Determine status
     let status = openRecord.status;
     const halfDayHours = 4;
-    const fullDayHours = 8;
+    const fullDayHours = 9;
     if (totalHours < halfDayHours) {
       status = "half_day";
     } else if (totalHours >= fullDayHours) {
@@ -150,18 +155,23 @@ async function checkAndAutoLogout(userId: string): Promise<void> {
       .from("attendance")
       .update({
         clock_out_time: clockOutTime,
+        logout_time: now,
+        session_status: "COMPLETED",
+        logout_type: "AUTO",
         total_hours: totalHours,
         status,
         notes: updateNotes,
         auto_logged_out: true,
         updated_at: now,
-      })
+      } as any)
       .eq("id", openRecord.id);
 
     console.log(`[Lazy Auto-Logout] User ${userId} auto-logged out`);
+    return true;
   } catch (error) {
     // Don't fail the request if auto-logout check fails
     console.warn("[Lazy Auto-Logout] Error:", error);
+    return false;
   }
 }
 

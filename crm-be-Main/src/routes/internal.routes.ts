@@ -102,7 +102,7 @@ router.post("/auto-logout", async (req: Request, res: Response) => {
         let status = record.status;
         // Default thresholds (should match attendance_rules but using safe defaults)
         const halfDayHours = 4;
-        const fullDayHours = 8;
+        const fullDayHours = 9;
 
         if (totalHours < halfDayHours) {
           status = "half_day";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useIsManager, useIsAdmin } from "@/providers/auth-provider";
+import { useAuth, useIsManager, useIsAdmin } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Plus,
   Filter,
@@ -117,12 +118,14 @@ const KANBAN_STATUSES: LeadStatus[] = [
   "proposal_sent",
   "future_lead",
   "not_interested",
+  "not_a_lead",
 ];
 
 export default function LeadsPage() {
   const router = useRouter();
   const { slug } = useParams();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const isManager = useIsManager();
   const isAdmin = useIsAdmin();
 
@@ -130,7 +133,7 @@ export default function LeadsPage() {
     searchParams.get("status") || "all",
   );
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50); // Default to 50 for bulk operations
+  const [pageSize, setPageSize] = useState(50);
   const [visibleColumns, setVisibleColumns] =
     useState<string[]>(DEFAULT_COLUMNS);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -144,16 +147,20 @@ export default function LeadsPage() {
     isAdmin || isManager ? "table" : "kanban",
   );
 
-  // Kanban global pagination (1-100, 101-200, etc.)
-  const [kanbanPage, setKanbanPage] = useState(1);
-  const KANBAN_PAGE_SIZE = 100;
-
   // Selection state for bulk operations
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
 
   // Track updating state for optimistic UI
   const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
+
+  // NAL reason dialog state
+  const [isNalDialogOpen, setIsNalDialogOpen] = useState(false);
+  const [nalReason, setNalReason] = useState("");
+  const [pendingNalMove, setPendingNalMove] = useState<{
+    leadId: string;
+    newStatus: LeadStatus;
+  } | null>(null);
 
   // Reassign state (for single lead reassign from table)
   const [isReassignOpen, setIsReassignOpen] = useState(false);
@@ -172,7 +179,17 @@ export default function LeadsPage() {
   >("all");
 
   // User filter state (Admin/Manager, both views)
+  // Manager defaults to their own leads; Admin defaults to all
   const [assignedToUserId, setAssignedToUserId] = useState<string>("all");
+  const [managerDefaultSet, setManagerDefaultSet] = useState(false);
+
+  // Set manager default to see only their own leads
+  useEffect(() => {
+    if (user && isManager && !isAdmin && !managerDefaultSet) {
+      setAssignedToUserId(user.id);
+      setManagerDefaultSet(true);
+    }
+  }, [user, isManager, isAdmin, managerDefaultSet]);
 
   // Team filter state (Admin only, Kanban view)
   const [kanbanTeamId, setKanbanTeamId] = useState<string>("all");
@@ -196,25 +213,86 @@ export default function LeadsPage() {
   );
   const teams = teamsData || [];
 
-  const { data, isLoading, error, mutate } = useSWR(
-    [
-      "leads",
-      page,
-      pageSize,
-      status,
-      viewMode,
-      assignmentFilter,
-      assignedToUserId,
-      kanbanPage,
-      kanbanTeamId,
-    ],
+  const isKanbanView = viewMode === "kanban";
+
+  // ─── KANBAN: Per-status fetching (100 leads per column) ───
+  const kanbanFilterParams = useMemo(
+    () => ({
+      assignedTo:
+        assignedToUserId !== "all" && assignedToUserId !== "_unassigned"
+          ? assignedToUserId
+          : undefined,
+      assigned:
+        assignedToUserId === "_unassigned"
+          ? ("unassigned" as const)
+          : undefined,
+      teamId: kanbanTeamId !== "all" ? kanbanTeamId : undefined,
+    }),
+    [assignedToUserId, kanbanTeamId],
+  );
+
+  const {
+    data: kanbanData,
+    isLoading: kanbanLoading,
+    isValidating: kanbanValidating,
+    mutate: kanbanMutate,
+  } = useSWR(
+    isKanbanView
+      ? [
+          "kanban-leads",
+          assignedToUserId,
+          kanbanTeamId,
+          JSON.stringify(statusLimits),
+        ]
+      : null,
+    async () => {
+      const results = await Promise.all(
+        KANBAN_STATUSES.map(async (statusValue) => {
+          const limit = statusLimits[statusValue] || 100;
+          const res = await leadsApi.list({
+            limit,
+            page: 1,
+            status: statusValue,
+            ...kanbanFilterParams,
+          });
+          return {
+            status: statusValue,
+            leads: (res.data || []) as Lead[],
+            total: res.meta?.total || 0,
+          };
+        }),
+      );
+      return results;
+    },
+    {
+      keepPreviousData: true,
+    },
+  );
+
+  // ─── TABLE: Standard paginated fetch ───
+  const {
+    data: tableData,
+    isLoading: tableLoading,
+    error,
+    mutate: tableMutate,
+  } = useSWR(
+    !isKanbanView
+      ? [
+          "table-leads",
+          page,
+          pageSize,
+          status,
+          assignmentFilter,
+          assignedToUserId,
+        ]
+      : null,
     () =>
       leadsApi.list({
-        page: viewMode === "kanban" ? kanbanPage : page,
-        limit: viewMode === "kanban" ? KANBAN_PAGE_SIZE : pageSize,
+        page,
+        limit: pageSize,
         status: status !== "all" ? status : undefined,
         assigned:
-          viewMode === "table" && assignmentFilter !== "all"
+          assignmentFilter !== "all"
             ? assignmentFilter
             : assignedToUserId === "_unassigned"
               ? "unassigned"
@@ -223,37 +301,178 @@ export default function LeadsPage() {
           assignedToUserId !== "all" && assignedToUserId !== "_unassigned"
             ? assignedToUserId
             : undefined,
-        teamId:
-          viewMode === "kanban" && kanbanTeamId !== "all"
-            ? kanbanTeamId
-            : undefined,
       }),
   );
 
-  // Fetch today's reminders to highlight leads
-  const { data: remindersData } = useSWR(
-    ["today-reminders", new Date().toISOString().split("T")[0]],
-    () =>
-      leadsApi.getAllReminders({
-        date: new Date().toISOString().split("T")[0],
-        status: "pending",
-        limit: 100,
-      }),
+  // ─── Unified data accessors ───
+  const leads = isKanbanView
+    ? kanbanData?.flatMap((s) => s.leads) || []
+    : tableData?.data || [];
+  const meta = isKanbanView ? null : tableData?.meta;
+  const isLoading = isKanbanView ? kanbanLoading : tableLoading;
+  const isInitialKanbanLoading = isKanbanView && kanbanLoading && !kanbanData;
+  const mutate = isKanbanView ? kanbanMutate : tableMutate;
+
+  // Kanban total lead count (sum of all status totals)
+  const kanbanTotalLeads =
+    kanbanData?.reduce((sum, s) => sum + s.total, 0) || 0;
+
+  // Fetch all pending reminders to highlight leads
+  const { data: remindersData } = useSWR(["pending-reminders"], () =>
+    leadsApi.getAllReminders({
+      status: "pending",
+      limit: 500,
+    }),
+  );
+
+  const pendingReminders = useMemo(() => {
+    if (Array.isArray(remindersData)) return remindersData;
+    return remindersData?.data || [];
+  }, [remindersData]);
+
+  const getReminderLeadId = (reminder: any): string | undefined =>
+    reminder?.leadId || reminder?.lead_id || reminder?.lead?.id || reminder?.leads?.id;
+
+  const getReminderAt = (reminder: any): string | undefined =>
+    reminder?.reminderAt || reminder?.reminder_at;
+
+  const reminderLeadIdsByPriority = useMemo(() => {
+    const sorted = [...pendingReminders].sort((a: any, b: any) => {
+      const aAt = getReminderAt(a);
+      const bAt = getReminderAt(b);
+      const aOverdue = aAt ? new Date(aAt).getTime() < Date.now() : false;
+      const bOverdue = bAt ? new Date(bAt).getTime() < Date.now() : false;
+      if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+      const aTs = aAt ? new Date(aAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const bTs = bAt ? new Date(bAt).getTime() : Number.MAX_SAFE_INTEGER;
+      return aTs - bTs;
+    });
+    const uniqueIds: string[] = [];
+    const seen = new Set<string>();
+    for (const reminder of sorted) {
+      const id = getReminderLeadId(reminder);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      uniqueIds.push(id);
+    }
+    return uniqueIds;
+  }, [pendingReminders]);
+  const reminderLeadPriorityIndex = useMemo(
+    () => new Map<string, number>(reminderLeadIdsByPriority.map((id, i) => [id, i])),
+    [reminderLeadIdsByPriority],
   );
 
   const leadsWithReminders = new Set(
-    (remindersData?.data || []).map((r: any) => r.leadId),
+    pendingReminders
+      .map((r: any) => getReminderLeadId(r))
+      .filter((id: string | undefined): id is string => Boolean(id)),
   );
 
   // Create a map of leadId -> hasOverdue for styling
   const leadsWithOverdueReminders = new Set(
-    (remindersData?.data || [])
-      .filter((r: any) => new Date(r.reminderAt).getTime() < Date.now())
-      .map((r: any) => r.leadId),
+    pendingReminders
+      .filter((r: any) => {
+        const reminderAt = getReminderAt(r);
+        return reminderAt
+          ? new Date(reminderAt).getTime() < Date.now()
+          : false;
+      })
+      .map((r: any) => getReminderLeadId(r))
+      .filter((id: string | undefined): id is string => Boolean(id)),
+  );
+  const activeRemindersCount = pendingReminders.length;
+  const overdueRemindersCount = pendingReminders.filter((r: any) => {
+    const reminderAt = getReminderAt(r);
+    return reminderAt ? new Date(reminderAt).getTime() < Date.now() : false;
+  }).length;
+
+  const reminderLeadFetchIds = reminderLeadIdsByPriority.slice(
+    0,
+    isKanbanView ? 200 : Math.max(pageSize, 50),
+  );
+  const { data: reminderLeadDetails = [] } = useSWR(
+    reminderLeadFetchIds.length > 0 && (!isKanbanView || kanbanTeamId === "all")
+      ? [
+          "reminder-leads",
+          reminderLeadFetchIds.join(","),
+          isKanbanView ? "kanban" : "table",
+          kanbanTeamId,
+          status,
+          assignmentFilter,
+          assignedToUserId,
+        ]
+      : null,
+    async () => {
+      const loaded = await Promise.all(
+        reminderLeadFetchIds.map(async (id) => {
+          try {
+            return await leadsApi.get(id);
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return loaded.filter(Boolean) as Lead[];
+    },
   );
 
-  const leads = data?.data || [];
-  const meta = data?.meta;
+  const tableLeads = useMemo(() => {
+    if (isKanbanView) return leads;
+
+    const reminderIndex = new Map<string, number>(
+      reminderLeadIdsByPriority.map((id, i) => [id, i]),
+    );
+    const reminderSet = new Set(reminderLeadIdsByPriority);
+    const baseLeads = [...(tableData?.data || [])];
+    const baseMap = new Map(baseLeads.map((l: Lead) => [l.id, l]));
+
+    const filteredReminderLeads = [...(reminderLeadDetails || [])].filter(
+      (lead: Lead) => {
+        if (status !== "all" && lead.status !== status) return false;
+        if (assignmentFilter === "assigned" && !lead.assignedTo) return false;
+        if (assignmentFilter === "unassigned" && lead.assignedTo) return false;
+        if (
+          assignedToUserId !== "all" &&
+          assignedToUserId !== "_unassigned" &&
+          lead.assignedTo !== assignedToUserId
+        ) {
+          return false;
+        }
+        if (assignedToUserId === "_unassigned" && lead.assignedTo) return false;
+        return true;
+      },
+    );
+    filteredReminderLeads.sort(
+      (a: Lead, b: Lead) =>
+        (reminderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+        (reminderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+    );
+
+    const nonReminderLeads = baseLeads.filter((lead: Lead) => !reminderSet.has(lead.id));
+
+    const merged: Lead[] = [];
+    const seen = new Set<string>();
+    for (const lead of [...filteredReminderLeads, ...baseLeads, ...nonReminderLeads]) {
+      if (seen.has(lead.id)) continue;
+      seen.add(lead.id);
+      merged.push(baseMap.get(lead.id) || lead);
+      if (merged.length >= pageSize) break;
+    }
+
+    return merged;
+  }, [
+    isKanbanView,
+    leads,
+    tableData?.data,
+    pageSize,
+    status,
+    assignmentFilter,
+    assignedToUserId,
+    reminderLeadIdsByPriority,
+    reminderLeadDetails,
+    leadsWithOverdueReminders,
+    leadsWithReminders,
+  ]);
 
   const toggleColumn = (key: string) => {
     setVisibleColumns((prev) =>
@@ -300,10 +519,11 @@ export default function LeadsPage() {
 
   // Selection handlers
   const toggleSelectAll = () => {
-    if (selectedIds.length === leads.length) {
+    const visibleLeads = viewMode === "table" ? tableLeads : leads;
+    if (selectedIds.length === visibleLeads.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(leads.map((l: Lead) => l.id));
+      setSelectedIds(visibleLeads.map((l: Lead) => l.id));
     }
   };
 
@@ -373,21 +593,64 @@ export default function LeadsPage() {
     }
   };
 
-  // Group leads by status for Kanban view (with pagination limits)
+  // Get leads for a Kanban status column (sorted by reminder priority)
   const getLeadsByStatus = (statusValue: LeadStatus) => {
-    const allForStatus = leads.filter(
-      (lead: Lead) => lead.status === statusValue,
-    );
-    const limit = statusLimits[statusValue] || 100;
-    return allForStatus.slice(0, limit);
+    let statusLeads: Lead[];
+    if (isKanbanView && kanbanData) {
+      const entry = kanbanData.find((s) => s.status === statusValue);
+      const baseStatusLeads = [...(entry?.leads || [])];
+      if (kanbanTeamId !== "all") {
+        statusLeads = baseStatusLeads;
+      } else {
+        const reminderStatusLeads = reminderLeadDetails
+          .filter((lead: Lead) => {
+            if (lead.status !== statusValue) return false;
+            if (
+              assignedToUserId !== "all" &&
+              assignedToUserId !== "_unassigned" &&
+              lead.assignedTo !== assignedToUserId
+            ) {
+              return false;
+            }
+            if (assignedToUserId === "_unassigned" && lead.assignedTo) return false;
+            return true;
+          })
+          .sort(
+            (a: Lead, b: Lead) =>
+              (reminderLeadPriorityIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+              (reminderLeadPriorityIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+          );
+        const merged = new Map<string, Lead>();
+        for (const lead of [...reminderStatusLeads, ...baseStatusLeads]) {
+          if (!merged.has(lead.id)) merged.set(lead.id, lead);
+        }
+        statusLeads = [...merged.values()];
+      }
+    } else {
+      statusLeads = leads.filter((lead: Lead) => lead.status === statusValue);
+    }
+    // Sort by reminder priority: overdue → upcoming → none
+    statusLeads.sort((a: Lead, b: Lead) => {
+      const aOverdue = leadsWithOverdueReminders.has(a.id) ? 0 : 1;
+      const bOverdue = leadsWithOverdueReminders.has(b.id) ? 0 : 1;
+      if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+      const aReminder = leadsWithReminders.has(a.id) ? 0 : 1;
+      const bReminder = leadsWithReminders.has(b.id) ? 0 : 1;
+      return aReminder - bReminder;
+    });
+    return statusLeads;
   };
 
-  // Get total count for a status
+  // Get total count for a status (from API meta for Kanban, or client count for table)
   const getTotalCountByStatus = (statusValue: LeadStatus) => {
+    if (isKanbanView && kanbanData) {
+      const entry = kanbanData.find((s) => s.status === statusValue);
+      return entry?.total || 0;
+    }
     return leads.filter((lead: Lead) => lead.status === statusValue).length;
   };
 
-  // Load more leads for a status
+  // Load more leads for a specific status column (increases limit, triggers refetch)
   const loadMoreForStatus = (statusValue: LeadStatus) => {
     setStatusLimits((prev) => ({
       ...prev,
@@ -423,36 +686,94 @@ export default function LeadsPage() {
       return;
     }
 
-    // Optimistic update
+    // If moving to NAL, show the NAL reason dialog instead of moving immediately
+    if (newStatus === "not_a_lead") {
+      setPendingNalMove({ leadId, newStatus });
+      setNalReason("");
+      setIsNalDialogOpen(true);
+      return;
+    }
+
+    // For all other statuses, proceed normally
+    await performStatusUpdate(leadId, newStatus);
+  };
+
+  // Perform the actual status update (used by both normal drag and NAL confirm)
+  const performStatusUpdate = async (
+    leadId: string,
+    newStatus: LeadStatus,
+    reason?: string,
+  ) => {
     setUpdatingLeadId(leadId);
 
-    // Create optimistic data
-    const optimisticLeads = leads.map((lead: Lead) =>
-      lead.id === leadId ? { ...lead, status: newStatus } : lead,
-    );
-
-    // Update the cache optimistically
-    mutate(
-      {
-        ...data,
-        data: optimisticLeads,
-      },
-      false, // Don't revalidate yet
-    );
+    // Optimistic update for Kanban per-status data
+    if (isKanbanView && kanbanData) {
+      let leadToMove: Lead | null = null;
+      const optimistic = kanbanData.map((entry) => {
+        const found = entry.leads.find((l: Lead) => l.id === leadId);
+        if (found) leadToMove = found;
+        return {
+          ...entry,
+          leads: entry.leads.filter((l: Lead) => l.id !== leadId),
+          total: found ? entry.total - 1 : entry.total,
+        };
+      });
+      if (leadToMove) {
+        const destIdx = optimistic.findIndex((e) => e.status === newStatus);
+        if (destIdx >= 0) {
+          optimistic[destIdx] = {
+            ...optimistic[destIdx],
+            leads: [
+              { ...(leadToMove as Lead), status: newStatus },
+              ...optimistic[destIdx].leads,
+            ],
+            total: optimistic[destIdx].total + 1,
+          };
+        }
+      }
+      kanbanMutate(optimistic, false);
+    } else if (tableData) {
+      const optimisticLeads = (tableData.data || []).map((lead: Lead) =>
+        lead.id === leadId ? { ...lead, status: newStatus } : lead,
+      );
+      tableMutate({ ...tableData, data: optimisticLeads }, false);
+    }
 
     try {
-      // Call API to update the status
-      await leadsApi.updateStatus(leadId, newStatus);
+      await leadsApi.updateStatus(leadId, newStatus, reason);
       toast.success(`Lead moved to ${getStatusLabel(newStatus)}`);
-      // Revalidate to get the latest data
-      mutate();
+      if (isKanbanView) kanbanMutate();
+      else tableMutate();
     } catch (error) {
-      // Revert on error
       toast.error("Failed to update lead status");
-      mutate(); // Revalidate to get the correct data
+      if (isKanbanView) kanbanMutate();
+      else tableMutate();
     } finally {
       setUpdatingLeadId(null);
     }
+  };
+
+  // Handle NAL reason dialog confirmation
+  const handleNalConfirm = async () => {
+    if (!pendingNalMove || !nalReason.trim()) {
+      toast.error("Please enter a reason for marking as Not A Lead");
+      return;
+    }
+    setIsNalDialogOpen(false);
+    await performStatusUpdate(
+      pendingNalMove.leadId,
+      pendingNalMove.newStatus,
+      nalReason.trim(),
+    );
+    setPendingNalMove(null);
+    setNalReason("");
+  };
+
+  // Handle NAL reason dialog cancel
+  const handleNalCancel = () => {
+    setIsNalDialogOpen(false);
+    setPendingNalMove(null);
+    setNalReason("");
   };
 
   return (
@@ -485,6 +806,17 @@ export default function LeadsPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Leads</h1>
           <p className="text-muted-foreground">Manage your sales leads</p>
+          {activeRemindersCount > 0 && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-200 px-2.5 py-1 text-xs font-medium text-red-700">
+              <Bell className="h-3.5 w-3.5" />
+              <span>
+                {activeRemindersCount} active reminder
+                {activeRemindersCount > 1 ? "s" : ""}
+                {overdueRemindersCount > 0 &&
+                  ` (${overdueRemindersCount} overdue)`}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           {/* View Toggle - Admin and Manager */}
@@ -622,7 +954,7 @@ export default function LeadsPage() {
                   )}
                   {userStats.users.map((user: any) => (
                     <SelectItem key={user.id} value={user.id}>
-                      {user.fullName} ({user.leadCount})
+                      {user.fullName} ({user.leadCount ?? user.total ?? 0})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -683,7 +1015,6 @@ export default function LeadsPage() {
                   value={assignedToUserId}
                   onValueChange={(v) => {
                     setAssignedToUserId(v);
-                    setKanbanPage(1);
                   }}
                 >
                   <SelectTrigger className="w-[180px]">
@@ -699,7 +1030,7 @@ export default function LeadsPage() {
                     )}
                     {userStats.users.map((user: any) => (
                       <SelectItem key={user.id} value={user.id}>
-                        {user.fullName} ({user.leadCount})
+                        {user.fullName} ({user.leadCount ?? user.total ?? 0})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -712,7 +1043,6 @@ export default function LeadsPage() {
                   value={kanbanTeamId}
                   onValueChange={(v) => {
                     setKanbanTeamId(v);
-                    setKanbanPage(1);
                   }}
                 >
                   <SelectTrigger className="w-[180px]">
@@ -731,28 +1061,11 @@ export default function LeadsPage() {
               )}
             </div>
 
-            {/* Pagination Controls */}
+            {/* Lead Count Display */}
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {(kanbanPage - 1) * KANBAN_PAGE_SIZE + 1}-
-                {kanbanPage * KANBAN_PAGE_SIZE}
+              <span className="text-sm font-medium text-muted-foreground">
+                Total: {kanbanTotalLeads} leads
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setKanbanPage((p) => Math.max(1, p - 1))}
-                disabled={kanbanPage === 1}
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setKanbanPage((p) => p + 1)}
-                disabled={leads.length < KANBAN_PAGE_SIZE}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
             </div>
           </div>
 
@@ -799,7 +1112,7 @@ export default function LeadsPage() {
                               : "bg-muted/30"
                           }`}
                         >
-                          {isLoading ? (
+                          {isInitialKanbanLoading ? (
                             <>
                               <Skeleton className="h-24" />
                               <Skeleton className="h-24" />
@@ -831,9 +1144,9 @@ export default function LeadsPage() {
                                           : ""
                                       } ${
                                         leadsWithOverdueReminders.has(lead.id)
-                                          ? "border-l-4 border-l-red-500 bg-red-50/30 dark:bg-red-950/10 hover:border-red-400"
+                                          ? "border-l-4 border-l-red-500 bg-red-200 dark:bg-red-950/10 hover:border-red-400"
                                           : leadsWithReminders.has(lead.id)
-                                            ? "border-l-4 border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/10 hover:border-amber-400"
+                                            ? "border-l-4 border-l-green-500 bg-green-200 dark:bg-green-950/10 hover:border-green-400"
                                             : "hover:border-primary/50"
                                       }`}
                                     >
@@ -858,7 +1171,7 @@ export default function LeadsPage() {
                                                         lead.id,
                                                       )
                                                         ? "text-red-500"
-                                                        : "text-amber-500"
+                                                        : "text-green-500"
                                                     }`}
                                                   />
                                                 )}
@@ -910,13 +1223,13 @@ export default function LeadsPage() {
                             ))
                           )}
                           {provided.placeholder}
-                          {!isLoading && statusLeads.length === 0 && (
+                          {!isInitialKanbanLoading && statusLeads.length === 0 && (
                             <div className="text-center text-sm text-muted-foreground py-8">
                               Drop leads here
                             </div>
                           )}
                           {/* Load More Button */}
-                          {!isLoading &&
+                          {!isInitialKanbanLoading &&
                             getTotalCountByStatus(statusValue) >
                               statusLeads.length && (
                               <Button
@@ -924,6 +1237,7 @@ export default function LeadsPage() {
                                 size="sm"
                                 className="w-full mt-2"
                                 onClick={() => loadMoreForStatus(statusValue)}
+                                disabled={kanbanValidating}
                               >
                                 Load More (
                                 {getTotalCountByStatus(statusValue) -
@@ -945,6 +1259,60 @@ export default function LeadsPage() {
       {/* Table View */}
       {viewMode === "table" && (
         <>
+          {/* Pagination */}
+          {meta && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {/* Page Size Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Rows:</span>
+                  <Select
+                    value={pageSize.toString()}
+                    onValueChange={(val) => {
+                      setPageSize(Number(val));
+                      setPage(1); // Reset to first page when changing page size
+                    }}
+                  >
+                    <SelectTrigger className="w-fit h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Showing{" "}
+                  {meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1} to{" "}
+                  {Math.min(meta.page * meta.limit, meta.total)} of {meta.total}
+                </p>
+              </div>
+              {meta.totalPages > 1 && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!meta.hasPrevPage}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!meta.hasNextPage}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           <Card>
             <CardContent className="p-0 overflow-auto">
               {isLoading ? (
@@ -970,8 +1338,8 @@ export default function LeadsPage() {
                         <TableHead className="w-12">
                           <Checkbox
                             checked={
-                              leads.length > 0 &&
-                              selectedIds.length === leads.length
+                              tableLeads.length > 0 &&
+                              selectedIds.length === tableLeads.length
                             }
                             onCheckedChange={toggleSelectAll}
                             aria-label="Select all"
@@ -989,16 +1357,16 @@ export default function LeadsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {leads.map((lead: Lead) => (
+                    {tableLeads.map((lead: Lead) => (
                       <TableRow
                         key={lead.id}
                         className={`cursor-pointer hover:bg-muted ${
                           selectedIds.includes(lead.id)
                             ? "bg-primary/5"
                             : leadsWithOverdueReminders.has(lead.id)
-                              ? "bg-red-50/50 hover:bg-red-100/50 border-l-2 border-l-red-500"
+                              ? "bg-red-200/60 hover:bg-red-200 border-l-2 border-l-red-500"
                               : leadsWithReminders.has(lead.id)
-                                ? "bg-amber-50/50 hover:bg-amber-100/50 border-l-2 border-l-amber-500"
+                                ? "bg-green-200/60 hover:bg-green-200 border-l-2 border-l-green-500"
                                 : ""
                         }`}
                         onClick={() => router.push(`/${slug}/leads/${lead.id}`)}
@@ -1066,60 +1434,6 @@ export default function LeadsPage() {
               )}
             </CardContent>
           </Card>
-
-          {/* Pagination */}
-          {meta && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <p className="text-sm text-muted-foreground">
-                  Showing{" "}
-                  {meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1} to{" "}
-                  {Math.min(meta.page * meta.limit, meta.total)} of {meta.total}
-                </p>
-                {/* Page Size Selector */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Rows:</span>
-                  <Select
-                    value={pageSize.toString()}
-                    onValueChange={(val) => {
-                      setPageSize(Number(val));
-                      setPage(1); // Reset to first page when changing page size
-                    }}
-                  >
-                    <SelectTrigger className="w-fit h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {meta.totalPages > 1 && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!meta.hasPrevPage}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!meta.hasNextPage}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
         </>
       )}
 
@@ -1185,6 +1499,49 @@ export default function LeadsPage() {
               disabled={!selectedBulkAssignUserId || selectedIds.length === 0}
             >
               Assign {selectedIds.length} Lead(s)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* NAL Reason Dialog */}
+      <Dialog
+        open={isNalDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) handleNalCancel();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Not A Lead - Reason Required</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for marking this lead as &quot;Not A
+              Lead&quot;. This cannot be left empty.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Textarea
+              placeholder="Enter reason (e.g., wrong number, spam, duplicate, etc.)"
+              value={nalReason}
+              onChange={(e) => setNalReason(e.target.value)}
+              rows={3}
+              className="resize-none"
+            />
+            {nalReason.length > 0 && nalReason.trim().length < 3 && (
+              <p className="text-sm text-red-500">
+                Reason must be at least 3 characters
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleNalCancel}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleNalConfirm}
+              disabled={nalReason.trim().length < 3}
+            >
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

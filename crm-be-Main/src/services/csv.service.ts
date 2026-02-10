@@ -444,13 +444,20 @@ export async function exportLeads(
   // Collect lead IDs for potential removal
   const exportedIds = data.map((lead: any) => lead.id as string);
 
+  const toSafeCsvText = (value: string | null | undefined): string => {
+    const text = value ?? "";
+    // Prevent spreadsheet apps from evaluating values as formulas.
+    // Example: +43-1-555-6677 would otherwise become a math expression.
+    return /^[=+\-@]/.test(text) ? `'${text}` : text;
+  };
+
   // Transform data for export (exclude id from CSV)
   const exportData = data.map((lead: any) => ({
     lead_name: lead.lead_name,
     business_name: lead.business_name || "",
     email: lead.email || "",
-    phone: lead.phone || "",
-    alternate_phone: lead.alternate_phone || "",
+    phone: toSafeCsvText(lead.phone),
+    alternate_phone: toSafeCsvText(lead.alternate_phone),
     address: lead.address || "",
     city: lead.city || "",
     state: lead.state || "",

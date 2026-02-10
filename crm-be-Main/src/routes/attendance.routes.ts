@@ -26,7 +26,10 @@ import {
   sendCreated,
   sendPaginated,
   sendNoContent,
+  ApiError,
 } from "../utils/responses.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
+import { USER_ROLES } from "../config/constants.js";
 import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
 import {
@@ -50,8 +53,36 @@ router.post(
   validateBody(clockInSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
-    const record = await attendanceService.clockIn(authReq.user.id, req.body);
-    sendCreated(res, record);
+    const body = req.body as {
+      userId?: string;
+      location?: string | null;
+      notes?: string | null;
+    };
+    const targetUserId = body.userId || authReq.user.id;
+
+    if (
+      targetUserId !== authReq.user.id &&
+      authReq.user.role !== USER_ROLES.ADMIN
+    ) {
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "You can only clock in for your own account",
+      );
+    }
+
+    const record = await attendanceService.clockIn(targetUserId, {
+      location: body.location,
+      notes: body.notes,
+    });
+
+    sendCreated(res, {
+      id: record.id,
+      userId: record.userId,
+      clockInTime: record.clockInTime,
+      status: record.status === "late" ? "Late" : "On-time",
+      attendanceStatus: record.status,
+      date: record.date,
+    });
   }),
 );
 
@@ -81,6 +112,19 @@ router.get(
       authReq.user.id,
     );
     sendSuccess(res, record);
+  }),
+);
+
+/**
+ * GET /attendance/shift-status
+ * Get remaining shift time and current session status
+ */
+router.get(
+  "/shift-status",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const status = await attendanceService.getMyShiftStatus(authReq.user.id);
+    sendSuccess(res, status);
   }),
 );
 

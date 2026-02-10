@@ -115,8 +115,12 @@ export default function UserAttendancePage() {
   const todayRecord = historyData?.records?.find((r: any) => r.date === today);
   const yesterdayRecord = historyData?.records?.find((r: any) => r.date === yesterdayStr);
   
-  // Prefer today's record, but if not found and user is night shift, use yesterday's
-  const todayAttendance = todayRecord || (userData?.shiftType === "night_shift" ? yesterdayRecord : null);
+  // Prefer today's record. For night shift, use yesterday only if that session is still active.
+  const todayAttendance =
+    todayRecord ||
+    (userData?.shiftType === "night_shift" && yesterdayRecord && !yesterdayRecord.clockOutTime
+      ? yesterdayRecord
+      : null);
   const isClockedIn = !!todayAttendance?.clockInTime;
   const isClockedOut = !!todayAttendance?.clockOutTime;
 
@@ -145,16 +149,21 @@ export default function UserAttendancePage() {
     if (!userId) return;
     setIsClockingIn(true);
     try {
-      await attendanceApi.adminClockIn(userId as string, {
-        location: "Office",
-      });
-      toast.success(`✅ Clocked in ${user?.fullName || "user"} successfully!`);
+      if (isClockedOut && todayAttendance?.id) {
+        await attendanceApi.adminRestoreAttendance(todayAttendance.id);
+        toast.success(`Restored ${user?.fullName || "user"} session successfully!`);
+      } else {
+        await attendanceApi.adminClockIn(userId as string, {
+          location: "Office",
+        });
+        toast.success(`Clocked in ${user?.fullName || "user"} successfully!`);
+      }
       // Invalidate all relevant cache keys
       mutateHistory();
       mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
       mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
-      mutate("attendance-today");
-      mutate("attendance-summary");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message || "Failed to clock in user",
@@ -175,8 +184,8 @@ export default function UserAttendancePage() {
       mutateHistory();
       mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
       mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
-      mutate("attendance-today");
-      mutate("attendance-summary");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message || "Failed to clock out user",
@@ -311,7 +320,7 @@ export default function UserAttendancePage() {
                   {isClockingIn
                     ? "Clocking In..."
                     : isClockedOut
-                      ? "Reset Clock In"
+                      ? "Clock In Again"
                       : "Clock In"}
                 </Button>
                 <Button
@@ -589,3 +598,5 @@ export default function UserAttendancePage() {
     </div>
   );
 }
+
+

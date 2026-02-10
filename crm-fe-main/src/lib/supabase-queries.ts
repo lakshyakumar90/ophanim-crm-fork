@@ -530,9 +530,9 @@ export async function getAllReminders(params?: {
   }
 
   if (params?.status === "pending") {
-    query = query.eq("is_sent", false).eq("is_done", false);
+    query = query.eq("is_done", false);
   } else if (params?.status === "sent") {
-    query = query.eq("is_sent", true);
+    query = query.eq("is_done", true);
   }
 
   if (params?.date) {

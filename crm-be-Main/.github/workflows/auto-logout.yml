@@ -2,10 +2,7 @@ name: Auto Logout
 
 on:
   schedule:
-    # 6:15 PM IST = 12:45 UTC (day shift)
-    - cron: "45 12 * * *"
-    # 4:15 AM IST = 22:45 UTC (night shift)
-    - cron: "45 22 * * *"
+    - cron: "*/5 * * * *"
   # Allow manual trigger for testing
   workflow_dispatch:
 
@@ -19,9 +16,9 @@ jobs:
           API_URL: ${{ secrets.API_URL }}
         run: |
           echo "Triggering auto-logout at $(date -u)"
-          response=$(curl -s -w "\n%{http_code}" -X POST \
-            -H "x-cron-secret: ${CRON_SECRET}" \
-            "${API_URL}/api/v1/internal/auto-logout")
+          response=$(curl -s -w "\n%{http_code}" -X GET \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${API_URL}/api/v1/cron/auto-logout")
           
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | head -n-1)

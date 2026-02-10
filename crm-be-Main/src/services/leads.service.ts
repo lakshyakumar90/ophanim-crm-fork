@@ -685,7 +685,8 @@ export async function getLeadPipeline(
   let query = supabaseAdmin
     .from("leads")
     .select("status")
-    .eq("is_deleted", false);
+    .eq("is_deleted", false)
+    .limit(100000); // Ensure we get all leads for accurate stats
 
   if (authUser.role === USER_ROLES.EMPLOYEE) {
     query = query.eq("assigned_to", authUser.id);
@@ -867,7 +868,8 @@ export async function getWonLeads(authUser: AuthUser): Promise<
     .select("id, lead_name, business_name, email")
     .eq("is_deleted", false)
     .eq("status", "won")
-    .order("lead_name", { ascending: true });
+    .order("lead_name", { ascending: true })
+    .limit(10000);
 
   // Role-based filtering
   if (authUser.role === USER_ROLES.EMPLOYEE) {
@@ -1359,16 +1361,23 @@ export async function createLeadReminder(
  */
 export async function deleteLeadReminder(
   reminderId: string,
-  userId: string,
+  authUser: AuthUser,
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("lead_reminders")
     .delete()
-    .eq("id", reminderId)
-    .eq("user_id", userId); // Users can only delete their own reminders
+    .eq("id", reminderId);
+  if (authUser.role !== "admin") {
+    query = query.eq("user_id", authUser.id); // Non-admins can only delete their own reminders
+  }
+
+  const { error, data } = await query.select("id").maybeSingle();
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+  if (!data) {
+    throw ApiError.notFound("Reminder");
   }
 }
 
@@ -1428,11 +1437,9 @@ export async function getAllReminders(
 
   // Status Filter
   if (query.status === "pending") {
-    baseQuery = baseQuery
-      .eq("is_sent", false)
-      .gte("reminder_at", getTimestampIST());
+    baseQuery = baseQuery.eq("is_done", false);
   } else if (query.status === "sent") {
-    baseQuery = baseQuery.eq("is_sent", true);
+    baseQuery = baseQuery.eq("is_done", true);
   }
 
   // Date Filter
@@ -1485,17 +1492,21 @@ export async function getAllReminders(
  */
 export async function markReminderDone(
   reminderId: string,
-  userId: string,
+  authUser: AuthUser,
 ): Promise<LeadReminder> {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("lead_reminders")
     .update({
       is_done: true,
     })
-    .eq("id", reminderId)
-    .eq("user_id", userId) // Users can only mark their own reminders as done
+    .eq("id", reminderId);
+  if (authUser.role !== "admin") {
+    query = query.eq("user_id", authUser.id); // Non-admins can only mark their own reminders
+  }
+
+  const { data, error } = await query
     .select("*, leads:lead_id (lead_name)")
-    .single();
+    .maybeSingle();
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);

@@ -438,7 +438,7 @@ router.delete(
     const authReq = req as unknown as AuthenticatedRequest;
     await leadsService.deleteLeadReminder(
       req.params["reminderId"] as string,
-      authReq.user.id,
+      authReq.user,
     );
     sendNoContent(res);
   }),
@@ -454,7 +454,7 @@ router.patch(
     const authReq = req as unknown as AuthenticatedRequest;
     const reminder = await leadsService.markReminderDone(
       req.params["reminderId"] as string,
-      authReq.user.id,
+      authReq.user,
     );
     sendSuccess(res, reminder);
   }),
