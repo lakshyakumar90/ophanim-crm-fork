@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { supabaseAdmin } from "../config/supabase.js";
 import {
   processLeadReminders,
   processTaskReminders,
@@ -6,14 +7,6 @@ import {
 import { bulkAutoLogoutDueSessions } from "../services/attendance.service.js";
 
 const router: Router = Router();
-
-const autoLogoutMonitor = {
-  lastRunAt: null as string | null,
-  lastSuccessAt: null as string | null,
-  lastLoggedOutCount: 0,
-  lastError: null as string | null,
-  lastDurationMs: 0,
-};
 
 /**
  * Verify cron request authorization.
@@ -66,25 +59,46 @@ router.get("/reminders", async (req, res) => {
 });
 
 /**
- * GET /api/v1/cron/auto-logout
+ * POST /api/v1/cron/auto-logout
  * Cron endpoint for auto-logging out users who forgot to clock out
  * Called by Vercel Cron every 5 minutes
  */
-router.get("/auto-logout", async (req, res) => {
+router.post("/auto-logout", async (req, res) => {
   if (!verifyCronAuth(req, res)) return;
 
   const startedAt = Date.now();
-  autoLogoutMonitor.lastRunAt = new Date().toISOString();
+  let runId: number | null = null;
+
+  const { data: runInsert } = await supabaseAdmin
+    .from("cron_job_runs")
+    .insert({
+      job_name: "auto_logout",
+      started_at: new Date().toISOString(),
+      processed_count: 0,
+    })
+    .select("id")
+    .single();
+
+  runId = (runInsert as any)?.id ?? null;
 
   try {
     console.log("[Cron] Starting auto-logout processing...");
 
     const loggedOutCount = await bulkAutoLogoutDueSessions();
     console.log(`[Cron] Auto-logout completed: ${loggedOutCount} sessions`);
-    autoLogoutMonitor.lastSuccessAt = new Date().toISOString();
-    autoLogoutMonitor.lastLoggedOutCount = loggedOutCount;
-    autoLogoutMonitor.lastError = null;
-    autoLogoutMonitor.lastDurationMs = Date.now() - startedAt;
+
+    if (runId) {
+      await supabaseAdmin
+        .from("cron_job_runs")
+        .update({
+          finished_at: new Date().toISOString(),
+          success: true,
+          processed_count: loggedOutCount,
+          duration_ms: Date.now() - startedAt,
+          error_message: null,
+        })
+        .eq("id", runId);
+    }
 
     return res.status(200).json({
       success: true,
@@ -92,9 +106,20 @@ router.get("/auto-logout", async (req, res) => {
     });
   } catch (error) {
     console.error("[Cron] Error processing auto-logout:", error);
-    autoLogoutMonitor.lastError =
-      error instanceof Error ? error.message : "Unknown error";
-    autoLogoutMonitor.lastDurationMs = Date.now() - startedAt;
+
+    if (runId) {
+      await supabaseAdmin
+        .from("cron_job_runs")
+        .update({
+          finished_at: new Date().toISOString(),
+          success: false,
+          duration_ms: Date.now() - startedAt,
+          error_message:
+            error instanceof Error ? error.message : "Unknown error",
+        })
+        .eq("id", runId);
+    }
+
     return res.status(500).json({
       success: false,
       error: "Failed to process auto-logout",
@@ -108,10 +133,24 @@ router.get("/auto-logout", async (req, res) => {
  */
 router.get("/auto-logout/status", async (req, res) => {
   if (!verifyCronAuth(req, res)) return;
+  const { data, error } = await supabaseAdmin
+    .from("cron_job_runs")
+    .select("*")
+    .eq("job_name", "auto_logout")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch auto-logout status",
+    });
+  }
 
   return res.status(200).json({
     success: true,
-    data: autoLogoutMonitor,
+    data,
     now: new Date().toISOString(),
   });
 });

@@ -81,7 +81,7 @@ const IST_TIMEZONE = "Asia/Kolkata";
 const AUTO_LOGOUT_GRACE_MINUTES = 15;
 const CLOCK_IN_EARLY_WINDOW_MINUTES = 15;
 const CLOCK_IN_LATE_WINDOW_MINUTES = 120;
-const SHIFT_DURATION_MINUTES = 9 * 60;
+const DEFAULT_SHIFT_DURATION_MINUTES = 9 * 60;
 
 function parseTimeToHHMM(value: string | null | undefined, fallback: string): string {
   const raw = (value || fallback).trim();
@@ -152,8 +152,22 @@ function evaluateClockInWindow(now: Date, shiftStart: Date): { status: string } 
   };
 }
 
-function calculateAutoLogoutTime(clockInTime: Date): Date {
-  return new Date(clockInTime.getTime() + SHIFT_DURATION_MINUTES * 60 * 1000);
+function getShiftDurationMinutes(rules?: any | null): number {
+  const hoursRaw = rules?.full_day_hours;
+  const hours = typeof hoursRaw === "number" ? hoursRaw : Number(hoursRaw);
+
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+    return DEFAULT_SHIFT_DURATION_MINUTES;
+  }
+
+  return Math.round(hours * 60);
+}
+
+function calculateAutoLogoutTime(
+  clockInTime: Date,
+  shiftDurationMinutes: number = DEFAULT_SHIFT_DURATION_MINUTES,
+): Date {
+  return new Date(clockInTime.getTime() + shiftDurationMinutes * 60 * 1000);
 }
 
 /**
@@ -284,7 +298,10 @@ export async function clockIn(
 
   const { status } = evaluateClockInWindow(now, shiftStart);
 
-  const autoLogoutAt = calculateAutoLogoutTime(now);
+  const autoLogoutAt = calculateAutoLogoutTime(
+    now,
+    getShiftDurationMinutes(rules),
+  );
   const autoLogoutISO = autoLogoutAt.toISOString();
 
   const { data, error } = await supabaseAdmin
@@ -1300,7 +1317,10 @@ export async function adminClockIn(
     }
   }
 
-  const autoLogoutAt = calculateAutoLogoutTime(now);
+  const autoLogoutAt = calculateAutoLogoutTime(
+    now,
+    getShiftDurationMinutes(rules),
+  );
   const autoLogoutISO = autoLogoutAt.toISOString();
 
   if (existing) {

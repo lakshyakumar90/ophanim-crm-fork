@@ -92,7 +92,6 @@ export default function RemindersPage() {
 
   const reminders = remindersData?.data || [];
   const meta = remindersData?.meta;
-  console.log(reminders);
 
   const getReminderLeadId = (reminder: any): string | undefined =>
     reminder?.leadId || reminder?.lead_id || reminder?.lead?.id || reminder?.leads?.id;

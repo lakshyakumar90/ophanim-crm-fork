@@ -755,8 +755,8 @@ export default function LeadsPage() {
 
   // Handle NAL reason dialog confirmation
   const handleNalConfirm = async () => {
-    if (!pendingNalMove || !nalReason.trim()) {
-      toast.error("Please enter a reason for marking as Not A Lead");
+    if (!pendingNalMove || nalReason.trim().length < 3) {
+      toast.error("Reason must be at least 3 characters");
       return;
     }
     setIsNalDialogOpen(false);

@@ -16,7 +16,7 @@ jobs:
           API_URL: ${{ secrets.API_URL }}
         run: |
           echo "Triggering auto-logout at $(date -u)"
-          response=$(curl -s -w "\n%{http_code}" -X GET \
+          response=$(curl -s -w "\n%{http_code}" -X POST \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${API_URL}/api/v1/cron/auto-logout")
           

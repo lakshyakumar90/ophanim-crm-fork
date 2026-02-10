@@ -2,7 +2,8 @@ import { Router, type Request, type Response } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requireAdmin } from "../middleware/authorization.middleware.js";
 import { asyncHandler } from "../middleware/error.middleware.js";
-import { sendSuccess } from "../utils/responses.js";
+import { sendSuccess, ApiError } from "../utils/responses.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
 import type { AuthenticatedRequest } from "../types/api.types.js";
 import * as attendanceService from "../services/attendance.service.js";
 
@@ -27,7 +28,7 @@ router.post(
         attendanceId,
       )
     ) {
-      throw new Error("Invalid attendance ID format");
+      throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "Invalid attendance ID format");
     }
 
     const restored = await attendanceService.restoreAttendanceByAdmin(
@@ -39,4 +40,3 @@ router.post(
 );
 
 export default router;
-

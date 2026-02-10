@@ -123,7 +123,9 @@ if (!process.env.VERCEL) {
       ({ startReminderService }) => {
         startReminderService();
       },
-    );
+    ).catch((err) => {
+      logger.error("Failed to start reminder service", err);
+    });
   } else {
     logger.info("Reminder worker disabled (ENABLE_REMINDER_WORKER=false)");
   }
