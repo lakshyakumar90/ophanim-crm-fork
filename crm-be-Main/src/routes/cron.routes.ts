@@ -69,17 +69,22 @@ router.post("/auto-logout", async (req, res) => {
   const startedAt = Date.now();
   let runId: number | null = null;
 
-  const { data: runInsert } = await supabaseAdmin
-    .from("cron_job_runs")
-    .insert({
-      job_name: "auto_logout",
-      started_at: new Date().toISOString(),
-      processed_count: 0,
-    })
-    .select("id")
-    .single();
+  try {
+    const { data: runInsert } = await supabaseAdmin
+      .from("cron_job_runs")
+      .insert({
+        job_name: "auto_logout",
+        started_at: new Date().toISOString(),
+        processed_count: 0,
+      })
+      .select("id")
+      .single();
 
-  runId = (runInsert as any)?.id ?? null;
+    runId = (runInsert as any)?.id ?? null;
+  } catch (trackingErr) {
+    console.error("[Cron] Failed to insert cron run tracking record:", trackingErr);
+    // Continue with the actual job even if tracking fails
+  }
 
   try {
     console.log("[Cron] Starting auto-logout processing...");
