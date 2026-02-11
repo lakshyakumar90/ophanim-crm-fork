@@ -30,7 +30,6 @@ function verifyInternalAuth(req: Request, res: Response): boolean {
 /**
  * POST /api/v1/internal/auto-logout
  * Secure endpoint for auto-logout processing
- * Called by GitHub Actions at shift end times
  */
 router.post("/auto-logout", async (req: Request, res: Response) => {
   if (!verifyInternalAuth(req, res)) return;
