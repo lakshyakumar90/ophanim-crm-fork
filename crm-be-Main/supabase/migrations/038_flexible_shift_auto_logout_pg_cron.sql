@@ -37,10 +37,32 @@ WHERE logout_type IN ('AUTO', 'ADMIN_FORCE');
 
 -- 3) Tighten constraints to required status/type model
 ALTER TABLE attendance
+ALTER COLUMN session_status SET DEFAULT 'ACTIVE';
+
+UPDATE attendance
+SET session_status = 'ACTIVE'
+WHERE session_status IS NULL;
+
+ALTER TABLE attendance
+ALTER COLUMN session_status SET NOT NULL;
+
+-- Keep session/logout fields consistent for legacy rows before enforcing checks.
+UPDATE attendance
+SET logout_time = COALESCE(logout_time, clock_out_time, auto_logout_time, shift_end_time, NOW())
+WHERE session_status = 'COMPLETED'
+  AND logout_time IS NULL;
+
+ALTER TABLE attendance
 DROP CONSTRAINT IF EXISTS attendance_session_status_check;
 ALTER TABLE attendance
 ADD CONSTRAINT attendance_session_status_check
 CHECK (session_status IN ('ACTIVE', 'COMPLETED'));
+
+ALTER TABLE attendance
+DROP CONSTRAINT IF EXISTS attendance_completed_requires_logout_time_check;
+ALTER TABLE attendance
+ADD CONSTRAINT attendance_completed_requires_logout_time_check
+CHECK (session_status <> 'COMPLETED' OR logout_time IS NOT NULL);
 
 ALTER TABLE attendance
 DROP CONSTRAINT IF EXISTS attendance_logout_type_check;
