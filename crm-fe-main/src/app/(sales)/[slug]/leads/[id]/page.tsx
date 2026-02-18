@@ -594,12 +594,12 @@ export default function LeadDetailPage() {
                           </a>
                         </div>
                       )}
-                      {lead.timezone && (
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-                          <span className="text-sm">{lead.timezone}</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+                        <span className="text-sm">
+                          Timezone: {lead.timezone || "NA"}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Divider */}
