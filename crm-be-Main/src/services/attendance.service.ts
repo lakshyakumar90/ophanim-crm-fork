@@ -52,6 +52,24 @@ interface AttendanceRow {
   updated_at: string;
 }
 
+function calculateWorkedHours(
+  clockInTime: string | null,
+  clockOutTime: string | null,
+  breakDuration: number | null | undefined = 0,
+): number | null {
+  if (!clockInTime || !clockOutTime) return null;
+  const clockIn = new Date(clockInTime);
+  const clockOut = new Date(clockOutTime);
+  if (Number.isNaN(clockIn.getTime()) || Number.isNaN(clockOut.getTime())) {
+    return null;
+  }
+
+  const totalMinutes =
+    (clockOut.getTime() - clockIn.getTime()) / 60000 - (breakDuration || 0);
+  const safeMinutes = Math.max(0, totalMinutes);
+  return Math.round((safeMinutes / 60) * 100) / 100;
+}
+
 function mapAttendanceRowToRecord(data: AttendanceRow): AttendanceRecord {
   return {
     id: data.id,
@@ -698,13 +716,13 @@ export async function getAttendanceList(
   if (dateRange.startDate) {
     baseQuery = baseQuery.gte(
       "date",
-      dateRange.startDate.toISOString().split("T")[0],
+      formatInTimeZone(dateRange.startDate, IST_TIMEZONE, "yyyy-MM-dd"),
     );
   }
   if (dateRange.endDate) {
     baseQuery = baseQuery.lte(
       "date",
-      dateRange.endDate.toISOString().split("T")[0],
+      formatInTimeZone(dateRange.endDate, IST_TIMEZONE, "yyyy-MM-dd"),
     );
   }
 
@@ -982,7 +1000,7 @@ export async function getAttendanceSummary(
     if (r.status === "half_day") summary.halfDay++;
     if (r.status === "absent") summary.absent++;
     if (r.status === "leave") summary.leave++;
-    if (r.total_hours) summary.totalHours += r.total_hours;
+    if (typeof r.total_hours === "number") summary.totalHours += r.total_hours;
   }
 
   summary.totalHours = Math.round(summary.totalHours * 100) / 100;
@@ -1083,7 +1101,7 @@ export async function getAttendanceAnalytics(
     if (r.status === "half_day") analytics.halfDay++;
     if (r.status === "absent") analytics.absent++;
     if (r.status === "leave") analytics.leave++;
-    if (r.total_hours) analytics.totalHours += r.total_hours;
+    if (typeof r.total_hours === "number") analytics.totalHours += r.total_hours;
   }
 
   if (analytics.totalRecords > 0) {
@@ -1229,9 +1247,18 @@ export async function getUserAttendanceHistory(
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  const records = (data || []).map((a: any) =>
-    mapAttendanceRowToRecord(a as AttendanceRow),
-  );
+  const records = (data || []).map((a: any) => {
+    const mapped = mapAttendanceRowToRecord(a as AttendanceRow);
+    const recalculatedHours = calculateWorkedHours(
+      mapped.clockInTime,
+      mapped.clockOutTime,
+      mapped.breakDuration,
+    );
+    return {
+      ...mapped,
+      totalHours: recalculatedHours ?? mapped.totalHours,
+    };
+  });
 
   // Calculate summary for the period
   const summary = {
@@ -1251,7 +1278,8 @@ export async function getUserAttendanceHistory(
     if (record.status === "half_day") summary.halfDay++;
     if (record.status === "absent") summary.absent++;
     if (record.status === "leave") summary.leave++;
-    if (record.totalHours) summary.totalHours += record.totalHours;
+    if (typeof record.totalHours === "number")
+      summary.totalHours += record.totalHours;
   }
 
   if (summary.totalDays > 0) {
@@ -1383,6 +1411,7 @@ export async function adminClockOut(
     .select("*")
     .eq("user_id", targetUserId)
     .eq("date", effectiveDate)
+    .eq("session_status", "ACTIVE")
     .single();
 
   // For night shift, always check the alternate date as fallback
@@ -1402,6 +1431,7 @@ export async function adminClockOut(
       .select("*")
       .eq("user_id", targetUserId)
       .eq("date", alternateDate)
+      .eq("session_status", "ACTIVE")
       .single();
     if (altRecord) {
       existing = altRecord;
@@ -1409,12 +1439,13 @@ export async function adminClockOut(
     }
   }
 
-  // Last resort: find ANY record for this user for today or yesterday
+  // Last resort: find any open attendance session for this user.
   if (findError) {
     const { data: anyRecord } = await supabaseAdmin
       .from("attendance")
       .select("*")
       .eq("user_id", targetUserId)
+      .eq("session_status", "ACTIVE")
       .order("clock_in_time", { ascending: false })
       .limit(1)
       .single();
@@ -1430,13 +1461,20 @@ export async function adminClockOut(
     );
   }
 
+  if (existing.clock_out_time) {
+    throw new ApiError(
+      ERROR_CODES.ALREADY_EXISTS,
+      "Already clocked out for this shift",
+    );
+  }
+
   // Calculate total hours
   const clockIn = new Date(existing.clock_in_time);
   const clockOut = new Date(nowISO);
   const breakDuration = input.breakDuration || existing.break_duration || 0;
   const totalMinutes =
     (clockOut.getTime() - clockIn.getTime()) / 60000 - breakDuration;
-  const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
+  const totalHours = Math.round((Math.max(0, totalMinutes) / 60) * 100) / 100;
 
   // Get attendance rules for this shift type
   const rules = await getAttendanceRulesForShift(shiftType);
@@ -1552,16 +1590,24 @@ export async function restoreAttendanceByAdmin(
  */
 export async function getWeeklyHours(userId: string, weekStartDate: string) {
   // weekStartDate should be a Monday in YYYY-MM-DD format
-  const startDate = new Date(weekStartDate);
+  const startDate = new Date(`${weekStartDate}T00:00:00+05:30`);
+  const weekStartDateStr = formatInTimeZone(startDate, IST_TIMEZONE, "yyyy-MM-dd");
 
   // Generate all 7 days of the week
-  const days = [];
+  const days: Array<{
+    day: string;
+    date: string;
+    hours: number;
+    isWeekend: boolean;
+    clockInTime: string | null;
+    clockOutTime: string | null;
+  }> = [];
   const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   for (let i = 0; i < 7; i++) {
     const currentDate = new Date(startDate);
     currentDate.setDate(startDate.getDate() + i);
-    const dateStr = currentDate.toISOString().split("T")[0]!;
+    const dateStr = formatInTimeZone(currentDate, IST_TIMEZONE, "yyyy-MM-dd");
 
     days.push({
       day: dayNames[i]!,
@@ -1572,17 +1618,18 @@ export async function getWeeklyHours(userId: string, weekStartDate: string) {
       clockOutTime: null as string | null,
     });
   }
+  const dayByDate = new Map(days.map((d) => [d.date, d]));
 
   // Fetch attendance records for the week
   const endDate = new Date(startDate);
   endDate.setDate(startDate.getDate() + 6);
-  const endDateStr = endDate.toISOString().split("T")[0]!;
+  const endDateStr = formatInTimeZone(endDate, IST_TIMEZONE, "yyyy-MM-dd");
 
   const { data, error } = await supabaseAdmin
     .from("attendance")
-    .select("date, total_hours, clock_in_time, clock_out_time")
+    .select("date, total_hours, clock_in_time, clock_out_time, break_duration")
     .eq("user_id", userId)
-    .gte("date", weekStartDate)
+    .gte("date", weekStartDateStr)
     .lte("date", endDateStr);
 
   if (error) {
@@ -1590,20 +1637,30 @@ export async function getWeeklyHours(userId: string, weekStartDate: string) {
   }
 
   // Map hours to corresponding days
+  type AttendanceWeekRow = {
+    date: string;
+    total_hours: number | null;
+    clock_in_time: string | null;
+    clock_out_time: string | null;
+    break_duration: number | null;
+  };
+
   for (const record of data || []) {
-    const r = record as {
-      date: string;
-      total_hours: number | null;
-      clock_in_time: string | null;
-      clock_out_time: string | null;
-    };
-    const dayIndex = days.findIndex((d) => d.date === r.date);
-    if (dayIndex !== -1) {
-      if (r.total_hours) {
-        days[dayIndex]!.hours = Math.round(r.total_hours * 100) / 100;
+    const r = record as AttendanceWeekRow;
+    const day = dayByDate.get(r.date);
+    if (day) {
+      day.clockInTime = r.clock_in_time;
+      day.clockOutTime = r.clock_out_time;
+      const recalculatedHours = calculateWorkedHours(
+        r.clock_in_time,
+        r.clock_out_time,
+        r.break_duration ?? 0,
+      );
+      if (typeof recalculatedHours === "number") {
+        day.hours = recalculatedHours;
+      } else if (typeof r.total_hours === "number") {
+        day.hours = Math.round(r.total_hours * 100) / 100;
       }
-      days[dayIndex]!.clockInTime = r.clock_in_time;
-      days[dayIndex]!.clockOutTime = r.clock_out_time;
     }
   }
 

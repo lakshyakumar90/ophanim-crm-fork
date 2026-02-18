@@ -45,7 +45,7 @@ export default function EditLeadPage() {
           occurred.
         </p>
         <button
-          onClick={() => router.push("/leads")}
+          onClick={() => router.push("/sales/leads")}
           className="mt-4 text-blue-600 hover:underline"
         >
           Back to Leads

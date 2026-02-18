@@ -46,7 +46,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { Department } from "@/types";
 import { Badge } from "@/components/ui/badge";
 
@@ -467,6 +467,72 @@ function GlobalSidebar({
       .slice(0, 2);
   };
 
+  const showDepartmentsSection =
+    !collapsed &&
+    (isAdmin || isManager || user?.departmentSlug || isProjectOnlyUser);
+
+  const departmentsSection = showDepartmentsSection ? (
+    <Collapsible
+      open={isDepartmentsOpen}
+      onOpenChange={setIsDepartmentsOpen}
+      className="space-y-1 pt-2"
+    >
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-between px-3 py-2 h-auto font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50"
+        >
+          <div className="flex items-center gap-3">
+            <Briefcase className="w-4 h-4" />
+            <span>Departments</span>
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-3 w-3 transition-transform duration-200",
+              isDepartmentsOpen ? "rotate-180" : "",
+            )}
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-1 px-2">
+        {departments
+          .filter((dept) => {
+            if (isAdmin) return true;
+            if (isProjectOnlyUser && dept.slug === "project-management") {
+              return true;
+            }
+            return dept.slug === user?.departmentSlug;
+          })
+          .sort((a, b) => {
+            if (!isAdmin && a.slug === user?.departmentSlug) return -1;
+            if (!isAdmin && b.slug === user?.departmentSlug) return 1;
+
+            const order = ["sales", "finance", "hr", "project-management"];
+            const indexA = order.indexOf(a.slug);
+            const indexB = order.indexOf(b.slug);
+
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
+            return a.name.localeCompare(b.name);
+          })
+          .map((dept) => (
+            <DepartmentDropdown
+              key={dept.id}
+              department={dept}
+              isActive={pathname.startsWith(
+                dept.slug === "project-management"
+                  ? "/projects"
+                  : `/${dept.slug}`,
+              )}
+              currentPath={pathname}
+            />
+          ))}
+      </CollapsibleContent>
+    </Collapsible>
+  ) : null;
+
   return (
     <div
       className={cn(
@@ -520,111 +586,28 @@ function GlobalSidebar({
 
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1 overflow-x-hidden">
         {filteredGlobal.map((item) => (
-          <NavLink
-            key={item.href}
-            item={item}
-            collapsed={collapsed}
-            isActive={
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href))
-            }
-            badgeCount={
-              item.showBadge
-                ? unreadCount
-                : item.showReminderBadge
-                  ? remindersCount
-                  : undefined
-            }
-            badgeColor={item.showReminderBadge ? "amber" : "red"}
-          />
+          <Fragment key={item.href}>
+            <NavLink
+              item={item}
+              collapsed={collapsed}
+              isActive={
+                pathname === item.href ||
+                (item.href !== "/" && pathname.startsWith(item.href))
+              }
+              badgeCount={
+                item.showBadge
+                  ? unreadCount
+                  : item.showReminderBadge
+                    ? remindersCount
+                    : undefined
+              }
+              badgeColor={item.showReminderBadge ? "amber" : "red"}
+            />
+            {item.title === "Attendance" && departmentsSection}
+          </Fragment>
         ))}
-
-        {/* Departments Section */}
-        {!collapsed &&
-          (isAdmin ||
-            isManager ||
-            user?.departmentSlug ||
-            isProjectOnlyUser) && (
-            <Collapsible
-              open={isDepartmentsOpen}
-              onOpenChange={setIsDepartmentsOpen}
-              className="space-y-1 pt-2"
-            >
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-between px-3 py-2 h-auto font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <Briefcase className="w-4 h-4" />
-                    <span>Departments</span>
-                  </div>
-                  <ChevronDown
-                    className={cn(
-                      "h-3 w-3 transition-transform duration-200",
-                      isDepartmentsOpen ? "rotate-180" : "",
-                    )}
-                  />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-1 px-2">
-                {departments
-                  .filter((dept) => {
-                    // If admin, show all
-                    if (isAdmin) return true;
-                    // For project-only users, show Project Management
-                    if (
-                      isProjectOnlyUser &&
-                      dept.slug === "project-management"
-                    ) {
-                      return true;
-                    }
-                    // If not admin, only show their own department
-                    return dept.slug === user?.departmentSlug;
-                  })
-                  .sort((a, b) => {
-                    // User's department always comes first for non-admins
-                    if (!isAdmin && a.slug === user?.departmentSlug) return -1;
-                    if (!isAdmin && b.slug === user?.departmentSlug) return 1;
-
-                    const order = [
-                      "sales",
-                      "finance",
-                      "hr",
-                      "project-management",
-                    ];
-                    const indexA = order.indexOf(a.slug);
-                    const indexB = order.indexOf(b.slug);
-
-                    // If both are in the order list, compare indices
-                    if (indexA !== -1 && indexB !== -1) {
-                      return indexA - indexB;
-                    }
-
-                    // If only A is in list, it comes first
-                    if (indexA !== -1) return -1;
-                    // If only B is in list, it comes first
-                    if (indexB !== -1) return 1;
-
-                    // Otherwise alphabetical
-                    return a.name.localeCompare(b.name);
-                  })
-                  .map((dept) => (
-                    <DepartmentDropdown
-                      key={dept.id}
-                      department={dept}
-                      isActive={pathname.startsWith(
-                        dept.slug === "project-management"
-                          ? "/projects"
-                          : `/${dept.slug}`,
-                      )}
-                      currentPath={pathname}
-                    />
-                  ))}
-              </CollapsibleContent>
-            </Collapsible>
-          )}
+        {!filteredGlobal.some((item) => item.title === "Attendance") &&
+          departmentsSection}
       </nav>
 
       {/* User Footer */}

@@ -46,6 +46,8 @@ interface LeadFormProps {
   mode: "create" | "edit";
 }
 
+const TIMEZONE_OPTIONS = ["EST", "CST", "MST", "PST"] as const;
+
 export function LeadForm({ initialData, mode }: LeadFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,12 +86,20 @@ export function LeadForm({ initialData, mode }: LeadFormProps) {
     try {
       // Helper to sanitize empty strings to undefined
       const sanitize = (val: any) => (val === "" ? undefined : val);
+      // Backend expects absolute URL format; normalize bare domains on submit.
+      const normalizeWebsite = (website?: string) => {
+        if (!website) return website;
+        const trimmed = website.trim();
+        if (!trimmed) return "";
+        if (/^https?:\/\//i.test(trimmed)) return trimmed;
+        return `https://${trimmed}`;
+      };
 
       const payload = {
         ...data,
         // Enum or Format fields that can't be empty string
         email: sanitize(data.email),
-        website: sanitize(data.website),
+        website: sanitize(normalizeWebsite(data.website)),
         source: sanitize(data.source),
         // Other optionals
         businessName: sanitize(data.businessName),
@@ -104,13 +114,13 @@ export function LeadForm({ initialData, mode }: LeadFormProps) {
       if (mode === "create") {
         await leadsApi.create(payload);
         toast.success("Lead created successfully");
-        router.push("/leads");
+        router.push("/sales/leads");
       } else {
         if (!initialData?.id) return;
         await leadsApi.update(initialData.id, payload);
         toast.success("Lead updated successfully");
         router.refresh();
-        router.push(`/leads/${initialData.id}`);
+        router.push(`/sales/leads/${initialData.id}`);
       }
     } catch (error: any) {
       console.error(error);
@@ -132,9 +142,9 @@ export function LeadForm({ initialData, mode }: LeadFormProps) {
           size="icon"
           onClick={() => {
             if (mode === "edit" && initialData) {
-              router.push(`/leads/${initialData.id}`);
+              router.push(`/sales/leads/${initialData.id}`);
             } else {
-              router.push("/leads");
+              router.push("/sales/leads");
             }
           }}
         >
@@ -308,12 +318,22 @@ export function LeadForm({ initialData, mode }: LeadFormProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="timezone">Timezone</Label>
-              <Input
-                id="timezone"
-                {...register("timezone")}
-                placeholder="e.g. IST / UTC-5"
-              />
+              <Label>Timezone</Label>
+              <Select
+                value={watch("timezone") || ""}
+                onValueChange={(v) => setValue("timezone", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONE_OPTIONS.map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
@@ -325,9 +345,9 @@ export function LeadForm({ initialData, mode }: LeadFormProps) {
             variant="outline"
             onClick={() => {
               if (mode === "edit" && initialData) {
-                router.push(`/leads/${initialData.id}`);
+                router.push(`/sales/leads/${initialData.id}`);
               } else {
-                router.push("/leads");
+                router.push("/sales/leads");
               }
             }}
           >

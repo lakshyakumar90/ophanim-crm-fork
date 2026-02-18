@@ -596,9 +596,20 @@ export default function LeadDetailPage() {
                       )}
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-                        <span className="text-sm">
+                        <span className="text-sm flex-1">
                           Timezone: {lead.timezone || "NA"}
                         </span>
+                        {isManager && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => router.push(`/${slug}/leads/${id}/edit`)}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        )}
                       </div>
                     </div>
 
