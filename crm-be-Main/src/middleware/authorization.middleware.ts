@@ -185,6 +185,48 @@ export function checkResourceAccess(
 }
 
 /**
+ * Check if user can edit lead info
+ * - Admin: can edit any lead
+ * - Others: can edit only leads assigned to them
+ */
+export function checkLeadEditAccess() {
+  return async (
+    req: AuthenticatedRequest,
+    _res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new ApiError(ERROR_CODES.AUTH_TOKEN_MISSING);
+      }
+
+      if (req.user.role === USER_ROLES.ADMIN) {
+        return next();
+      }
+
+      const resourceId = req.params["id"];
+      if (!resourceId) {
+        throw new ApiError(ERROR_CODES.RESOURCE_ACCESS_DENIED);
+      }
+
+      const { data: lead } = await supabaseAdmin
+        .from("leads")
+        .select("assigned_to")
+        .eq("id", resourceId)
+        .single();
+
+      if (!lead || lead.assigned_to !== req.user.id) {
+        throw new ApiError(ERROR_CODES.RESOURCE_ACCESS_DENIED);
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
  * Check if user can perform action on their own team
  */
 export async function isTeamMember(

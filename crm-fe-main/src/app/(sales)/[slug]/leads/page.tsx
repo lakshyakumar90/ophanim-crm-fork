@@ -1408,14 +1408,16 @@ export default function LeadsPage() {
                                 <Eye className="mr-2 h-4 w-4" />
                                 View
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  router.push(`/${slug}/leads/${lead.id}/edit`)
-                                }
-                              >
-                                <Pencil className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
+                              {(isAdmin || lead.assignedTo === user?.id) && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    router.push(`/${slug}/leads/${lead.id}/edit`)
+                                  }
+                                >
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
                               {isAdmin && (
                                 <DropdownMenuItem
                                   onClick={() => openReassignDialog(lead)}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { leadsApi, usersApi } from "@/lib/api";
-import { useIsManager, useIsAdmin } from "@/providers/auth-provider";
+import { useAuth, useIsAdmin } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { UserSelector } from "@/components/shared/user-selector";
 import { Button } from "@/components/ui/button";
@@ -124,7 +124,7 @@ function formatActivityDescription(activity: LeadActivity): string | null {
 export default function LeadDetailPage() {
   const { id, slug } = useParams();
   const router = useRouter();
-  const isManager = useIsManager();
+  const { user } = useAuth();
   const isAdmin = useIsAdmin();
 
   // Assignment state
@@ -369,6 +369,8 @@ export default function LeadDetailPage() {
     );
   }
 
+  const canEditLead = isAdmin || lead.assignedTo === user?.id;
+
   return (
     <div className="min-h-screen">
       {/* Main content - full width */}
@@ -447,7 +449,7 @@ export default function LeadDetailPage() {
                 {lead.assignedTo ? "Reassign" : "Assign"}
               </Button>
             )}
-            {isManager && (
+            {canEditLead && (
               <Button onClick={() => router.push(`/${slug}/leads/${id}/edit`)}>
                 <Pencil className="w-4 h-4 mr-2" />
                 Edit Lead
@@ -599,7 +601,7 @@ export default function LeadDetailPage() {
                         <span className="text-sm flex-1">
                           Timezone: {lead.timezone || "NA"}
                         </span>
-                        {isManager && (
+                        {canEditLead && (
                           <Button
                             variant="ghost"
                             size="sm"

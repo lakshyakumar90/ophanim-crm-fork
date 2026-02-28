@@ -4,6 +4,7 @@ import {
   requireAdmin,
   requireManager,
   checkResourceAccess,
+  checkLeadEditAccess,
 } from "../middleware/authorization.middleware.js";
 import {
   validateBody,
@@ -215,7 +216,7 @@ router.put(
   "/:id",
   validateParams(uuidParamSchema),
   validateBody(updateLeadSchema),
-  checkResourceAccess("lead") as any,
+  checkLeadEditAccess() as any,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
     const lead = await leadsService.updateLead(
