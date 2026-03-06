@@ -137,6 +137,27 @@ export function parseStoredIST(dateStr: string | Date | number): number {
 }
 
 /**
+ * Convert decimal hours into a readable duration string.
+ * Examples:
+ * - 1.39 -> "1h 23m"
+ * - 0.01 -> "1m"
+ * - 2 -> "2h"
+ */
+export function formatHoursToReadable(
+  hours: number | null | undefined,
+  fallback: string = "--",
+): string {
+  if (typeof hours !== "number" || Number.isNaN(hours)) return fallback;
+  const totalMinutes = Math.max(0, Math.round(hours * 60));
+  if (totalMinutes === 0) return "0m";
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
+/**
  * Helper to convert any input to true IST Date object (shifted).
  * Use only if strictly necessary for component internals that rely on local time being IST.
  */

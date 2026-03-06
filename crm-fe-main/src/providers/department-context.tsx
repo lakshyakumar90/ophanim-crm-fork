@@ -89,10 +89,10 @@ export function DepartmentProvider({ children }: { children: ReactNode }) {
       setCurrentDepartment(dept);
       setIsGlobalContext(false);
     } else if (departments.length > 0 && !pathname.startsWith("/login")) {
-      // If we're not in global, not in a dept, and departments are loaded
-      // We might be in a shared route like /attendance or root /
-      // Context logic for shared routes depends on requirements.
-      // For now, let's say root / redirects to default
+      // Shared/non-department routes (e.g. /attendance, /notifications, /)
+      // must not keep stale department from previous navigation.
+      setCurrentDepartment(null);
+      setIsGlobalContext(false);
     }
   }, [pathname, departments]);
 

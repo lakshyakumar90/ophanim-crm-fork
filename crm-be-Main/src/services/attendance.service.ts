@@ -41,15 +41,44 @@ interface AttendanceRow {
   id: string;
   user_id: string;
   date: string;
+  attendance_date?: string | null;
   clock_in_time: string | null;
   clock_out_time: string | null;
+  session_status?: string | null;
   total_hours: number | null;
   break_duration: number;
   status: string;
+  attendance_status?: string | null;
   location: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+function normalizeAttendanceStatus(value: string | null | undefined): string {
+  if (!value) return "present";
+  const normalized = value.toLowerCase();
+  if (normalized === "week_off") return "holiday";
+  return normalized;
+}
+
+function toCompatAttendanceStatus(value: string | null | undefined): string {
+  const normalized = normalizeAttendanceStatus(value);
+
+  switch (normalized) {
+    case "present":
+    case "late":
+      return "PRESENT";
+    case "half_day":
+      return "HALF_DAY";
+    case "absent":
+    case "leave":
+      return "ABSENT";
+    case "holiday":
+      return "HOLIDAY";
+    default:
+      return "PRESENT";
+  }
 }
 
 function calculateWorkedHours(
@@ -71,15 +100,18 @@ function calculateWorkedHours(
 }
 
 function mapAttendanceRowToRecord(data: AttendanceRow): AttendanceRecord {
+  const status = normalizeAttendanceStatus(data.status || data.attendance_status);
+  const hasClockIn = Boolean(data.clock_in_time);
+  const hideTimes = !hasClockIn || status === "absent";
   return {
     id: data.id,
     userId: data.user_id,
-    date: data.date,
-    clockInTime: data.clock_in_time,
-    clockOutTime: data.clock_out_time,
+    date: data.date || data.attendance_date || "",
+    clockInTime: hideTimes ? null : data.clock_in_time,
+    clockOutTime: hideTimes ? null : data.clock_out_time,
     totalHours: data.total_hours,
     breakDuration: data.break_duration,
-    status: data.status,
+    status,
     location: data.location,
     notes: data.notes,
     createdAt: data.created_at,
@@ -88,17 +120,13 @@ function mapAttendanceRowToRecord(data: AttendanceRow): AttendanceRecord {
 }
 
 import {
-  getTodayIST,
   getTimestampIST,
-  getStartOfMonthIST,
-  getEndOfMonthIST,
 } from "../utils/date-utils.js";
 import { formatInTimeZone } from "date-fns-tz";
 
 const IST_TIMEZONE = "Asia/Kolkata";
 const AUTO_LOGOUT_GRACE_MINUTES = 15;
-const CLOCK_IN_EARLY_WINDOW_MINUTES = 15;
-const CLOCK_IN_LATE_WINDOW_MINUTES = 120;
+const AUTO_MERGE_WINDOW_MINUTES = 2;
 const DEFAULT_SHIFT_DURATION_MINUTES = 9 * 60;
 
 function parseTimeToHHMM(value: string | null | undefined, fallback: string): string {
@@ -118,6 +146,7 @@ function getShiftDateTimes(
   rules?: {
     work_start_time?: string | null;
     work_end_time?: string | null;
+    auto_logout_time?: string | null;
   } | null,
 ): { shiftStart: Date; shiftEnd: Date; autoLogoutAt: Date } {
   const fallbackStart = shiftType === SHIFT_TYPES.NIGHT_SHIFT ? "19:00" : "09:00";
@@ -133,38 +162,29 @@ function getShiftDateTimes(
   const shiftEnd = new Date(
     shiftEndBase.getTime() + (crossesMidnight ? 24 * 60 * 60 * 1000 : 0),
   );
-  const autoLogoutAt = new Date(
-    shiftEnd.getTime() + AUTO_LOGOUT_GRACE_MINUTES * 60 * 1000,
-  );
+
+  let autoLogoutAt: Date;
+  if (rules?.auto_logout_time) {
+    const autoLogoutHHMM = parseTimeToHHMM(
+      rules.auto_logout_time,
+      shiftType === SHIFT_TYPES.NIGHT_SHIFT ? "04:15" : "18:15",
+    );
+    const autoLogoutMinutes = parseMinutes(autoLogoutHHMM);
+    const autoLogoutBase = new Date(`${effectiveDate}T${autoLogoutHHMM}:00+05:30`);
+    const autoLogoutCrossesMidnight = autoLogoutMinutes <= startMinutes;
+    autoLogoutAt = new Date(
+      autoLogoutBase.getTime() + (autoLogoutCrossesMidnight ? 24 * 60 * 60 * 1000 : 0),
+    );
+  } else {
+    autoLogoutAt = new Date(
+      shiftEnd.getTime() + AUTO_LOGOUT_GRACE_MINUTES * 60 * 1000,
+    );
+  }
+
   return { shiftStart, shiftEnd, autoLogoutAt };
 }
 
 function evaluateClockInWindow(now: Date, shiftStart: Date): { status: string } {
-  const allowedFrom = new Date(
-    shiftStart.getTime() - CLOCK_IN_EARLY_WINDOW_MINUTES * 60 * 1000,
-  );
-  const allowedUntil = new Date(
-    shiftStart.getTime() + CLOCK_IN_LATE_WINDOW_MINUTES * 60 * 1000,
-  );
-
-  if (now < allowedFrom || now > allowedUntil) {
-    const allowedFromLabel = formatInTimeZone(
-      allowedFrom,
-      IST_TIMEZONE,
-      "yyyy-MM-dd HH:mm",
-    );
-    const allowedUntilLabel = formatInTimeZone(
-      allowedUntil,
-      IST_TIMEZONE,
-      "yyyy-MM-dd HH:mm",
-    );
-
-    throw new ApiError(
-      ERROR_CODES.INVALID_INPUT,
-      `Clock-in is allowed only between ${allowedFromLabel} and ${allowedUntilLabel} IST`,
-    );
-  }
-
   return {
     status: now > shiftStart ? "late" : "present",
   };
@@ -188,11 +208,23 @@ function calculateAutoLogoutTime(
   return new Date(clockInTime.getTime() + shiftDurationMinutes * 60 * 1000);
 }
 
-/**
- * Get today's date string in IST
- */
-function getTodayDateString(): string {
-  return getTodayIST();
+function calculateScheduledAutoLogoutTime(
+  clockInTime: Date,
+  effectiveDate: string,
+  shiftType: string,
+  rules?: {
+    work_start_time?: string | null;
+    work_end_time?: string | null;
+    auto_logout_time?: string | null;
+  } | null,
+): Date {
+  const { shiftStart, autoLogoutAt } = getShiftDateTimes(
+    effectiveDate,
+    shiftType,
+    rules,
+  );
+  const lateByMs = Math.max(0, clockInTime.getTime() - shiftStart.getTime());
+  return new Date(autoLogoutAt.getTime() + lateByMs);
 }
 
 /**
@@ -260,6 +292,453 @@ function getEffectiveAttendanceDate(
   return today;
 }
 
+type TodayAttendanceResponse = (AttendanceRecord & {
+  sessionsCount: number;
+  sessions: AttendanceRecord[];
+  today: {
+    totalHours: number;
+    sessionsCount: number;
+  };
+}) | null;
+
+function deriveSessionStatusByHours(
+  baseStatus: string,
+  totalHours: number,
+  rules?: any | null,
+): string {
+  const halfDayHours = (rules?.half_day_hours as number) || 4;
+  const fullDayHours = (rules?.full_day_hours as number) || 8;
+
+  if (totalHours < halfDayHours) return "half_day";
+  if (totalHours >= fullDayHours) {
+    return baseStatus === "late" ? "late" : "present";
+  }
+  return baseStatus;
+}
+
+async function getLatestOpenSession(userId: string): Promise<AttendanceRow | null> {
+  const { data } = await supabaseAdmin
+    .from("attendance")
+    .select("*")
+    .eq("user_id", userId)
+    .is("clock_out_time", null)
+    .not("clock_in_time", "is", null)
+    .order("clock_in_time", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return (data as AttendanceRow | null) || null;
+}
+
+async function closeMalformedOpenSessions(userId: string): Promise<number> {
+  const { data, error } = await supabaseAdmin
+    .from("attendance")
+    .delete()
+    .eq("user_id", userId)
+    .is("clock_in_time", null)
+    .select("id");
+
+  if (error) {
+    console.log(error);
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+
+  return (data || []).length;
+}
+
+async function closeDueOpenSessions(userId: string): Promise<number> {
+  const nowISO = new Date().toISOString();
+  const staleFallbackISO = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+
+  // Split into two separate queries to avoid PostgREST nested and() parse error
+  const [{ data: dueByLogout, error: err1 }, { data: dueByStale, error: err2 }] =
+    await Promise.all([
+      supabaseAdmin
+        .from("attendance")
+        .select("*")
+        .eq("user_id", userId)
+        .is("clock_out_time", null)
+        .not("clock_in_time", "is", null)
+        .not("auto_logout_time", "is", null)
+        .lte("auto_logout_time", nowISO),
+      supabaseAdmin
+        .from("attendance")
+        .select("*")
+        .eq("user_id", userId)
+        .is("clock_out_time", null)
+        .not("clock_in_time", "is", null)
+        .lte("clock_in_time", staleFallbackISO),
+    ]);
+
+  if (err1) throw new ApiError(ERROR_CODES.DATABASE_ERROR, err1.message);
+  if (err2) throw new ApiError(ERROR_CODES.DATABASE_ERROR, err2.message);
+
+  // Merge by id to deduplicate rows found by both queries
+  const rowMap = new Map<string, any>();
+  for (const r of [...(dueByLogout || []), ...(dueByStale || [])]) {
+    rowMap.set(r.id, r);
+  }
+  const dueRows = [...rowMap.values()];
+
+  if (dueRows.length === 0) {
+    return 0;
+  }
+
+  let updatedCount = 0;
+  for (const row of dueRows as any[]) {
+    if (!row.clock_in_time) {
+      continue;
+    }
+    const clockOutAt = row.auto_logout_time || nowISO;
+    const workedHours = calculateWorkedHours(
+      row.clock_in_time,
+      clockOutAt,
+      row.break_duration ?? 0,
+    );
+    const status = deriveSessionStatusByHours(row.status, workedHours ?? 0, null);
+
+    const { error: updateError } = await supabaseAdmin
+      .from("attendance")
+      .update({
+        clock_out_time: clockOutAt,
+        logout_time: nowISO,
+        session_status: "COMPLETED",
+        logout_type: "AUTO_SHIFT",
+        total_hours: workedHours,
+        status,
+        attendance_status: toCompatAttendanceStatus(status),
+        auto_logged_out: true,
+        updated_at: getCurrentTimestamp(),
+      } as any)
+      .eq("id", row.id);
+
+    if (updateError) {
+      throw new ApiError(ERROR_CODES.DATABASE_ERROR, updateError.message);
+    }
+
+    updatedCount += 1;
+  }
+
+  return updatedCount;
+}
+
+async function getTodaySessions(
+  userId: string,
+  date: string,
+): Promise<AttendanceRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("attendance")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date", date)
+    .order("clock_in_time", { ascending: true });
+
+  if (error) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+
+  return ((data || []) as AttendanceRow[]).filter((row) => Boolean(row.clock_in_time));
+}
+
+function calculateDayTotalHours(rows: AttendanceRow[]): number {
+  let total = 0;
+  for (const row of rows) {
+    const worked = calculateWorkedHours(
+      row.clock_in_time,
+      row.clock_out_time,
+      row.break_duration ?? 0,
+    );
+    if (typeof worked === "number") {
+      total += worked;
+    } else if (typeof row.total_hours === "number") {
+      total += row.total_hours;
+    }
+  }
+
+  return Math.round(total * 100) / 100;
+}
+
+type AttendanceUserContext = {
+  id: string;
+  shift_type: string | null;
+  role: string | null;
+  department_id: string | null;
+  team_id: string | null;
+};
+
+type DerivedDayAttendance = {
+  date: string;
+  status: string;
+  totalHours: number;
+  overtimeHours: number;
+  hasSession: boolean;
+  sessionCount: number;
+  clockInTime: string | null;
+  clockOutTime: string | null;
+  isHoliday: boolean;
+  isLeave: boolean;
+  isWorkingDay: boolean;
+};
+
+function toISTDate(dateStr: string): Date {
+  return new Date(`${dateStr}T00:00:00+05:30`);
+}
+
+function formatISTDate(date: Date): string {
+  return formatInTimeZone(date, IST_TIMEZONE, "yyyy-MM-dd");
+}
+
+function normalizeWeeklyOffDays(values: unknown): number[] {
+  const raw = Array.isArray(values) ? values : [6, 7];
+  const normalized = new Set<number>();
+
+  for (const value of raw) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) continue;
+    if (n === 0) {
+      // Legacy convention used 0 for Sunday; normalize to ISO Sunday=7.
+      normalized.add(7);
+      continue;
+    }
+    if (n >= 1 && n <= 7) {
+      normalized.add(n);
+    }
+  }
+
+  if (normalized.size === 0) {
+    normalized.add(6);
+    normalized.add(7);
+  }
+
+  return [...normalized];
+}
+
+function getDateRangeStrings(startDate: string, endDate: string): string[] {
+  const result: string[] = [];
+  const start = toISTDate(startDate);
+  const end = toISTDate(endDate);
+  const cursor = new Date(start);
+
+  while (cursor.getTime() <= end.getTime()) {
+    result.push(formatISTDate(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return result;
+}
+
+function getHolidayDateString(holiday: any): string | null {
+  return (holiday?.holiday_date as string | null) || (holiday?.date as string | null) || null;
+}
+
+function isHolidayApplicableToUser(holiday: any, user: AttendanceUserContext): boolean {
+  const holidayDeptId = holiday?.department_id || null;
+  const holidayTeamId = holiday?.team_id || null;
+  const holidayRoleRaw = (holiday?.role || holiday?.user_role || null) as string | null;
+  const holidayRole = holidayRoleRaw?.toLowerCase() || null;
+
+  if (holidayDeptId && holidayDeptId !== user.department_id) return false;
+  if (holidayTeamId && holidayTeamId !== user.team_id) return false;
+  if (holidayRole && user.role && holidayRole !== String(user.role).toLowerCase()) return false;
+
+  return true;
+}
+
+function getDayStatusFromSessions(
+  rows: AttendanceRow[],
+  rules: any | null,
+): { status: string; totalHours: number; overtimeHours: number; clockInTime: string | null; clockOutTime: string | null } {
+  const totalHours = calculateDayTotalHours(rows);
+  const halfDayHours = Number(rules?.half_day_hours) || 4;
+  const fullDayHours = Number(rules?.full_day_hours) || 8;
+  const hasLate = rows.some((r) => normalizeAttendanceStatus(r.status || r.attendance_status) === "late");
+
+  let status = "present";
+  if (totalHours < halfDayHours) status = "half_day";
+  else if (hasLate) status = "late";
+
+  let earliestIn: string | null = null;
+  let latestOut: string | null = null;
+  for (const row of rows) {
+    if (row.clock_in_time && (!earliestIn || new Date(row.clock_in_time) < new Date(earliestIn))) {
+      earliestIn = row.clock_in_time;
+    }
+    if (row.clock_out_time && (!latestOut || new Date(row.clock_out_time) > new Date(latestOut))) {
+      latestOut = row.clock_out_time;
+    }
+  }
+
+  const overtimeHours = Math.max(0, Math.round((totalHours - fullDayHours) * 100) / 100);
+
+  return {
+    status,
+    totalHours,
+    overtimeHours,
+    clockInTime: earliestIn,
+    clockOutTime: latestOut,
+  };
+}
+
+async function deriveAttendanceDaysForUsers(
+  userIds: string[],
+  startDate: string,
+  endDate: string,
+): Promise<Map<string, Map<string, DerivedDayAttendance>>> {
+  const today = formatInTimeZone(new Date(), IST_TIMEZONE, "yyyy-MM-dd");
+  const boundedEnd = endDate > today ? today : endDate;
+  const allDates = getDateRangeStrings(startDate, boundedEnd);
+
+  const result = new Map<string, Map<string, DerivedDayAttendance>>();
+  if (userIds.length === 0 || allDates.length === 0) {
+    return result;
+  }
+
+  const [{ data: users }, { data: rules }, { data: holidaysByHolidayDate }, { data: holidaysByDateColumn }, { data: sessions }, { data: leaves }] =
+    await Promise.all([
+      supabaseAdmin
+        .from("users")
+        .select("id, shift_type, role, department_id, team_id")
+        .in("id", userIds),
+      supabaseAdmin.from("attendance_rules").select("*"),
+      supabaseAdmin
+        .from("holidays")
+        .select("*")
+        .gte("holiday_date", startDate)
+        .lte("holiday_date", boundedEnd),
+      supabaseAdmin
+        .from("holidays")
+        .select("*")
+        .gte("date", startDate)
+        .lte("date", boundedEnd),
+      supabaseAdmin
+        .from("attendance")
+        .select("*")
+        .in("user_id", userIds)
+        .not("clock_in_time", "is", null)
+        .gte("date", startDate)
+        .lte("date", boundedEnd),
+      supabaseAdmin
+        .from("leave_requests")
+        .select("user_id, start_date, end_date, status")
+        .in("user_id", userIds)
+        .eq("status", "approved")
+        .lte("start_date", boundedEnd)
+        .gte("end_date", startDate),
+    ]);
+
+  const userMap = new Map<string, AttendanceUserContext>();
+  for (const u of (users || []) as any[]) {
+    userMap.set(u.id, {
+      id: u.id,
+      shift_type: u.shift_type || SHIFT_TYPES.DAY_SHIFT,
+      role: u.role || null,
+      department_id: u.department_id || null,
+      team_id: u.team_id || null,
+    });
+  }
+
+  const rulesByShift = new Map<string, any>();
+  for (const rule of (rules || []) as any[]) {
+    if (rule.shift_type) rulesByShift.set(rule.shift_type, rule);
+  }
+
+  const holidaysByDate = new Map<string, any[]>();
+  const mergedHolidays = new Map<string, any>();
+  for (const holiday of [...(holidaysByHolidayDate || []), ...(holidaysByDateColumn || [])]) {
+    if (holiday?.id) {
+      mergedHolidays.set(String(holiday.id), holiday);
+    } else {
+      const key = `${holiday?.name || ""}|${getHolidayDateString(holiday) || ""}`;
+      mergedHolidays.set(key, holiday);
+    }
+  }
+
+  for (const holiday of mergedHolidays.values()) {
+    const date = getHolidayDateString(holiday);
+    if (!date) continue;
+    const list = holidaysByDate.get(date) || [];
+    list.push(holiday);
+    holidaysByDate.set(date, list);
+  }
+
+  const leaveDays = new Set<string>();
+  for (const leave of leaves || []) {
+    const start = leave.start_date as string;
+    const end = leave.end_date as string;
+    for (const day of getDateRangeStrings(start, end)) {
+      if (day < startDate || day > boundedEnd) continue;
+      leaveDays.add(`${leave.user_id}|${day}`);
+    }
+  }
+
+  const sessionsByUserDate = new Map<string, AttendanceRow[]>();
+  for (const s of (sessions || []) as AttendanceRow[]) {
+    const key = `${s.user_id}|${s.date}`;
+    const list = sessionsByUserDate.get(key) || [];
+    list.push(s);
+    sessionsByUserDate.set(key, list);
+  }
+
+  for (const userId of userIds) {
+    const user = userMap.get(userId);
+    if (!user) continue;
+    const shiftRules = rulesByShift.get(user.shift_type || SHIFT_TYPES.DAY_SHIFT) || null;
+    const weeklyOffDays = normalizeWeeklyOffDays(shiftRules?.weekly_off_days);
+
+    const byDate = new Map<string, DerivedDayAttendance>();
+    for (const date of allDates) {
+      const dayKey = `${userId}|${date}`;
+      const daySessions = sessionsByUserDate.get(dayKey) || [];
+      const dayDate = toISTDate(date);
+      // Use ISO day-of-week ("i"): 1=Mon, 2=Tue, …, 6=Sat, 7=Sun — locale-independent
+      const dayOfWeek = parseInt(formatInTimeZone(dayDate, IST_TIMEZONE, "i"));
+      const isWeekOff = weeklyOffDays.includes(dayOfWeek);
+      const holidayRows = holidaysByDate.get(date) || [];
+      // isHoliday only covers declared company holidays, NOT weekends
+      const isHoliday = holidayRows.some((h) => isHolidayApplicableToUser(h, user));
+      const isLeave = leaveDays.has(dayKey);
+
+      if (daySessions.length > 0) {
+        const sessionDerived = getDayStatusFromSessions(daySessions, shiftRules);
+        byDate.set(date, {
+          date,
+          status: sessionDerived.status,
+          totalHours: sessionDerived.totalHours,
+          overtimeHours: sessionDerived.overtimeHours,
+          hasSession: true,
+          sessionCount: daySessions.length,
+          clockInTime: sessionDerived.clockInTime,
+          clockOutTime: sessionDerived.clockOutTime,
+          isHoliday,
+          isLeave,
+          isWorkingDay: !isHoliday && !isLeave && !isWeekOff,
+        });
+        continue;
+      }
+
+      // week_off is a distinct status from holiday
+      const status = isLeave ? "leave" : isWeekOff ? "week_off" : isHoliday ? "holiday" : "absent";
+      byDate.set(date, {
+        date,
+        status,
+        totalHours: 0,
+        overtimeHours: 0,
+        hasSession: false,
+        sessionCount: 0,
+        clockInTime: null,
+        clockOutTime: null,
+        isHoliday,
+        isLeave,
+        isWorkingDay: !isHoliday && !isLeave && !isWeekOff,
+      });
+    }
+
+    result.set(userId, byDate);
+  }
+
+  return result;
+}
+
 /**
  * Clock in
  */
@@ -268,84 +747,143 @@ export async function clockIn(
   input: ClockInInput,
 ): Promise<AttendanceRecord> {
   const now = new Date();
-  const nowISO = getTimestampIST();
+  const nowISO = new Date().toISOString();
 
-  // Get user's shift type
+  await closeMalformedOpenSessions(userId);
+  await closeDueOpenSessions(userId);
+
   const shiftType = await getUserShiftType(userId);
 
-  // Guard: user cannot start a new session while one is active
-  const { data: activeSession } = await supabaseAdmin
-    .from("attendance")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("session_status", "ACTIVE")
-    .maybeSingle();
-
+  const activeSession = await getLatestOpenSession(userId);
   if (activeSession) {
-    throw new ApiError(
-      ERROR_CODES.ALREADY_EXISTS,
-      "Active attendance session already exists",
-    );
+    throw new ApiError(ERROR_CODES.ALREADY_EXISTS, "User already clocked in");
   }
 
-  // Get effective attendance date (yesterday for night shift if between 00:00-04:15)
   const effectiveDate = getEffectiveAttendanceDate(shiftType, now);
+  const rules = await getAttendanceRulesForShift(shiftType);
+  const { shiftStart } = getShiftDateTimes(effectiveDate, shiftType, rules);
+  const { status } = evaluateClockInWindow(now, shiftStart);
 
-  // Check if already clocked in for this effective date
-  const { data: existing } = await supabaseAdmin
+  const { data: lastCompleted, error: lastCompletedError } = await supabaseAdmin
     .from("attendance")
     .select("*")
     .eq("user_id", userId)
-    .eq("date", effectiveDate)
-    .single();
+    .not("clock_out_time", "is", null)
+    .order("clock_out_time", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  if (existing) {
-    throw new ApiError(
-      ERROR_CODES.ALREADY_EXISTS,
-      "Already clocked in for this shift",
-    );
+  if (lastCompletedError) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, lastCompletedError.message);
   }
 
-  // Get attendance rules for this shift type
-  const rules = await getAttendanceRulesForShift(shiftType);
-  const { shiftStart } = getShiftDateTimes(
+  if (lastCompleted?.clock_out_time) {
+    const previousOutMs = new Date(lastCompleted.clock_out_time).getTime();
+    const withinMergeWindowMs = AUTO_MERGE_WINDOW_MINUTES * 60 * 1000;
+    const elapsedSinceClockOutMs = now.getTime() - previousOutMs;
+    if (elapsedSinceClockOutMs >= 0 && elapsedSinceClockOutMs <= withinMergeWindowMs) {
+      const resumedClockIn = lastCompleted.clock_in_time || nowISO;
+      const resumedStatus = evaluateClockInWindow(
+        new Date(resumedClockIn),
+        shiftStart,
+      ).status;
+      const resumedAutoLogout =
+        calculateScheduledAutoLogoutTime(
+          new Date(resumedClockIn),
+          effectiveDate,
+          shiftType,
+          rules,
+        ).toISOString();
+
+      const { data: merged, error: mergeError } = await supabaseAdmin
+        .from("attendance")
+        .update({
+          clock_out_time: null,
+          logout_time: null,
+          session_status: "ACTIVE",
+          logout_type: null,
+          total_hours: null,
+          status: resumedStatus,
+          attendance_status: toCompatAttendanceStatus(resumedStatus),
+          shift_end_time: resumedAutoLogout,
+          auto_logout_time: resumedAutoLogout,
+          auto_logged_out: false,
+          updated_at: getCurrentTimestamp(),
+        } as any)
+        .eq("id", lastCompleted.id)
+        .select("*")
+        .single();
+
+      if (mergeError || !merged) {
+        console.log(mergeError)
+        throw new ApiError(ERROR_CODES.DATABASE_ERROR, mergeError?.message);
+      }
+
+      await supabaseAdmin.from("user_activities").insert({
+        user_id: userId,
+        activity_type: "auto_merge_session",
+        title: "Attendance session resumed",
+        description: "Reopened previous session within merge window",
+        metadata: {
+          merge_window_minutes: AUTO_MERGE_WINDOW_MINUTES,
+          previous_clock_out_time: lastCompleted.clock_out_time,
+          resumed_clock_in_time: resumedClockIn,
+          resumed_at: nowISO,
+          shift_type: shiftType,
+        },
+        created_at: getTimestampIST(),
+      });
+
+      return mapAttendanceRowToRecord(merged as unknown as AttendanceRow);
+    }
+  }
+
+  const autoLogoutAt = calculateScheduledAutoLogoutTime(
+    now,
     effectiveDate,
     shiftType,
     rules,
   );
-
-  const { status } = evaluateClockInWindow(now, shiftStart);
-
-  const autoLogoutAt = calculateAutoLogoutTime(
-    now,
-    getShiftDurationMinutes(rules),
-  );
   const autoLogoutISO = autoLogoutAt.toISOString();
 
-  const { data, error } = await supabaseAdmin
-    .from("attendance")
-    .insert({
-      user_id: userId,
-      date: effectiveDate,
-      clock_in_time: nowISO,
-      shift_end_time: autoLogoutISO,
-      auto_logout_time: autoLogoutISO,
-      logout_time: null,
-      session_status: "ACTIVE",
-      logout_type: null,
-      status,
-      location: input.location,
-      notes: input.notes,
-      break_duration: 0,
-    } as any)
-    .select()
-    .single();
+  const insertPayload = {
+    user_id: userId,
+    date: effectiveDate,
+    attendance_date: effectiveDate,
+    clock_in_time: nowISO,
+    clock_out_time: null,
+    shift_end_time: autoLogoutISO,
+    auto_logout_time: autoLogoutISO,
+    logout_time: null,
+    session_status: "ACTIVE",
+    logout_type: null,
+    status,
+    attendance_status: toCompatAttendanceStatus(status),
+    location: input.location,
+    notes: input.notes,
+    break_duration: 0,
+  } as any;
 
-  if (error) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  let data: AttendanceRow | null = null;
+  let error: any = null;
+
+  ({ data, error } = await supabaseAdmin
+    .from("attendance")
+    .insert(insertPayload)
+    .select("*")
+    .single());
+
+  if (error?.code === "23505") {
+    const activeAfterRace = await getLatestOpenSession(userId);
+    if (activeAfterRace) {
+      throw new ApiError(ERROR_CODES.ALREADY_EXISTS, "User already clocked in");
+    }
   }
 
-  // Log activity
+  if (error || !data) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error?.message);
+  }
+
   await supabaseAdmin.from("user_activities").insert({
     user_id: userId,
     activity_type: "clock_in",
@@ -367,110 +905,38 @@ export async function clockIn(
     created_at: getTimestampIST(),
   });
 
-  return mapAttendanceRowToRecord(data as unknown as AttendanceRow);
+  return mapAttendanceRowToRecord(data);
 }
 
 /**
  * Clock out
- * For night shifts crossing midnight, checks yesterday's record if in early morning hours
  */
 export async function clockOut(
   userId: string,
   input: ClockOutInput,
 ): Promise<AttendanceRecord> {
-  const now = new Date();
-  const nowISO = getTimestampIST();
-
-  // Get user's shift type
+  const nowISO = new Date().toISOString();
   const shiftType = await getUserShiftType(userId);
 
-  // Get effective attendance date (yesterday for night shift if between 00:00-04:15)
-  const effectiveDate = getEffectiveAttendanceDate(shiftType, now);
+  await closeMalformedOpenSessions(userId);
 
-  // Try to get attendance record for effective date
-  let { data: existing } = await supabaseAdmin
-    .from("attendance")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("date", effectiveDate)
-    .eq("session_status", "ACTIVE")
-    .single();
-
-  // For night shift, always check the alternate date as fallback
-  // This handles edge cases: clocking out after 4:15 AM, or records created on adjacent dates
-  if (!existing && shiftType === SHIFT_TYPES.NIGHT_SHIFT) {
-    const today = formatInTimeZone(now, IST_TIMEZONE, "yyyy-MM-dd");
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = formatInTimeZone(
-      yesterday,
-      IST_TIMEZONE,
-      "yyyy-MM-dd",
-    );
-
-    // Check the other date (whichever we didn't already check)
-    const alternateDate = effectiveDate === today ? yesterdayStr : today;
-    const { data: altRecord } = await supabaseAdmin
-      .from("attendance")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("date", alternateDate)
-      .eq("session_status", "ACTIVE")
-      .single();
-    if (altRecord) {
-      existing = altRecord;
-    }
-  }
-
-  // Last resort: find ANY open clock-in record for this user (regardless of date)
-  if (!existing) {
-    const { data: anyOpen } = await supabaseAdmin
-      .from("attendance")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("session_status", "ACTIVE")
-      .order("clock_in_time", { ascending: false })
-      .limit(1)
-      .single();
-    if (anyOpen) {
-      existing = anyOpen;
-    }
-  }
-
-  if (!existing) {
-    throw ApiError.notFound("Clock-in record for this shift");
-  }
-
-  if (existing.clock_out_time) {
+  const existing = await getLatestOpenSession(userId);
+  if (!existing || !existing.clock_in_time) {
     throw new ApiError(
-      ERROR_CODES.ALREADY_EXISTS,
-      "Already clocked out for this shift",
+      ERROR_CODES.NOT_FOUND,
+      "No active clock-in session found",
     );
   }
 
-  // Calculate total hours
   const clockIn = new Date(existing.clock_in_time);
   const clockOut = new Date(nowISO);
   const breakDuration = input.breakDuration || existing.break_duration || 0;
   const totalMinutes =
     (clockOut.getTime() - clockIn.getTime()) / 60000 - breakDuration;
-  const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
+  const totalHours = Math.round((Math.max(0, totalMinutes) / 60) * 100) / 100;
 
-  // Get attendance rules for this shift type to determine final status
   const rules = await getAttendanceRulesForShift(shiftType);
-
-  // Determine final status
-  let status = existing.status;
-  if (rules) {
-    const halfDayHours = (rules.half_day_hours as number) || 4;
-    const fullDayHours = (rules.full_day_hours as number) || 8;
-
-    if (totalHours < halfDayHours) {
-      status = "half_day";
-    } else if (totalHours >= fullDayHours) {
-      status = existing.status === "late" ? "late" : "present";
-    }
-  }
+  const status = deriveSessionStatusByHours(existing.status, totalHours, rules);
 
   const updateNotes = input.notes
     ? existing.notes
@@ -488,18 +954,18 @@ export async function clockOut(
       total_hours: totalHours,
       break_duration: breakDuration,
       status,
+      attendance_status: toCompatAttendanceStatus(status),
       notes: updateNotes,
       updated_at: getCurrentTimestamp(),
     } as any)
     .eq("id", existing.id)
-    .select()
+    .select("*")
     .single();
 
-  if (error) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  if (error || !data) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error?.message);
   }
 
-  // Log activity
   await supabaseAdmin.from("user_activities").insert({
     user_id: userId,
     activity_type: "clock_out",
@@ -517,60 +983,115 @@ export async function clockOut(
 }
 
 /**
- * Get my attendance for today
- * For night shifts crossing midnight (e.g., 7pm-4am), also checks yesterday's record
- * if current time is before shift end time and no today record exists
+ * Get my attendance for today (session-aware)
  */
 export async function getMyTodayAttendance(
   userId: string,
-): Promise<AttendanceRecord | null> {
+): Promise<TodayAttendanceResponse> {
   const now = new Date();
-
-  // Get user's shift type
   const shiftType = await getUserShiftType(userId);
-
-  // Get effective attendance date (yesterday for night shift if between 00:00-04:15)
   const effectiveDate = getEffectiveAttendanceDate(shiftType, now);
 
-  // Try to get attendance record for effective date
-  const { data: attendanceData } = await supabaseAdmin
-    .from("attendance")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("date", effectiveDate)
-    .single();
+  let dayRows = await getTodaySessions(userId, effectiveDate);
 
-  if (attendanceData) {
-    return mapAttendanceRowToRecord(attendanceData as unknown as AttendanceRow);
-  }
-
-  // For night shift, check alternate date only for an active session.
-  // This prevents yesterday's completed record from appearing as today's attendance.
-  if (shiftType === SHIFT_TYPES.NIGHT_SHIFT) {
+  if (dayRows.length === 0 && shiftType === SHIFT_TYPES.NIGHT_SHIFT) {
     const today = formatInTimeZone(now, IST_TIMEZONE, "yyyy-MM-dd");
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = formatInTimeZone(
-      yesterday,
-      IST_TIMEZONE,
-      "yyyy-MM-dd",
-    );
-
-    const alternateDate = effectiveDate === today ? yesterdayStr : today;
-    const { data: altData } = await supabaseAdmin
-      .from("attendance")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("date", alternateDate)
-      .or("session_status.eq.ACTIVE,clock_out_time.is.null")
-      .single();
-
-    if (altData) {
-      return mapAttendanceRowToRecord(altData as unknown as AttendanceRow);
-    }
+    const alternateDate =
+      effectiveDate === today
+        ? formatInTimeZone(yesterday, IST_TIMEZONE, "yyyy-MM-dd")
+        : today;
+    dayRows = await getTodaySessions(userId, alternateDate);
   }
 
-  return null;
+  if (dayRows.length === 0) {
+    // Determine the status for today even though there are no sessions
+    const rules = await getAttendanceRulesForShift(shiftType);
+    const weeklyOffDays = normalizeWeeklyOffDays(rules?.weekly_off_days);
+    // Use ISO day-of-week ("i"): 1=Mon, …, 6=Sat, 7=Sun — locale-independent
+    const dayOfWeek = parseInt(formatInTimeZone(new Date(effectiveDate), IST_TIMEZONE, "i"));
+    const isWeekOff = weeklyOffDays.includes(dayOfWeek);
+
+    const { data: userData } = await supabaseAdmin
+      .from("users")
+      .select("id, role, department_id, team_id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    let isHoliday = false;
+    if (!isWeekOff) {
+      const { data: holidays } = await supabaseAdmin
+        .from("holidays")
+        .select("*")
+        .or(`holiday_date.eq.${effectiveDate},date.eq.${effectiveDate}`);
+      if (holidays && holidays.length > 0 && userData) {
+        isHoliday = holidays.some((h: any) =>
+          isHolidayApplicableToUser(h, {
+            id: userId,
+            shift_type: shiftType,
+            role: userData.role,
+            department_id: userData.department_id,
+            team_id: userData.team_id,
+          }),
+        );
+      }
+    }
+
+    let isLeave = false;
+    if (!isWeekOff && !isHoliday) {
+      const { data: leaves } = await supabaseAdmin
+        .from("leave_requests")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("status", "approved")
+        .lte("start_date", effectiveDate)
+        .gte("end_date", effectiveDate)
+        .limit(1);
+      isLeave = (leaves || []).length > 0;
+    }
+
+    const todayStatus = isLeave ? "leave" : isWeekOff ? "week_off" : isHoliday ? "holiday" : "absent";
+
+    return {
+      id: "",
+      userId,
+      date: effectiveDate,
+      clockInTime: null,
+      clockOutTime: null,
+      totalHours: 0,
+      breakDuration: 0,
+      status: todayStatus,
+      location: null,
+      notes: null,
+      createdAt: "",
+      updatedAt: "",
+      isNoSession: true,
+      sessionsCount: 0,
+      sessions: [],
+      today: { totalHours: 0, sessionsCount: 0 },
+    } as any;
+  }
+
+  const sessions = dayRows.map((row) => mapAttendanceRowToRecord(row));
+  const activeRow =
+    dayRows.find((row) => !row.clock_out_time) || dayRows[dayRows.length - 1];
+
+  if (!activeRow) return null;
+
+  const totalHours = calculateDayTotalHours(dayRows);
+  const baseRecord = mapAttendanceRowToRecord(activeRow);
+
+  return {
+    ...baseRecord,
+    totalHours,
+    sessionsCount: sessions.length,
+    sessions,
+    today: {
+      totalHours,
+      sessionsCount: sessions.length,
+    },
+  };
 }
 
 export async function getMyShiftStatus(userId: string) {
@@ -582,7 +1103,8 @@ export async function getMyShiftStatus(userId: string) {
       "id, date, status, clock_in_time, shift_end_time, auto_logout_time, clock_out_time, session_status",
     )
     .eq("user_id", userId)
-    .eq("session_status", "ACTIVE")
+    .is("clock_out_time", null)
+    .not("clock_in_time", "is", null)
     .order("clock_in_time", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -754,29 +1276,62 @@ export async function getAttendanceList(
 export async function createManualAttendance(
   input: ManualAttendanceInput,
 ): Promise<AttendanceRecord> {
-  // Check if record exists
-  const { data: existing } = await supabaseAdmin
-    .from("attendance")
-    .select("id")
-    .eq("user_id", input.userId)
-    .eq("date", input.date)
-    .single();
-
-  if (existing) {
+  if (!input.clockInTime) {
     throw new ApiError(
-      ERROR_CODES.ALREADY_EXISTS,
-      "Attendance record already exists for this date",
+      ERROR_CODES.INVALID_INPUT,
+      "clockInTime is required for attendance sessions",
     );
   }
+
+  if (["absent", "leave", "holiday"].includes(input.status)) {
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      "Manual attendance only supports session statuses: present, late, half_day",
+    );
+  }
+
+  if (
+    input.clockOutTime &&
+    new Date(input.clockOutTime).getTime() < new Date(input.clockInTime).getTime()
+  ) {
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      "clockOutTime must be greater than or equal to clockInTime",
+    );
+  }
+
+  if (!input.clockOutTime) {
+    const openSession = await getLatestOpenSession(input.userId);
+    if (openSession) {
+      throw new ApiError(ERROR_CODES.ALREADY_EXISTS, "User already clocked in");
+    }
+  }
+
+  const shiftType = await getUserShiftType(input.userId);
+  const rules = await getAttendanceRulesForShift(shiftType);
+  const workedHours = calculateWorkedHours(
+    input.clockInTime,
+    input.clockOutTime ?? null,
+    0,
+  );
+  const effectiveStatus = input.clockOutTime
+    ? deriveSessionStatusByHours(input.status, workedHours ?? 0, rules)
+    : input.status;
 
   const { data, error } = await supabaseAdmin
     .from("attendance")
     .insert({
       user_id: input.userId,
       date: input.date,
+      attendance_date: input.date,
       clock_in_time: input.clockInTime,
       clock_out_time: input.clockOutTime,
-      status: input.status,
+      logout_time: input.clockOutTime || null,
+      session_status: input.clockOutTime ? "COMPLETED" : "ACTIVE",
+      logout_type: input.clockOutTime ? "MANUAL" : null,
+      total_hours: workedHours,
+      status: effectiveStatus,
+      attendance_status: toCompatAttendanceStatus(effectiveStatus),
       notes: input.notes,
       break_duration: 0,
     })
@@ -797,15 +1352,96 @@ export async function updateAttendance(
   attendanceId: string,
   input: UpdateAttendanceInput,
 ): Promise<AttendanceRecord> {
-  const updateData: Record<string, unknown> = {};
+  if (
+    input.status !== undefined &&
+    ["absent", "leave", "holiday"].includes(input.status)
+  ) {
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      "Attendance records only support session statuses: present, late, half_day",
+    );
+  }
 
-  if (input.clockInTime !== undefined)
-    updateData["clock_in_time"] = input.clockInTime;
-  if (input.clockOutTime !== undefined)
-    updateData["clock_out_time"] = input.clockOutTime;
-  if (input.breakDuration !== undefined)
-    updateData["break_duration"] = input.breakDuration;
-  if (input.status !== undefined) updateData["status"] = input.status;
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("attendance")
+    .select("*")
+    .eq("id", attendanceId)
+    .single();
+
+  if (existingError || !existing) {
+    throw ApiError.notFound("Attendance record");
+  }
+
+  const finalClockIn =
+    input.clockInTime !== undefined ? input.clockInTime : existing.clock_in_time;
+  const finalClockOut =
+    input.clockOutTime !== undefined ? input.clockOutTime : existing.clock_out_time;
+  const finalBreakDuration =
+    input.breakDuration !== undefined
+      ? input.breakDuration
+      : (existing.break_duration as number | null) || 0;
+
+  if (!finalClockIn) {
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      "Attendance records must have clockInTime",
+    );
+  }
+
+  if (
+    finalClockOut &&
+    new Date(finalClockOut).getTime() < new Date(finalClockIn).getTime()
+  ) {
+    throw new ApiError(
+      ERROR_CODES.INVALID_INPUT,
+      "clockOutTime must be greater than or equal to clockInTime",
+    );
+  }
+
+  if (!finalClockOut) {
+    const { data: openRows, error: openError } = await supabaseAdmin
+      .from("attendance")
+      .select("id")
+      .eq("user_id", existing.user_id)
+      .is("clock_out_time", null)
+      .neq("id", attendanceId)
+      .not("clock_in_time", "is", null)
+      .limit(1);
+
+    if (openError) {
+      throw new ApiError(ERROR_CODES.DATABASE_ERROR, openError.message);
+    }
+    if ((openRows || []).length > 0) {
+      throw new ApiError(ERROR_CODES.ALREADY_EXISTS, "User already clocked in");
+    }
+  }
+
+  const shiftType = await getUserShiftType(existing.user_id as string);
+  const rules = await getAttendanceRulesForShift(shiftType);
+  const baseStatus = (input.status || existing.status || "present") as string;
+  const workedHours = calculateWorkedHours(
+    finalClockIn,
+    finalClockOut,
+    finalBreakDuration,
+  );
+  const effectiveStatus = finalClockOut
+    ? deriveSessionStatusByHours(baseStatus, workedHours ?? 0, rules)
+    : baseStatus;
+
+  const updateData: Record<string, unknown> = {};
+  if (input.clockInTime !== undefined) updateData["clock_in_time"] = input.clockInTime;
+  if (input.clockOutTime !== undefined) updateData["clock_out_time"] = input.clockOutTime;
+  if (input.breakDuration !== undefined) updateData["break_duration"] = input.breakDuration;
+  updateData["status"] = effectiveStatus;
+  updateData["attendance_status"] = toCompatAttendanceStatus(effectiveStatus);
+  updateData["total_hours"] = workedHours;
+  updateData["session_status"] = finalClockOut ? "COMPLETED" : "ACTIVE";
+  updateData["logout_time"] = finalClockOut ? finalClockOut : null;
+  updateData["logout_type"] = finalClockOut
+    ? existing.logout_type === "AUTO_SHIFT"
+      ? "AUTO_SHIFT"
+      : "MANUAL"
+    : null;
   if (input.notes !== undefined) updateData["notes"] = input.notes;
   updateData["updated_at"] = getCurrentTimestamp();
 
@@ -818,10 +1454,6 @@ export async function updateAttendance(
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
-  }
-
-  if (!data) {
-    throw ApiError.notFound("Attendance record");
   }
 
   return mapAttendanceRowToRecord(data as unknown as AttendanceRow);
@@ -920,20 +1552,40 @@ export async function getHolidays(year?: number) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  return data || [];
+  return (data || []).map((holiday: any) => ({
+    ...holiday,
+    date: holiday.date || holiday.holiday_date,
+  }));
 }
 
 /**
  * Create holiday (admin only)
  */
 export async function createHoliday(input: CreateHolidayInput) {
+  const { data: holidayColumns, error: holidayColumnsError } = await supabaseAdmin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "holidays")
+    .in("column_name", ["department_id", "team_id", "role", "user_role"]);
+
+  const availableCols = new Set(
+    holidayColumnsError ? [] : (holidayColumns || []).map((c: any) => c.column_name as string),
+  );
+  const payload: Record<string, unknown> = {
+    name: input.name,
+    date: input.date,
+    holiday_date: input.date,
+    is_optional: input.isOptional,
+  };
+  if (availableCols.has("department_id")) payload["department_id"] = input.departmentId || null;
+  if (availableCols.has("team_id")) payload["team_id"] = input.teamId || null;
+  if (availableCols.has("role")) payload["role"] = input.role || null;
+  if (availableCols.has("user_role")) payload["user_role"] = input.role || null;
+
   const { data, error } = await supabaseAdmin
     .from("holidays")
-    .insert({
-      name: input.name,
-      date: input.date,
-      is_optional: input.isOptional,
-    })
+    .insert(payload)
     .select()
     .single();
 
@@ -969,38 +1621,36 @@ export async function getAttendanceSummary(
   month: number,
   year: number,
 ) {
-  const startDate = getStartOfMonthIST(year, month);
-  const endDate = getEndOfMonthIST(year, month);
-
-  const { data, error } = await supabaseAdmin
-    .from("attendance")
-    .select("status, total_hours")
-    .eq("user_id", userId)
-    .gte("date", startDate)
-    .lte("date", endDate);
-
-  if (error) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
-  }
+  const monthStr = String(month).padStart(2, "0");
+  const startDate = `${year}-${monthStr}-01`;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const endDate = `${year}-${monthStr}-${String(daysInMonth).padStart(2, "0")}`;
+  const derived = await deriveAttendanceDaysForUsers([userId], startDate, endDate);
+  const dayMap = derived.get(userId) || new Map<string, DerivedDayAttendance>();
 
   const summary = {
-    totalDays: data?.length || 0,
+    totalDays: dayMap.size,
+    workingDays: 0,
     present: 0,
     late: 0,
     halfDay: 0,
     absent: 0,
     leave: 0,
+    holiday: 0,
+    week_off: 0,
     totalHours: 0,
   };
 
-  for (const record of data || []) {
-    const r = record as { status: string; total_hours: number | null };
-    if (r.status === "present") summary.present++;
-    if (r.status === "late") summary.late++;
-    if (r.status === "half_day") summary.halfDay++;
-    if (r.status === "absent") summary.absent++;
-    if (r.status === "leave") summary.leave++;
-    if (typeof r.total_hours === "number") summary.totalHours += r.total_hours;
+  for (const day of dayMap.values()) {
+    if (day.isWorkingDay) summary.workingDays++;
+    if (day.status === "present") summary.present++;
+    if (day.status === "late") summary.late++;
+    if (day.status === "half_day") summary.halfDay++;
+    if (day.status === "absent") summary.absent++;
+    if (day.status === "leave") summary.leave++;
+    if (day.status === "holiday") summary.holiday++;
+    if (day.status === "week_off") summary.week_off++;
+    summary.totalHours += day.totalHours || 0;
   }
 
   summary.totalHours = Math.round(summary.totalHours * 100) / 100;
@@ -1016,17 +1666,9 @@ export async function getAttendanceAnalytics(
   endDate: string,
   departmentId?: string,
 ) {
-  // Get all attendance records for the period
-  // Get all attendance records for the period
-  let attendanceQuery = supabaseAdmin
-    .from("attendance")
-    .select("status, total_hours, date, user_id")
-    .gte("date", startDate)
-    .lte("date", endDate);
-
-  let totalUsersQuery = supabaseAdmin
+  let usersQuery = supabaseAdmin
     .from("users")
-    .select("id", { count: "exact" })
+    .select("id, team_id, department_id")
     .eq("is_active", true);
 
   if (departmentId) {
@@ -1034,84 +1676,74 @@ export async function getAttendanceAnalytics(
       .from("teams")
       .select("id")
       .eq("department_id", departmentId);
-
     const teamIds = (teams || []).map((t: any) => t.id);
-
     if (teamIds.length > 0) {
-      const { data: usersInDept } = await supabaseAdmin
-        .from("users")
-        .select("id")
-        .in("team_id", teamIds);
-
-      const userIds = (usersInDept || []).map((u: any) => u.id);
-
-      if (userIds.length > 0) {
-        attendanceQuery = attendanceQuery.in("user_id", userIds);
-        totalUsersQuery = totalUsersQuery.in("id", userIds); // Filter active users too
-      } else {
-        attendanceQuery = attendanceQuery.eq(
-          "id",
-          "00000000-0000-0000-0000-000000000000",
-        );
-        totalUsersQuery = totalUsersQuery.eq(
-          "id",
-          "00000000-0000-0000-0000-000000000000",
-        );
-      }
+      usersQuery = usersQuery.or(
+        `department_id.eq.${departmentId},team_id.in.(${teamIds.join(",")})`,
+      );
     } else {
-      attendanceQuery = attendanceQuery.eq(
-        "id",
-        "00000000-0000-0000-0000-000000000000",
-      );
-      totalUsersQuery = totalUsersQuery.eq(
-        "id",
-        "00000000-0000-0000-0000-000000000000",
-      );
+      usersQuery = usersQuery.eq("department_id", departmentId);
     }
   }
 
-  const { data: attendanceData, error: attendanceError } =
-    await attendanceQuery;
-
-  if (attendanceError) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, attendanceError.message);
+  const { data: users, error: usersError } = await usersQuery;
+  if (usersError) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersError.message);
   }
-
-  // Get total active users
-  const { count: totalUsers } = await totalUsersQuery;
+  const userIds = (users || []).map((u: any) => u.id as string);
+  const totalUsers = userIds.length;
 
   const analytics = {
     totalUsers: totalUsers || 0,
     present: 0,
     late: 0,
     halfDay: 0,
+    half_day: 0,
     absent: 0,
     leave: 0,
-    totalRecords: attendanceData?.length || 0,
+    holiday: 0,
+    week_off: 0,
+    totalRecords: 0,
+    workingDays: 0,
     totalHours: 0,
     avgHours: 0,
     attendanceRate: 0,
     punctualityRate: 0,
   };
 
-  for (const record of attendanceData || []) {
-    const r = record as { status: string; total_hours: number | null };
-    if (r.status === "present") analytics.present++;
-    if (r.status === "late") analytics.late++;
-    if (r.status === "half_day") analytics.halfDay++;
-    if (r.status === "absent") analytics.absent++;
-    if (r.status === "leave") analytics.leave++;
-    if (typeof r.total_hours === "number") analytics.totalHours += r.total_hours;
+  if (userIds.length === 0) {
+    return analytics;
   }
+
+  const derived = await deriveAttendanceDaysForUsers(userIds, startDate, endDate);
+
+  for (const byDate of derived.values()) {
+    for (const day of byDate.values()) {
+      analytics.totalRecords += 1;
+      if (day.isWorkingDay) analytics.workingDays += 1;
+      if (day.status === "present") analytics.present++;
+      if (day.status === "late") analytics.late++;
+      if (day.status === "half_day") analytics.halfDay++;
+      if (day.status === "absent") analytics.absent++;
+      if (day.status === "leave") analytics.leave++;
+      if (day.status === "holiday") analytics.holiday++;
+      if (day.status === "week_off") analytics.week_off++;
+      analytics.totalHours += day.totalHours || 0;
+    }
+  }
+  analytics.half_day = analytics.halfDay;
 
   if (analytics.totalRecords > 0) {
     analytics.avgHours =
       Math.round((analytics.totalHours / analytics.totalRecords) * 100) / 100;
-    analytics.attendanceRate = Math.round(
-      ((analytics.present + analytics.late + analytics.halfDay) /
-        analytics.totalRecords) *
-        100,
-    );
+    analytics.attendanceRate =
+      analytics.workingDays > 0
+        ? Math.round(
+            ((analytics.present + analytics.late + analytics.halfDay) /
+              analytics.workingDays) *
+              100,
+          )
+        : 0;
     analytics.punctualityRate =
       Math.round(
         (analytics.present / (analytics.present + analytics.late)) * 100,
@@ -1156,60 +1788,113 @@ export async function getAllUsersAttendance(
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersError.message);
   }
 
-  // For night shift users, we need to check both today and yesterday
-  // because their effective date might be yesterday if they clocked in between 00:00-04:15
-  const now = new Date();
-  const currentHour = parseInt(formatInTimeZone(now, IST_TIMEZONE, "HH"));
-  const currentMin = parseInt(formatInTimeZone(now, IST_TIMEZONE, "mm"));
-  const isEarlyMorning =
-    currentHour < 4 || (currentHour === 4 && currentMin <= 15);
-
-  // Calculate yesterday's date
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = formatInTimeZone(yesterday, IST_TIMEZONE, "yyyy-MM-dd");
-
-  // Get night shift user IDs
-  const nightShiftUserIds = (users || [])
-    .filter((u: any) => u.shift_type === SHIFT_TYPES.NIGHT_SHIFT)
-    .map((u: any) => u.id);
-
-  // Get attendance for the date and yesterday (for night shift users)
-  const datesToCheck = [date];
-  if (isEarlyMorning && nightShiftUserIds.length > 0) {
-    datesToCheck.push(yesterdayStr);
-  }
-
   const { data: attendanceData, error: attendanceError } = await supabaseAdmin
     .from("attendance")
     .select("*")
-    .in("date", datesToCheck);
+    .eq("date", date)
+    .not("clock_in_time", "is", null);
 
   if (attendanceError) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, attendanceError.message);
   }
+  const sessionRows = (attendanceData || []) as AttendanceRow[];
+  const userIds = (users || []).map((u: any) => u.id as string);
+  const derived = await deriveAttendanceDaysForUsers(userIds, date, date);
+  const sessionsByUser = new Map<string, AttendanceRow[]>();
+  for (const row of sessionRows) {
+    const list = sessionsByUser.get(row.user_id) || [];
+    list.push(row);
+    sessionsByUser.set(row.user_id, list);
+  }
+  for (const list of sessionsByUser.values()) {
+    list.sort((a, b) => {
+      const aTime = a.clock_in_time ? new Date(a.clock_in_time).getTime() : 0;
+      const bTime = b.clock_in_time ? new Date(b.clock_in_time).getTime() : 0;
+      return aTime - bTime;
+    });
+  }
 
   // Create a map of user attendance
-  // For night shift users, prefer today's record, but fall back to yesterday if needed
-  const attendanceMap = new Map();
-  for (const record of attendanceData || []) {
-    const r = record as AttendanceRow;
+  // Priority: active session > record for requested date > latest clock_in_time
+  const attendanceMap = new Map<string, AttendanceRow>();
+  for (const r of sessionRows) {
     const userId = r.user_id;
+    const existing = attendanceMap.get(userId);
+    if (!existing) {
+      attendanceMap.set(userId, r);
+      continue;
+    }
 
-    // If user already has attendance mapped, prefer the one for the requested date
-    if (attendanceMap.has(userId)) {
-      const existing = attendanceMap.get(userId);
-      if (r.date === date) {
-        attendanceMap.set(userId, mapAttendanceRowToRecord(r));
+    const existingIsActive = !existing.clock_out_time;
+    const currentIsActive = !r.clock_out_time;
+
+    if (currentIsActive && !existingIsActive) {
+      attendanceMap.set(userId, r);
+      continue;
+    }
+
+    if (currentIsActive === existingIsActive) {
+      if (r.date === date && existing.date !== date) {
+        attendanceMap.set(userId, r);
+        continue;
       }
-    } else {
-      attendanceMap.set(userId, mapAttendanceRowToRecord(r));
+      const existingClockIn = existing.clock_in_time
+        ? new Date(existing.clock_in_time).getTime()
+        : 0;
+      const currentClockIn = r.clock_in_time ? new Date(r.clock_in_time).getTime() : 0;
+      if (currentClockIn > existingClockIn) {
+        attendanceMap.set(userId, r);
+      }
     }
   }
 
   // Combine users with their attendance
   const result = (users || []).map((user: any) => {
-    const attendance = attendanceMap.get(user.id);
+    const derivedDay = derived.get(user.id)?.get(date);
+    const userSessions = sessionsByUser.get(user.id) || [];
+    const source = attendanceMap.get(user.id);
+    let attendance = source ? mapAttendanceRowToRecord(source) : null;
+    const firstClockIn = userSessions[0]?.clock_in_time || derivedDay?.clockInTime || null;
+    const lastClockOut =
+      [...userSessions]
+        .reverse()
+        .find((s) => Boolean(s.clock_out_time))
+        ?.clock_out_time || derivedDay?.clockOutTime || null;
+
+    if (attendance) {
+      attendance = {
+        ...attendance,
+        status: derivedDay?.status || attendance.status,
+        totalHours:
+          typeof derivedDay?.totalHours === "number"
+            ? derivedDay.totalHours
+            : attendance.totalHours,
+        clockInTime: firstClockIn,
+        clockOutTime: lastClockOut,
+        sessionsCount: userSessions.length,
+        sessions: userSessions.map((s) => mapAttendanceRowToRecord(s)),
+      } as AttendanceRecord & {
+        sessionsCount: number;
+        sessions: AttendanceRecord[];
+      };
+    } else if (userSessions.length > 0) {
+      const first = mapAttendanceRowToRecord(userSessions[0]!);
+      attendance = {
+        ...first,
+        status: derivedDay?.status || first.status,
+        totalHours:
+          typeof derivedDay?.totalHours === "number"
+            ? derivedDay.totalHours
+            : calculateDayTotalHours(userSessions),
+        clockInTime: firstClockIn,
+        clockOutTime: lastClockOut,
+        sessionsCount: userSessions.length,
+        sessions: userSessions.map((s) => mapAttendanceRowToRecord(s)),
+      } as AttendanceRecord & {
+        sessionsCount: number;
+        sessions: AttendanceRecord[];
+      };
+    }
     return {
       user: {
         id: user.id,
@@ -1220,7 +1905,7 @@ export async function getAllUsersAttendance(
         shiftType: user.shift_type || null,
       },
       attendance: attendance || null,
-      status: attendance?.status || "absent",
+      status: derivedDay?.status || "absent",
     };
   });
 
@@ -1247,7 +1932,9 @@ export async function getUserAttendanceHistory(
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  const records = (data || []).map((a: any) => {
+  const records = (data || [])
+    .filter((a: any) => Boolean(a.clock_in_time))
+    .map((a: any) => {
     const mapped = mapAttendanceRowToRecord(a as AttendanceRow);
     const recalculatedHours = calculateWorkedHours(
       mapped.clockInTime,
@@ -1259,27 +1946,118 @@ export async function getUserAttendanceHistory(
       totalHours: recalculatedHours ?? mapped.totalHours,
     };
   });
+  const derived = await deriveAttendanceDaysForUsers([userId], startDate, endDate);
+  const dayMap = derived.get(userId) || new Map<string, DerivedDayAttendance>();
 
-  // Calculate summary for the period
+  const groupedDailyMap = new Map<
+    string,
+    {
+      date: string;
+      status: string;
+      totalHours: number;
+      firstClockIn: string | null;
+      lastClockOut: string | null;
+      location: string | null;
+      sessionsCount: number;
+      sessions: Array<{
+        id: string;
+        clockInTime: string | null;
+        clockOutTime: string | null;
+        totalHours: number | null;
+        location: string | null;
+        status: string;
+      }>;
+    }
+  >();
+
+  for (const record of records) {
+    const existing = groupedDailyMap.get(record.date) || {
+      date: record.date,
+      status: "absent",
+      totalHours: 0,
+      firstClockIn: null as string | null,
+      lastClockOut: null as string | null,
+      location: null as string | null,
+      sessionsCount: 0,
+      sessions: [],
+    };
+
+    existing.sessionsCount += 1;
+    existing.totalHours =
+      Math.round((existing.totalHours + (record.totalHours || 0)) * 100) / 100;
+
+    if (
+      record.clockInTime &&
+      (!existing.firstClockIn || new Date(record.clockInTime) < new Date(existing.firstClockIn))
+    ) {
+      existing.firstClockIn = record.clockInTime;
+    }
+
+    if (
+      record.clockOutTime &&
+      (!existing.lastClockOut || new Date(record.clockOutTime) > new Date(existing.lastClockOut))
+    ) {
+      existing.lastClockOut = record.clockOutTime;
+    }
+
+    if (!existing.location && record.location) {
+      existing.location = record.location;
+    } else if (
+      existing.location &&
+      record.location &&
+      existing.location !== record.location
+    ) {
+      existing.location = "Multiple";
+    }
+
+    existing.sessions.push({
+      id: record.id,
+      clockInTime: record.clockInTime,
+      clockOutTime: record.clockOutTime,
+      totalHours: record.totalHours,
+      location: record.location,
+      status: record.status,
+    });
+
+    groupedDailyMap.set(record.date, existing);
+  }
+
+  const daily = Array.from(groupedDailyMap.values())
+    .map((day) => ({
+      ...day,
+      status: dayMap.get(day.date)?.status || day.status,
+      totalHours: Math.round(day.totalHours * 100) / 100,
+      sessions: day.sessions.sort((a, b) => {
+        const aTime = a.clockInTime ? new Date(a.clockInTime).getTime() : 0;
+        const bTime = b.clockInTime ? new Date(b.clockInTime).getTime() : 0;
+        return aTime - bTime;
+      }),
+    }))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Calculate summary for the period by distinct attendance date
   const summary = {
-    totalDays: records.length,
+    totalDays: dayMap.size,
+    workingDays: 0,
     present: 0,
     late: 0,
     halfDay: 0,
     absent: 0,
     leave: 0,
+    holiday: 0,
     totalHours: 0,
     avgHours: 0,
   };
 
-  for (const record of records) {
-    if (record.status === "present") summary.present++;
-    if (record.status === "late") summary.late++;
-    if (record.status === "half_day") summary.halfDay++;
-    if (record.status === "absent") summary.absent++;
-    if (record.status === "leave") summary.leave++;
-    if (typeof record.totalHours === "number")
-      summary.totalHours += record.totalHours;
+  for (const day of dayMap.values()) {
+    if (day.isWorkingDay) summary.workingDays++;
+    if (day.status === "present") summary.present++;
+    if (day.status === "late") summary.late++;
+    if (day.status === "half_day") summary.halfDay++;
+    if (day.status === "absent") summary.absent++;
+    if (day.status === "leave") summary.leave++;
+    if (day.status === "holiday") summary.holiday++;
+    summary.totalHours += day.totalHours || 0;
   }
 
   if (summary.totalDays > 0) {
@@ -1288,242 +2066,13 @@ export async function getUserAttendanceHistory(
   }
   summary.totalHours = Math.round(summary.totalHours * 100) / 100;
 
-  return { records, summary };
+  return { records, daily, summary };
 }
 
 /**
  * Admin clock in for any user (bypasses restrictions)
  * If record exists for today, it resets the clock-in time and clears clock-out
  */
-export async function adminClockIn(
-  targetUserId: string,
-  adminUserId: string,
-  input: ClockInInput,
-): Promise<AttendanceRecord> {
-  const now = new Date();
-  const nowISO = getTimestampIST();
-
-  // Get target user's shift type
-  const shiftType = await getUserShiftType(targetUserId);
-
-  // Get effective attendance date
-  const effectiveDate = getEffectiveAttendanceDate(shiftType, now);
-
-  // Check if record exists for effective date
-  const { data: existing } = await supabaseAdmin
-    .from("attendance")
-    .select("*")
-    .eq("user_id", targetUserId)
-    .eq("date", effectiveDate)
-    .single();
-
-  // Get attendance rules for this shift type
-  const rules = await getAttendanceRulesForShift(shiftType);
-  // Determine status based on clock-in time
-  let status = "present";
-  if (rules) {
-    const workStartTime = rules.work_start_time as string;
-    const lateThreshold = (rules.late_threshold_minutes as number) || 15;
-
-    // Use effective date for expected start calculation to ensure consistency
-    const expectedStartDateStr = effectiveDate;
-    // Ensure workStartTime is in HH:MM format (remove seconds if present)
-    const timeParts = workStartTime.split(":");
-    const formattedTime = `${timeParts[0]}:${timeParts[1]}`;
-    const expectedStartStr = `${expectedStartDateStr}T${formattedTime}:00+05:30`;
-    const expectedStart = new Date(expectedStartStr);
-
-    // Validate that expectedStart is a valid date
-    if (isNaN(expectedStart.getTime())) {
-      // If date parsing failed, log error but continue with "present" status
-      console.error(`Invalid expected start date: ${expectedStartStr}`);
-    } else {
-      const lateBy = (now.getTime() - expectedStart.getTime()) / 60000;
-      if (lateBy >= lateThreshold) {
-        status = "late";
-      }
-    }
-  }
-
-  const autoLogoutAt = calculateAutoLogoutTime(
-    now,
-    getShiftDurationMinutes(rules),
-  );
-  const autoLogoutISO = autoLogoutAt.toISOString();
-
-  if (existing) {
-    throw new ApiError(
-      ERROR_CODES.ALREADY_EXISTS,
-      "Attendance already exists for this date. Use restore endpoint for accidental logout.",
-    );
-  }
-
-  // Create new record
-  const { data, error } = await supabaseAdmin
-    .from("attendance")
-    .insert({
-      user_id: targetUserId,
-      date: effectiveDate,
-      clock_in_time: nowISO,
-      shift_end_time: autoLogoutISO,
-      auto_logout_time: autoLogoutISO,
-      logout_time: null,
-      session_status: "ACTIVE",
-      logout_type: null,
-      status,
-      location: input.location,
-      notes: input.notes ? `[Admin Override] ${input.notes}` : null,
-      break_duration: 0,
-    } as any)
-    .select()
-    .single();
-
-  if (error) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
-  }
-
-  // Attendance tracked in attendance table
-
-  return mapAttendanceRowToRecord(data as unknown as AttendanceRow);
-}
-
-/**
- * Admin clock out for any user (bypasses restrictions)
- * Can overwrite existing clock out time
- */
-export async function adminClockOut(
-  targetUserId: string,
-  adminUserId: string,
-  input: ClockOutInput,
-): Promise<AttendanceRecord> {
-  const now = new Date();
-  const nowISO = getTimestampIST();
-
-  // Get target user's shift type
-  const shiftType = await getUserShiftType(targetUserId);
-
-  // Get effective attendance date
-  const effectiveDate = getEffectiveAttendanceDate(shiftType, now);
-
-  // Get attendance record for effective date
-  let { data: existing, error: findError } = await supabaseAdmin
-    .from("attendance")
-    .select("*")
-    .eq("user_id", targetUserId)
-    .eq("date", effectiveDate)
-    .eq("session_status", "ACTIVE")
-    .single();
-
-  // For night shift, always check the alternate date as fallback
-  if (findError && shiftType === SHIFT_TYPES.NIGHT_SHIFT) {
-    const today = formatInTimeZone(now, IST_TIMEZONE, "yyyy-MM-dd");
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = formatInTimeZone(
-      yesterday,
-      IST_TIMEZONE,
-      "yyyy-MM-dd",
-    );
-
-    const alternateDate = effectiveDate === today ? yesterdayStr : today;
-    const { data: altRecord } = await supabaseAdmin
-      .from("attendance")
-      .select("*")
-      .eq("user_id", targetUserId)
-      .eq("date", alternateDate)
-      .eq("session_status", "ACTIVE")
-      .single();
-    if (altRecord) {
-      existing = altRecord;
-      findError = null;
-    }
-  }
-
-  // Last resort: find any open attendance session for this user.
-  if (findError) {
-    const { data: anyRecord } = await supabaseAdmin
-      .from("attendance")
-      .select("*")
-      .eq("user_id", targetUserId)
-      .eq("session_status", "ACTIVE")
-      .order("clock_in_time", { ascending: false })
-      .limit(1)
-      .single();
-    if (anyRecord) {
-      existing = anyRecord;
-      findError = null;
-    }
-  }
-
-  if (findError || !existing) {
-    throw ApiError.notFound(
-      "Clock-in record for this shift. Please clock in the user first.",
-    );
-  }
-
-  if (existing.clock_out_time) {
-    throw new ApiError(
-      ERROR_CODES.ALREADY_EXISTS,
-      "Already clocked out for this shift",
-    );
-  }
-
-  // Calculate total hours
-  const clockIn = new Date(existing.clock_in_time);
-  const clockOut = new Date(nowISO);
-  const breakDuration = input.breakDuration || existing.break_duration || 0;
-  const totalMinutes =
-    (clockOut.getTime() - clockIn.getTime()) / 60000 - breakDuration;
-  const totalHours = Math.round((Math.max(0, totalMinutes) / 60) * 100) / 100;
-
-  // Get attendance rules for this shift type
-  const rules = await getAttendanceRulesForShift(shiftType);
-
-  // Determine final status
-  let status = existing.status;
-  if (rules) {
-    const halfDayHours = (rules.half_day_hours as number) || 4;
-    const fullDayHours = (rules.full_day_hours as number) || 8;
-
-    if (totalHours < halfDayHours) {
-      status = "half_day";
-    } else if (totalHours >= fullDayHours) {
-      status = existing.status === "late" ? "late" : "present";
-    }
-  }
-
-  const updateNotes = input.notes
-    ? existing.notes
-      ? `${existing.notes}\n[Admin Override] ${input.notes}`
-      : `[Admin Override] ${input.notes}`
-    : existing.notes;
-
-  const { data, error } = await supabaseAdmin
-    .from("attendance")
-    .update({
-      clock_out_time: nowISO,
-      logout_time: nowISO,
-      session_status: "COMPLETED",
-      logout_type: "ADMIN_FORCE",
-      total_hours: totalHours,
-      break_duration: breakDuration,
-      status,
-      notes: updateNotes,
-      updated_at: getCurrentTimestamp(),
-    } as any)
-    .eq("id", existing.id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
-  }
-
-  // Attendance tracked in attendance table
-
-  return mapAttendanceRowToRecord(data as unknown as AttendanceRow);
-}
-
 export async function restoreAttendanceByAdmin(
   attendanceId: string,
   adminId: string,
@@ -1568,6 +2117,7 @@ export async function restoreAttendanceByAdmin(
       session_status: "ACTIVE",
       logout_time: null,
       clock_out_time: null,
+      total_hours: null,
       logout_type: null,
       restored_by_admin_id: adminId,
       restored_at: nowISO,
@@ -1649,17 +2199,25 @@ export async function getWeeklyHours(userId: string, weekStartDate: string) {
     const r = record as AttendanceWeekRow;
     const day = dayByDate.get(r.date);
     if (day) {
-      day.clockInTime = r.clock_in_time;
-      day.clockOutTime = r.clock_out_time;
       const recalculatedHours = calculateWorkedHours(
         r.clock_in_time,
         r.clock_out_time,
         r.break_duration ?? 0,
       );
+      if (r.clock_in_time) {
+        if (!day.clockInTime || new Date(r.clock_in_time) < new Date(day.clockInTime)) {
+          day.clockInTime = r.clock_in_time;
+        }
+      }
+      if (r.clock_out_time) {
+        if (!day.clockOutTime || new Date(r.clock_out_time) > new Date(day.clockOutTime)) {
+          day.clockOutTime = r.clock_out_time;
+        }
+      }
       if (typeof recalculatedHours === "number") {
-        day.hours = recalculatedHours;
+        day.hours = Math.round((day.hours + recalculatedHours) * 100) / 100;
       } else if (typeof r.total_hours === "number") {
-        day.hours = Math.round(r.total_hours * 100) / 100;
+        day.hours = Math.round((day.hours + r.total_hours) * 100) / 100;
       }
     }
   }

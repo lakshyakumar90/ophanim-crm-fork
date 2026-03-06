@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { attendanceApi } from "@/lib/api";
@@ -46,8 +46,11 @@ import {
   TrendingUp,
   CalendarDays,
   ChevronDown,
+  ChevronLeft,
   AlertCircle,
   ExternalLink,
+  ChevronRight,
+  Gift,
 } from "lucide-react";
 import {
   format,
@@ -82,6 +85,7 @@ import {
   formatStoredTime,
   nowISTAsUTC,
   parseStoredIST,
+  formatHoursToReadable,
 } from "@/lib/date-utils";
 
 type DateRangeType =
@@ -101,14 +105,32 @@ const statusColors: Record<string, string> = {
   half_day: "bg-orange-100 text-orange-700",
   absent: "bg-red-100 text-red-700",
   leave: "bg-blue-100 text-blue-700",
+  holiday: "bg-violet-100 text-violet-700",
+  week_off: "bg-slate-100 text-slate-600",
 };
 
-const statusIcons: Record<string, string> = {
-  present: "🟢",
-  late: "🟡",
-  half_day: "🟠",
-  absent: "🔴",
-  leave: "🔵",
+type UserDaySession = {
+  id?: string;
+  clockInTime?: string | null;
+  clockOutTime?: string | null;
+  totalHours?: number | null;
+};
+
+type UsersTodayItem = {
+  user: {
+    id: string;
+    fullName: string;
+    avatarUrl?: string | null;
+    role?: string | null;
+    shiftType?: string | null;
+  };
+  status: string;
+  attendance?: {
+    clockInTime?: string | null;
+    clockOutTime?: string | null;
+    totalHours?: number | null;
+    sessions?: UserDaySession[];
+  } | null;
 };
 
 export default function AttendancePage() {
@@ -144,9 +166,17 @@ export default function AttendancePage() {
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [shiftFilter, setShiftFilter] = useState<string>("all");
   const oneYearAgo = useMemo(() => subYears(new Date(), 1), []);
+
+  // Personal attendance history state
+  const [myHistoryYear, setMyHistoryYear] = useState<number>(new Date().getFullYear());
+  const [myHistoryMonth, setMyHistoryMonth] = useState<number>(new Date().getMonth() + 1);
+  const [myHistoryMode, setMyHistoryMode] = useState<"month" | "custom">("month");
+  const [myHistoryCustomRange, setMyHistoryCustomRange] = useState({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
+  const [myHistoryCalOpen, setMyHistoryCalOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -219,6 +249,21 @@ export default function AttendancePage() {
     };
   }, [dateRange, customDateRange]);
 
+  const myHistoryStartDate = useMemo(
+    () =>
+      myHistoryMode === "custom"
+        ? format(myHistoryCustomRange.from, "yyyy-MM-dd")
+        : format(startOfMonth(new Date(myHistoryYear, myHistoryMonth - 1)), "yyyy-MM-dd"),
+    [myHistoryMode, myHistoryYear, myHistoryMonth, myHistoryCustomRange.from],
+  );
+  const myHistoryEndDate = useMemo(
+    () =>
+      myHistoryMode === "custom"
+        ? format(myHistoryCustomRange.to, "yyyy-MM-dd")
+        : format(endOfMonth(new Date(myHistoryYear, myHistoryMonth - 1)), "yyyy-MM-dd"),
+    [myHistoryMode, myHistoryYear, myHistoryMonth, myHistoryCustomRange.to],
+  );
+
   // Fetch data
   const { data: todayData, isLoading: loadingToday } = useSWR(
     isAuthenticated && user ? ["attendance-today", user.id] : null,
@@ -239,6 +284,19 @@ export default function AttendancePage() {
 
   const { currentDepartment } = useDepartment();
 
+  const { data: myHistoryData, isLoading: loadingMyHistory } = useSWR(
+    isAuthenticated && user
+      ? ["my-history", user.id, myHistoryStartDate, myHistoryEndDate]
+      : null,
+    () => attendanceApi.getUserHistory(user!.id, myHistoryStartDate, myHistoryEndDate),
+  );
+  const { data: myMonthSummary, isLoading: loadingMyMonthSummary } = useSWR(
+    isAuthenticated && user && myHistoryMode === "month"
+      ? ["my-month-summary", user.id, myHistoryMonth, myHistoryYear]
+      : null,
+    () => attendanceApi.getSummary(myHistoryMonth, myHistoryYear),
+  );
+
   const { data: analyticsData, isLoading: loadingAnalytics } = useSWR(
     isAuthenticated && isAdmin
       ? ["attendance-analytics", startDate, endDate, currentDepartment?.id]
@@ -247,6 +305,23 @@ export default function AttendancePage() {
       attendanceApi
         .getAnalytics(startDate, endDate, currentDepartment?.id),
   );
+
+  const currentYear = new Date().getFullYear();
+  const { data: holidaysData } = useSWR(
+    isAuthenticated ? ["holidays-current-year", currentYear] : null,
+    () => attendanceApi.getHolidays(currentYear),
+  );
+
+  const todayHoliday = useMemo(() => {
+    if (!Array.isArray(holidaysData)) return null;
+    const todayStr = format(nowIST(), "yyyy-MM-dd");
+    return (
+      holidaysData.find((h: any) => {
+        const d: string = h.date || h.holiday_date || "";
+        return d === todayStr;
+      }) ?? null
+    );
+  }, [holidaysData]);
 
   const { data: usersAttendanceData, isLoading: loadingUsers } = useSWR(
     isAuthenticated && isAdmin
@@ -288,7 +363,7 @@ export default function AttendancePage() {
     setIsClockingIn(true);
     try {
       await attendanceApi.clockIn({ location: "Office" });
-      toast.success("🕐 Clocked in successfully! Have a productive day!");
+      toast.success("ðŸ• Clocked in successfully! Have a productive day!");
       // Invalidate all relevant cache keys
       mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
       mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
@@ -310,7 +385,7 @@ export default function AttendancePage() {
     setIsClockingOut(true);
     try {
       await attendanceApi.clockOut({});
-      toast.success("👋 Clocked out successfully! See you tomorrow!");
+      toast.success("ðŸ‘‹ Clocked out successfully! See you tomorrow!");
       // Invalidate all relevant cache keys
       mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
       mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
@@ -329,10 +404,17 @@ export default function AttendancePage() {
   };
 
   const today = todayData;
-  const hasClockIn = Boolean(today?.clockInTime);
-  const hasClockOut = Boolean(today?.clockOutTime);
-  const hasOpenSession = hasClockIn && !hasClockOut;
-  const canShowClockIn = !hasClockIn;
+  const hasOpenSession = Boolean(today?.clockInTime && !today?.clockOutTime);
+  const canShowClockIn = !hasOpenSession;
+  const isHolidayToday = Boolean(
+    today?.isNoSession && today?.status === "holiday",
+  );
+  const todaySessions = Array.isArray(today?.sessions)
+    ? today.sessions
+    : today
+      ? [today]
+      : [];
+  const todayTotalHours = today?.today?.totalHours ?? today?.totalHours ?? 0;
   const summary = summaryData;
   const analytics = analyticsData;
   const allUsersAttendance = usersAttendanceData || [];
@@ -362,7 +444,12 @@ export default function AttendancePage() {
         <p className="text-muted-foreground">
           Date: {row?.date ? format(new Date(row.date), "MMM d, yyyy") : "-"}
         </p>
-        <p>Hours: {typeof row?.hours === "number" ? `${row.hours}h` : "0h"}</p>
+        <p>
+          Hours:{" "}
+          {typeof row?.hours === "number"
+            ? formatHoursToReadable(row.hours, "0m")
+            : "0m"}
+        </p>
         <p>
           Clock In:{" "}
           {row?.clockInTime ? formatStoredTime(row.clockInTime) : "--:--"}
@@ -414,6 +501,19 @@ export default function AttendancePage() {
     }
     return { shiftType, shiftStart, shiftEnd };
   }, [shiftRule, user]);
+
+  const navigateMyHistoryMonth = (delta: number) => {
+    let m = myHistoryMonth + delta;
+    let y = myHistoryYear;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    setMyHistoryMonth(m);
+    setMyHistoryYear(y);
+  };
+  const isMHCurrent =
+    myHistoryYear === new Date().getFullYear() &&
+    myHistoryMonth === new Date().getMonth() + 1;
+
   if (authLoading || !isAuthenticated || !user) {
     return (
       <div className="space-y-4">
@@ -486,10 +586,40 @@ export default function AttendancePage() {
                   {formatIST(shiftWindow.shiftEnd, "h:mm a")} IST
                 </p>
               )}
+              {isHolidayToday && (
+                <div className="mt-2 inline-flex items-center gap-1.5 bg-white/20 rounded-full px-3 py-1">
+                  <Gift className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">
+                    {todayHoliday?.name ?? "Public Holiday"}
+                  </span>
+                </div>
+              )}
             </div>
 
             {loadingToday ? (
               <Skeleton className="h-12 w-40 bg-white/20" />
+            ) : isHolidayToday ? (
+              <div className="flex flex-col items-end gap-3">
+                <div className="flex items-center gap-2 bg-white/20 rounded-lg px-4 py-3">
+                  <Gift className="h-5 w-5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm">
+                      {todayHoliday?.name ?? "Public Holiday"}
+                    </p>
+                    <p className="text-xs text-blue-100">Enjoy your day off!</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleClockIn}
+                  disabled={isClockingIn}
+                  className="text-xs"
+                >
+                  <LogIn className="mr-1.5 h-3.5 w-3.5" />
+                  {isClockingIn ? "Clocking in..." : "Working today? Clock In"}
+                </Button>
+              </div>
             ) : canShowClockIn ? (
               <div className="flex flex-col items-end gap-2">
                 <Button
@@ -534,7 +664,7 @@ export default function AttendancePage() {
                 <div>
                   <p className="font-semibold">Day Complete!</p>
                   <p className="text-sm text-blue-100">
-                    {today.totalHours}h worked today
+                    {formatHoursToReadable(todayTotalHours)} worked today
                   </p>
                 </div>
               </div>
@@ -555,7 +685,23 @@ export default function AttendancePage() {
           </CardHeader>
           <CardContent>
             {today ? (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-4">
+                {today.isNoSession && today.status === "holiday" && (
+                  <div className="flex items-center gap-2 rounded-md bg-violet-50 px-3 py-2">
+                    <Gift className="h-4 w-4 text-violet-600 flex-shrink-0" />
+                    <span className="text-xs font-medium text-violet-700">
+                      {todayHoliday?.name
+                        ? `Holiday: ${todayHoliday.name}`
+                        : "Public Holiday — no session required"}
+                    </span>
+                  </div>
+                )}
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <CheckCircle className="h-5 w-5 mx-auto text-violet-500 mb-1" />
+                    <p className="text-xs text-muted-foreground">Sessions</p>
+                    <p className="font-semibold">{today?.today?.sessionsCount ?? todaySessions.length}</p>
+                  </div>
                 <div className="text-center">
                   <LogIn className="h-5 w-5 mx-auto text-green-500 mb-1" />
                   <p className="text-xs text-muted-foreground">Clock In</p>
@@ -576,14 +722,53 @@ export default function AttendancePage() {
                   <Timer className="h-5 w-5 mx-auto text-blue-500 mb-1" />
                   <p className="text-xs text-muted-foreground">Hours</p>
                   <p className="font-semibold">
-                    {today.totalHours ? `${today.totalHours}h` : "--"}
+                    {formatHoursToReadable(todayTotalHours)}
                   </p>
                 </div>
+                </div>
+                {todaySessions.length > 0 && (
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Today's Sessions</p>
+                    <div className="space-y-1">
+                      {todaySessions.map((session: any, index: number) => (
+                        <div key={session.id || index} className="text-xs flex items-center justify-between">
+                          <span>
+                            {session.clockInTime ? formatStoredTime(session.clockInTime) : "--:--"}{" "}
+                            -{" "}
+                            {session.clockOutTime ? formatStoredTime(session.clockOutTime) : "Active"}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {typeof session.totalHours === "number"
+                              ? formatHoursToReadable(session.totalHours)
+                              : "--"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-4 text-muted-foreground">
                 <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Not clocked in yet today</p>
+                {today?.isNoSession && today?.status ? (
+                  <>
+                    <p className="text-sm mb-2">No session today</p>
+                    <Badge
+                      className={`capitalize ${
+                        statusColors[today.status] ?? "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {today.status === "week_off"
+                        ? "Week Off"
+                        : today.status === "half_day"
+                          ? "Half Day"
+                          : today.status.charAt(0).toUpperCase() + today.status.slice(1)}
+                    </Badge>
+                  </>
+                ) : (
+                  <p className="text-sm">Not clocked in yet today</p>
+                )}
               </div>
             )}
           </CardContent>
@@ -626,7 +811,7 @@ export default function AttendancePage() {
                 </div>
                 <div className="text-center p-2 bg-blue-50 rounded-lg">
                   <p className="text-lg font-bold text-blue-600">
-                    {summary.totalHours || 0}h
+                    {formatHoursToReadable(summary.totalHours || 0)}
                   </p>
                   <p className="text-[10px] text-muted-foreground">Hours</p>
                 </div>
@@ -706,7 +891,7 @@ export default function AttendancePage() {
                 size="sm"
                 onClick={() => setWeekOffset((prev) => prev - 1)}
               >
-                ← Previous
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
               </Button>
               <span className="text-sm text-muted-foreground min-w-[120px] text-center">
                 {format(new Date(weekStartDate), "MMM d")} -{" "}
@@ -723,7 +908,7 @@ export default function AttendancePage() {
                 onClick={() => setWeekOffset((prev) => prev + 1)}
                 disabled={weekOffset >= 0}
               >
-                Next →
+                Next <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
           </div>
@@ -773,9 +958,207 @@ export default function AttendancePage() {
             </span>
             <span className="flex items-center gap-1">
               <div className="w-3 h-3 rounded bg-slate-400" />
-              Weekend (Holiday)
+              Weekend (Office Off)
             </span>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* My Attendance History */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" />
+              My Attendance History
+            </CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              {myHistoryMode === "month" ? (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => navigateMyHistoryMonth(-1)}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm font-medium min-w-[100px] text-center">
+                    {format(new Date(myHistoryYear, myHistoryMonth - 1), "MMMM yyyy")}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigateMyHistoryMonth(1)}
+                    disabled={isMHCurrent}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : (
+                <Popover open={myHistoryCalOpen} onOpenChange={setMyHistoryCalOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <CalendarIcon className="h-4 w-4" />
+                      {format(myHistoryCustomRange.from, "MMM d")} –{" "}
+                      {format(myHistoryCustomRange.to, "MMM d, yyyy")}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-3" align="end">
+                    <Calendar
+                      mode="range"
+                      selected={{ from: myHistoryCustomRange.from, to: myHistoryCustomRange.to }}
+                      onSelect={(range) => {
+                        if (range?.from) {
+                          setMyHistoryCustomRange({
+                            from: range.from,
+                            to: range.to || range.from,
+                          });
+                          if (range.from && range.to) setMyHistoryCalOpen(false);
+                        }
+                      }}
+                      disabled={(date) => date > new Date() || date < oneYearAgo}
+                      numberOfMonths={2}
+                      captionLayout="dropdown"
+                      fromYear={oneYearAgo.getFullYear()}
+                      toYear={new Date().getFullYear()}
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+              <Button
+                variant={myHistoryMode === "custom" ? "default" : "outline"}
+                size="sm"
+                onClick={() =>
+                  setMyHistoryMode(myHistoryMode === "custom" ? "month" : "custom")
+                }
+              >
+                {myHistoryMode === "custom" ? "Month View" : "Custom Range"}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Summary stats row */}
+          {(() => {
+            const stats = myHistoryMode === "month" ? myMonthSummary : myHistoryData?.summary;
+            const loading =
+              myHistoryMode === "month" ? loadingMyMonthSummary : loadingMyHistory;
+            if (loading) {
+              return (
+                <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-4">
+                  {[...Array(7)].map((_, i) => (
+                    <Skeleton key={i} className="h-12" />
+                  ))}
+                </div>
+              );
+            }
+            if (!stats) return null;
+            return (
+              <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-4">
+                <div className="text-center p-2 bg-green-50 rounded">
+                  <p className="text-lg font-bold text-green-600">{stats.present || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Present</p>
+                </div>
+                <div className="text-center p-2 bg-amber-50 rounded">
+                  <p className="text-lg font-bold text-amber-600">{stats.late || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Late</p>
+                </div>
+                <div className="text-center p-2 bg-orange-50 rounded">
+                  <p className="text-lg font-bold text-orange-600">
+                    {(stats as any).halfDay ?? (stats as any).half_day ?? 0}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Half Day</p>
+                </div>
+                <div className="text-center p-2 bg-red-50 rounded">
+                  <p className="text-lg font-bold text-red-600">{stats.absent || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Absent</p>
+                </div>
+                <div className="text-center p-2 bg-blue-50 rounded">
+                  <p className="text-lg font-bold text-blue-600">{stats.leave || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">On Leave</p>
+                </div>
+                {myHistoryMode === "month" && (
+                  <div className="text-center p-2 bg-slate-50 rounded">
+                    <p className="text-lg font-bold text-slate-600">
+                      {(stats as any).week_off || 0}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">Week Off</p>
+                  </div>
+                )}
+                <div className="text-center p-2 bg-indigo-50 rounded">
+                  <p className="text-lg font-bold text-indigo-600">
+                    {formatHoursToReadable(stats.totalHours || 0)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Total hrs</p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Records table */}
+          {loadingMyHistory ? (
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-10" />
+              ))}
+            </div>
+          ) : (myHistoryData?.records?.length ?? 0) > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Day</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden sm:table-cell">Clock In</TableHead>
+                    <TableHead className="hidden sm:table-cell">Clock Out</TableHead>
+                    <TableHead>Hours</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {myHistoryData!.records.map((rec: any) => (
+                    <TableRow key={rec.id}>
+                      <TableCell className="font-mono text-sm">
+                        {rec.date
+                          ? format(new Date(`${rec.date}T12:00:00`), "MMM d, yyyy")
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {rec.date
+                          ? format(new Date(`${rec.date}T12:00:00`), "EEE")
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={statusColors[rec.status] || "bg-gray-100 text-gray-700"}
+                        >
+                          {rec.status === "week_off"
+                            ? "Week Off"
+                            : rec.status === "half_day"
+                              ? "Half Day"
+                              : rec.status
+                                ? rec.status.charAt(0).toUpperCase() + rec.status.slice(1)
+                                : "—"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell font-mono text-sm">
+                        {rec.clockInTime ? formatStoredTime(rec.clockInTime) : "—"}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell font-mono text-sm">
+                        {rec.clockOutTime ? formatStoredTime(rec.clockOutTime) : "—"}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {typeof rec.totalHours === "number"
+                          ? formatHoursToReadable(rec.totalHours)
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No attendance records found for this period</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1207,88 +1590,157 @@ export default function AttendancePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {usersAttendance.map((item: any) => (
-                        <TableRow key={item.user.id} className="group">
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={item.user.avatarUrl} />
-                                <AvatarFallback className="text-xs">
-                                  {getInitials(item.user.fullName)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0">
-                                <p className="font-medium text-sm truncate">
-                                  {item.user.fullName}
-                                </p>
-                                <p className="text-xs text-muted-foreground capitalize">
-                                  {item.user.role}
-                                </p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                item.user.shiftType === "night_shift"
-                                  ? "border-purple-500 text-purple-700"
-                                  : "border-blue-500 text-blue-700"
-                              }
-                            >
-                              {item.user.shiftType === "day_shift"
-                                ? "Day"
-                                : item.user.shiftType === "night_shift"
-                                  ? "Night"
-                                  : "N/A"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              className={
-                                statusColors[item.status] ||
-                                "bg-gray-100 text-gray-700"
-                              }
-                            >
-                              {statusIcons[item.status] || "⚪"}{" "}
-                              {item.status?.replace("_", " ")}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="hidden sm:table-cell font-mono text-sm">
-                            {item.attendance?.clockInTime
-                              ? format(
-                                  new Date(item.attendance.clockInTime),
-                                  "h:mm a",
-                                )
-                              : "--:--"}
-                          </TableCell>
-                          <TableCell className="hidden sm:table-cell font-mono text-sm">
-                            {item.attendance?.clockOutTime
-                              ? format(
-                                  new Date(item.attendance.clockOutTime),
-                                  "h:mm a",
-                                )
-                              : "--:--"}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell font-mono text-sm">
-                            {item.attendance?.totalHours
-                              ? `${item.attendance.totalHours}h`
-                              : "--"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                router.push(`/attendance/${item.user.id}`)
-                              }
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              View <ExternalLink className="ml-1 h-3 w-3" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {usersAttendance.map((item: UsersTodayItem) => {
+                        const sessions = Array.isArray(item.attendance?.sessions)
+                          ? item.attendance.sessions
+                          : [];
+                        const firstClockIn =
+                          sessions[0]?.clockInTime || item.attendance?.clockInTime || null;
+                        const lastClockOut =
+                          [...sessions]
+                            .reverse()
+                            .find((s: UserDaySession) => Boolean(s.clockOutTime))
+                            ?.clockOutTime || item.attendance?.clockOutTime || null;
+                        const dayHours =
+                          typeof item.attendance?.totalHours === "number"
+                            ? item.attendance.totalHours
+                            : sessions.reduce(
+                                (sum: number, s: UserDaySession) =>
+                                  sum + (typeof s.totalHours === "number" ? s.totalHours : 0),
+                                0,
+                              );
+                        const isExpanded = expandedUserId === item.user.id;
+
+                        return (
+                          <Fragment key={item.user.id}>
+                            <TableRow className="group">
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedUserId(isExpanded ? null : item.user.id)
+                                    }
+                                    className="rounded p-1 hover:bg-muted"
+                                    title="Toggle sessions"
+                                  >
+                                    <ChevronRight
+                                      className={`h-4 w-4 transition-transform ${
+                                        isExpanded ? "rotate-90" : ""
+                                      }`}
+                                    />
+                                  </button>
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={item.user.avatarUrl || undefined} />
+                                    <AvatarFallback className="text-xs">
+                                      {getInitials(item.user.fullName)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-sm truncate">
+                                      {item.user.fullName}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground capitalize">
+                                      {item.user.role}
+                                    </p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    item.user.shiftType === "night_shift"
+                                      ? "border-purple-500 text-purple-700"
+                                      : "border-blue-500 text-blue-700"
+                                  }
+                                >
+                                  {item.user.shiftType === "day_shift"
+                                    ? "Day"
+                                    : item.user.shiftType === "night_shift"
+                                      ? "Night"
+                                      : "N/A"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  className={
+                                    statusColors[item.status] ||
+                                    "bg-gray-100 text-gray-700"
+                                  }
+                                >
+                                  {item.status?.replace("_", " ")}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell font-mono text-sm">
+                                {firstClockIn ? format(new Date(firstClockIn), "h:mm a") : "--:--"}
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell font-mono text-sm">
+                                {firstClockIn && lastClockOut
+                                  ? format(new Date(lastClockOut), "h:mm a")
+                                  : "--:--"}
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell font-mono text-sm">
+                                {typeof dayHours === "number"
+                                  ? formatHoursToReadable(dayHours)
+                                  : "--"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  {sessions.length > 0 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {sessions.length} sessions
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => router.push(`/attendance/${item.user.id}`)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    View <ExternalLink className="ml-1 h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                            {isExpanded && sessions.length > 0 && (
+                              <TableRow>
+                                <TableCell colSpan={7} className="bg-muted/20">
+                                  <div className="rounded-md border bg-background p-3">
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                                      Sessions ({sessions.length})
+                                    </p>
+                                    <div className="space-y-1">
+                                      {sessions.map((session: UserDaySession, index: number) => (
+                                        <div
+                                          key={session.id || index}
+                                          className="text-xs flex items-center justify-between"
+                                        >
+                                          <span>
+                                            #{index + 1}:{" "}
+                                            {session.clockInTime
+                                              ? format(new Date(session.clockInTime), "h:mm a")
+                                              : "--:--"}{" "}
+                                            -{" "}
+                                            {session.clockOutTime
+                                              ? format(new Date(session.clockOutTime), "h:mm a")
+                                              : "Active"}
+                                          </span>
+                                          <span className="text-muted-foreground">
+                                            {typeof session.totalHours === "number"
+                                              ? formatHoursToReadable(session.totalHours)
+                                              : "--"}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </Fragment>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -1300,3 +1752,5 @@ export default function AttendancePage() {
     </div>
   );
 }
+
+

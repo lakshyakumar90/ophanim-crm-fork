@@ -1,9 +1,20 @@
 import { Router, type Router as RouterType } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requireAdmin } from "../middleware/authorization.middleware.js";
+import {
+  validateBody,
+  validateParams,
+} from "../middleware/validation.middleware.js";
 import { asyncHandler } from "../middleware/error.middleware.js";
-import { sendSuccess, sendCreated } from "../utils/responses.js";
+import { sendSuccess, sendCreated, ApiError } from "../utils/responses.js";
 import * as departmentsService from "../services/departments.service.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
+import { uuidParamSchema } from "../validators/users.validator.js";
+import {
+  createDepartmentSchema,
+  updateDepartmentSchema,
+  departmentSlugParamSchema,
+} from "../validators/departments.validator.js";
 import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
 
@@ -30,6 +41,7 @@ router.get(
  */
 router.get(
   "/slug/:slug",
+  validateParams(departmentSlugParamSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const department = await departmentsService.getDepartmentBySlug(
@@ -37,11 +49,7 @@ router.get(
     );
 
     if (!department) {
-      res.status(404).json({
-        success: false,
-        error: { code: "NOT_FOUND", message: "Department not found" },
-      });
-      return;
+      throw new ApiError(ERROR_CODES.NOT_FOUND, "Department not found");
     }
 
     sendSuccess(res, department);
@@ -54,16 +62,13 @@ router.get(
  */
 router.get(
   "/:id",
+  validateParams(uuidParamSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const department = await departmentsService.getDepartmentById(id as string);
 
     if (!department) {
-      res.status(404).json({
-        success: false,
-        error: { code: "NOT_FOUND", message: "Department not found" },
-      });
-      return;
+      throw new ApiError(ERROR_CODES.NOT_FOUND, "Department not found");
     }
 
     sendSuccess(res, department);
@@ -77,19 +82,9 @@ router.get(
 router.post(
   "/",
   requireAdmin as any,
+  validateBody(createDepartmentSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { name, slug, description, icon, color } = req.body;
-
-    if (!name || !slug) {
-      res.status(400).json({
-        success: false,
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Name and slug are required",
-        },
-      });
-      return;
-    }
 
     const department = await departmentsService.createDepartment({
       name,
@@ -110,6 +105,8 @@ router.post(
 router.put(
   "/:id",
   requireAdmin as any,
+  validateParams(uuidParamSchema),
+  validateBody(updateDepartmentSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, description, icon, color, isActive } = req.body;

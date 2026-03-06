@@ -169,8 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     checkAuth();
-    // Only run on mount - use pathname in deps to re-check when navigating
-  }, []);
+  }, [isPublicPath, router]);
 
   return (
     <AuthContext.Provider
@@ -185,7 +184,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
       }}
     >
-      {children}
+      {isLoading && !isPublicPath ? (
+        <div className="h-full min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }

@@ -1488,6 +1488,56 @@ export async function getAllReminders(
 }
 
 /**
+ * Get reminders count (optimized for badges/widgets)
+ */
+export async function getRemindersCount(
+  query: {
+    userId?: string;
+    status?: "pending" | "sent" | "all";
+    date?: string; // Format: YYYY-MM-DD
+  },
+  authUser: AuthUser,
+): Promise<number> {
+  let baseQuery = supabaseAdmin
+    .from("lead_reminders")
+    .select("id", { count: "exact", head: true });
+
+  // Access Control
+  if (authUser.role !== "admin") {
+    baseQuery = baseQuery.eq("user_id", authUser.id);
+  } else if (query.userId) {
+    baseQuery = baseQuery.eq("user_id", query.userId);
+  }
+
+  // Status Filter
+  if (query.status === "pending") {
+    baseQuery = baseQuery.eq("is_done", false);
+  } else if (query.status === "sent") {
+    baseQuery = baseQuery.eq("is_done", true);
+  }
+
+  // Date Filter
+  if (query.date) {
+    const startDate = new Date(query.date);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(query.date);
+    endDate.setHours(23, 59, 59, 999);
+
+    baseQuery = baseQuery
+      .gte("reminder_at", startDate.toISOString())
+      .lte("reminder_at", endDate.toISOString());
+  }
+
+  const { count, error } = await baseQuery;
+
+  if (error) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+
+  return count || 0;
+}
+
+/**
  * Mark a reminder as done
  */
 export async function markReminderDone(

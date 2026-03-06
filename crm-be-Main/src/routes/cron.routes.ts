@@ -1,12 +1,22 @@
 import { Router, Request, Response } from "express";
+import { config } from "../config/env.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import {
   processLeadReminders,
   processTaskReminders,
 } from "../services/reminder.service.js";
 import { bulkAutoLogoutDueSessions } from "../services/attendance.service.js";
+import { logger } from "../utils/logger.js";
 
 const router: Router = Router();
+
+router.use((_req, res, next): void => {
+  if (!config.cron.enableHttpCron) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  next();
+});
 
 /**
  * Verify cron request authorization.
@@ -14,7 +24,7 @@ const router: Router = Router();
  * Returns true if authorized, false otherwise.
  */
 function verifyCronAuth(req: Request, res: Response): boolean {
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = config.cron.secret;
   if (!cronSecret) {
     res.status(500).json({ error: "CRON_SECRET is not configured" });
     return false;
@@ -31,18 +41,18 @@ function verifyCronAuth(req: Request, res: Response): boolean {
 /**
  * GET /api/v1/cron/reminders
  * Cron endpoint for processing reminders
- * Called by Vercel Cron every 5 minutes
+ * Called by external scheduler when ENABLE_HTTP_CRON=true
  */
 router.get("/reminders", async (req, res) => {
   if (!verifyCronAuth(req, res)) return;
 
   try {
-    console.log("[Cron] Starting reminder processing...");
+    logger.info("[Cron] Starting reminder processing...");
 
     // Process all reminder types
     await Promise.all([processTaskReminders(), processLeadReminders()]);
 
-    console.log("[Cron] Reminder processing completed");
+    logger.info("[Cron] Reminder processing completed");
 
     return res.status(200).json({
       success: true,
@@ -50,7 +60,7 @@ router.get("/reminders", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("[Cron] Error processing reminders:", error);
+    logger.error({ error }, "[Cron] Error processing reminders");
     return res.status(500).json({
       success: false,
       error: "Failed to process reminders",
@@ -61,7 +71,7 @@ router.get("/reminders", async (req, res) => {
 /**
  * POST /api/v1/cron/auto-logout
  * Cron endpoint for auto-logging out users who forgot to clock out
- * Called by Vercel Cron every 5 minutes
+ * Called by external scheduler when ENABLE_HTTP_CRON=true
  */
 router.post("/auto-logout", async (req, res) => {
   if (!verifyCronAuth(req, res)) return;
@@ -82,15 +92,21 @@ router.post("/auto-logout", async (req, res) => {
 
     runId = (runInsert as any)?.id ?? null;
   } catch (trackingErr) {
-    console.error("[Cron] Failed to insert cron run tracking record:", trackingErr);
+    logger.error(
+      { error: trackingErr },
+      "[Cron] Failed to insert cron run tracking record",
+    );
     // Continue with the actual job even if tracking fails
   }
 
   try {
-    console.log("[Cron] Starting auto-logout processing...");
+    logger.info("[Cron] Starting auto-logout processing...");
 
     const loggedOutCount = await bulkAutoLogoutDueSessions();
-    console.log(`[Cron] Auto-logout completed: ${loggedOutCount} sessions`);
+    logger.info(
+      { loggedOutCount },
+      "[Cron] Auto-logout completed",
+    );
 
     if (runId) {
       await supabaseAdmin
@@ -110,7 +126,7 @@ router.post("/auto-logout", async (req, res) => {
       loggedOutCount,
     });
   } catch (error) {
-    console.error("[Cron] Error processing auto-logout:", error);
+    logger.error({ error }, "[Cron] Error processing auto-logout");
 
     if (runId) {
       await supabaseAdmin

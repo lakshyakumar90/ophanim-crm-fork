@@ -8,8 +8,9 @@ import { ERROR_CODES } from "../utils/error-codes.js";
 import { logger } from "../utils/logger.js";
 import { getTimestampIST, getTodayIST } from "../utils/date-utils.js";
 
-// Encryption key derived from JWT secret
-const ENCRYPTION_KEY = crypto.scryptSync(config.jwt.secret, "salt", 32);
+// Encryption key derived from JWT secret and deployment-specific salt
+const ENCRYPTION_SALT = `${config.supabase.url}:user-email-settings`;
+const ENCRYPTION_KEY = crypto.scryptSync(config.jwt.secret, ENCRYPTION_SALT, 32);
 const IV_LENGTH = 16;
 
 // Maximum emails per batch

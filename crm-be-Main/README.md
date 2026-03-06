@@ -115,8 +115,7 @@ JWT_REFRESH_SECRET=your-refresh-secret
 | GET    | `/attendance/user/:userId/history`    | User history                 |
 | POST   | `/attendance/manual`                  | Create manual record (admin) |
 | PUT    | `/attendance/:id`                     | Update record (admin)        |
-| POST   | `/attendance/admin/clock-in/:userId`  | Admin clock in user          |
-| POST   | `/attendance/admin/clock-out/:userId` | Admin clock out user         |
+| POST   | `/attendance/admin/restore/:id`       | Restore attendance (admin)   |
 | GET    | `/attendance/rules`                   | Get attendance rules         |
 | PUT    | `/attendance/rules`                   | Update rules (admin)         |
 | GET    | `/attendance/holidays`                | Get holidays                 |

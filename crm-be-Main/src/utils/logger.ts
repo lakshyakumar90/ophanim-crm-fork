@@ -11,13 +11,7 @@ export const logger = pino({
           colorize: true,
         },
       }
-    : {
-        target: "pino/file",
-        options: {
-          destination: "./logs/server.log",
-          mkdir: true,
-        },
-      },
+    : undefined,
   base: {
     env: config.server.nodeEnv,
   },

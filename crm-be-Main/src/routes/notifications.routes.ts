@@ -1,8 +1,12 @@
 import { Router, type Router as RouterType } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
-import { validateParams } from "../middleware/validation.middleware.js";
+import {
+  validateBody,
+  validateParams,
+} from "../middleware/validation.middleware.js";
 import { asyncHandler } from "../middleware/error.middleware.js";
 import { uuidParamSchema } from "../validators/users.validator.js";
+import { updateNotificationPreferencesSchema } from "../validators/notifications.validator.js";
 import * as notificationsService from "../services/notifications.service.js";
 import {
   sendSuccess,
@@ -65,6 +69,7 @@ router.get(
  */
 router.put(
   "/preferences",
+  validateBody(updateNotificationPreferencesSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
     const prefs = await notificationsService.updatePreferences(

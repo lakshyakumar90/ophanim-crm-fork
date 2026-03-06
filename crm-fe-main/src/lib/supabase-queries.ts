@@ -563,6 +563,41 @@ export async function getAllReminders(params?: {
   };
 }
 
+export async function getRemindersCount(params?: {
+  userId?: string;
+  status?: "pending" | "sent" | "all";
+  date?: string;
+}) {
+  let query = supabase
+    .from("lead_reminders")
+    .select("id", { count: "exact", head: true });
+
+  if (params?.userId) {
+    query = query.eq("user_id", params.userId);
+  }
+
+  if (params?.status === "pending") {
+    query = query.eq("is_done", false);
+  } else if (params?.status === "sent") {
+    query = query.eq("is_done", true);
+  }
+
+  if (params?.date) {
+    query = query
+      .gte("reminder_at", `${params.date}T00:00:00`)
+      .lte("reminder_at", `${params.date}T23:59:59`);
+  }
+
+  const { count, error } = await query;
+
+  if (error) {
+    console.error("Error fetching reminders count:", error);
+    throw error;
+  }
+
+  return { count: count || 0 };
+}
+
 export async function getLeadStatsByUser() {
   const { data, error } = await supabase
     .from("leads")
@@ -1119,7 +1154,10 @@ export async function getNotifications(params?: {
   // RLS will filter to current user only
   let query = supabase
     .from("notifications")
-    .select("*", { count: "exact" })
+    .select(
+      "id, user_id, title, message, type, related_entity_type, related_entity_id, is_read, action_url, priority, created_at",
+      { count: "exact" },
+    )
     .order("created_at", { ascending: false });
 
   if (params?.unreadOnly) {

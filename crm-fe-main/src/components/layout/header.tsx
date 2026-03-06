@@ -16,24 +16,42 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/providers/auth-provider";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 import { notificationsApi, usersApi } from "@/lib/api";
 import { useTheme } from "next-themes";
 import { DepartmentSwitcher } from "@/components/layout/department-switcher";
 import { GlobalSearch } from "@/components/search/global-search";
+import { usePollingCoordinator } from "@/lib/polling-coordinator";
 
 export function Header() {
   const router = useRouter();
   const { user, logout, refreshUser } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { isLeader: isPollingLeader, publish } = usePollingCoordinator(
+    (payload) => {
+      if (typeof payload.unreadCount === "number") {
+        void globalMutate(
+          "notifications-unread-count",
+          { count: payload.unreadCount },
+          { revalidate: false },
+        );
+      }
+    },
+  );
   // Track the last theme value synced from DB to prevent reverting optimistic updates
   const syncedThemeRef = useRef<string | null>(null);
 
   // Fetch unread count - use same key as sidebar for shared cache
-  const { data: unreadData, mutate } = useSWR(
+  const { data: unreadData, mutate: mutateUnreadCount } = useSWR(
     user ? "notifications-unread-count" : null,
     () => notificationsApi.getUnreadCount(),
-    { refreshInterval: 30000 }, // Refresh every 30 seconds to stay in sync
+    {
+      refreshInterval: isPollingLeader ? 120000 : 0,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
   );
 
   // Sync theme with user preference on load
@@ -62,16 +80,12 @@ export function Header() {
     }
   };
 
-  const refreshNotifications = () => {
-    // Manually revalidate
-    notificationsApi.getUnreadCount().then((res) => {
-      // SWR mutate would be better but simple re-fetch works
-      // To do it properly with SWR:
-    });
-    // Actually we can just use the bound mutate from useSWR if we capture it
-  };
-
   const unreadCount = unreadData?.count || 0;
+
+  useEffect(() => {
+    if (!user || !isPollingLeader) return;
+    publish({ unreadCount });
+  }, [isPollingLeader, publish, unreadCount, user]);
 
   const getInitials = (name: string) => {
     return name
@@ -114,7 +128,7 @@ export function Header() {
           variant="ghost"
           size="icon"
           className="text-muted-foreground hover:bg-accent mr-1"
-          onClick={() => mutate("notifications-unread-count")}
+          onClick={() => mutateUnreadCount()}
           title="Refresh Notifications"
         >
           <RefreshCw className="h-4 w-4" />

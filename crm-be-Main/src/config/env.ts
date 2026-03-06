@@ -43,6 +43,13 @@ const envSchema = z.object({
 
   // Background Workers
   ENABLE_REMINDER_WORKER: z.string().default("false"),
+
+  // Runtime optimizations
+  ENABLE_LAZY_AUTO_LOGOUT: z.string().default("false"),
+  AUTH_USER_CACHE_TTL_MS: z.string().default("60000"),
+  REQUEST_LOG_SAMPLE_RATE: z.string().default("0.2"),
+  ENABLE_HTTP_CRON: z.string().default("false"),
+  CRON_SECRET: z.string().optional(),
 });
 
 // Parse and validate environment variables
@@ -95,5 +102,23 @@ export const config = {
   bulkOperationLimit: parseInt(env.BULK_OPERATION_LIMIT, 10),
   workers: {
     enableReminderWorker: env.ENABLE_REMINDER_WORKER === "true",
+  },
+  auth: {
+    enableLazyAutoLogout: env.ENABLE_LAZY_AUTO_LOGOUT === "true",
+    userCacheTtlMs: (() => {
+      const parsed = parseInt(env.AUTH_USER_CACHE_TTL_MS, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 60000;
+    })(),
+  },
+  logging: {
+    requestLogSampleRate: (() => {
+      const parsed = parseFloat(env.REQUEST_LOG_SAMPLE_RATE);
+      if (!Number.isFinite(parsed)) return 0.2;
+      return Math.min(1, Math.max(0, parsed));
+    })(),
+  },
+  cron: {
+    enableHttpCron: env.ENABLE_HTTP_CRON === "true",
+    secret: env.CRON_SECRET,
   },
 } as const;

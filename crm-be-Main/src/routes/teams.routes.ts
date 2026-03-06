@@ -13,6 +13,8 @@ import {
 } from "../validators/teams.validator.js";
 import { uuidParamSchema } from "../validators/users.validator.js";
 import * as teamsService from "../services/teams.service.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
+import { ApiError } from "../utils/responses.js";
 import { sendSuccess, sendCreated, sendNoContent } from "../utils/responses.js";
 import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
@@ -61,14 +63,10 @@ router.get(
     const isOwnTeam = authReq.user.teamId === teamId;
 
     if (!isAdmin && !isTeamManager && !isOwnTeam) {
-      res.status(403).json({
-        success: false,
-        error: {
-          code: "FORBIDDEN",
-          message: "You can only view your own team or teams you manage",
-        },
-      });
-      return;
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "You can only view your own team or teams you manage",
+      );
     }
 
     sendSuccess(res, team);
@@ -88,14 +86,10 @@ router.get(
 
     // Check access: admin can see any team, others only their own team
     if (authReq.user.role !== "admin" && authReq.user.teamId !== teamId) {
-      res.status(403).json({
-        success: false,
-        error: {
-          code: "FORBIDDEN",
-          message: "You can only view your own team members",
-        },
-      });
-      return;
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "You can only view your own team members",
+      );
     }
 
     const members = await teamsService.getTeamMembersWithDetails(teamId);

@@ -131,6 +131,13 @@ export const updateCommentSchema = z.object({
   content: z.string().min(1, "Comment cannot be empty").max(2000),
 });
 
+export const createLeadReminderSchema = z.object({
+  reminderAt: z
+    .string()
+    .datetime({ message: "reminderAt must be a valid ISO datetime string" }),
+  note: z.string().max(500).optional().nullable(),
+});
+
 // Types
 export type CreateLeadInput = z.infer<typeof createLeadSchema>;
 export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
@@ -143,3 +150,4 @@ export type CreateActivityInput = z.infer<typeof createActivitySchema>;
 export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
+export type CreateLeadReminderInput = z.infer<typeof createLeadReminderSchema>;

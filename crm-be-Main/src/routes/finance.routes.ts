@@ -1,4 +1,5 @@
 import { Router, type Router as RouterType } from "express";
+import { config } from "../config/env.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import {
   requireManager,
@@ -13,7 +14,7 @@ import {
   ApiError,
 } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
 
 // Services
@@ -46,6 +47,18 @@ import {
 } from "../validators/finance.validator.js";
 
 const router: RouterType = Router();
+
+function requireHttpCronEnabled(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (!config.cron.enableHttpCron) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  next();
+}
 
 // All routes require authentication
 router.use(authenticate as any);
@@ -1054,6 +1067,7 @@ router.post(
  */
 router.post(
   "/cron/process-scheduled-emails",
+  requireHttpCronEnabled as any,
   requireAdmin as any,
   asyncHandler(async (req: Request, res: Response) => {
     const result = await scheduledEmailService.processScheduledEmails();
@@ -1067,6 +1081,7 @@ router.post(
  */
 router.post(
   "/cron/process-recurring-invoices",
+  requireHttpCronEnabled as any,
   requireAdmin as any,
   asyncHandler(async (req: Request, res: Response) => {
     const result = await recurringService.processRecurringInvoices();
@@ -1080,6 +1095,7 @@ router.post(
  */
 router.post(
   "/cron/update-overdue",
+  requireHttpCronEnabled as any,
   requireAdmin as any,
   asyncHandler(async (req: Request, res: Response) => {
     const result = await invoiceService.updateOverdueInvoices();

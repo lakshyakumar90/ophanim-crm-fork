@@ -1,9 +1,4 @@
-import api from "./api";
-import type { Project, ProjectMember, ApiResponse } from "@/types";
-
-function unwrap(res: any) {
-  return res?.data?.data ?? res?.data ?? res;
-}
+import { projectsApi } from "./api";
 
 export interface CreateProjectInput {
   name: string;
@@ -14,7 +9,6 @@ export interface CreateProjectInput {
   priority?: "low" | "medium" | "high";
   startDate?: Date;
   endDate?: Date;
-  // Team members to add on creation
   teamMembers?: { userId: string; role: string }[];
 }
 
@@ -44,8 +38,8 @@ export interface ProjectStats {
     projectCount: number;
     activeCount: number;
     completedCount: number;
-    taskCompletionRate?: number; // New
-    overdueTasks?: number; // New
+    taskCompletionRate?: number;
+    overdueTasks?: number;
   }[];
   byPriority: {
     high: number;
@@ -53,12 +47,11 @@ export interface ProjectStats {
     low: number;
   };
   teamWorkload?: {
-    // New
     userId: string;
     userName: string;
     activeTasks: number;
   }[];
-  totalOverdueTasks: number; // New
+  totalOverdueTasks: number;
 }
 
 export interface ProjectResources {
@@ -94,59 +87,4 @@ export interface ProjectResources {
   }[];
 }
 
-export const projectsApi = {
-  // Standard CRUD
-  list: async () => {
-    const res = await api.get<ApiResponse<Project[]>>("/projects");
-    return unwrap(res);
-  },
-  get: async (id: string) => {
-    const res = await api.get<ApiResponse<Project>>(`/projects/${id}`);
-    return unwrap(res);
-  },
-  create: (data: CreateProjectInput) =>
-    api.post<ApiResponse<Project>>("/projects", data),
-  update: (id: string, data: UpdateProjectInput) =>
-    api.put<ApiResponse<Project>>(`/projects/${id}`, data),
-  delete: (id: string) => api.delete(`/projects/${id}`),
-
-  // Dashboard & Analytics
-  getStats: async () => {
-    const res = await api.get<ApiResponse<ProjectStats>>("/projects/stats");
-    return unwrap(res);
-  },
-  getIdleProjects: async () => {
-    const res = await api.get<ApiResponse<Project[]>>("/projects/idle");
-    return unwrap(res);
-  },
-  getResources: async () => {
-    const res = await api.get<ApiResponse<ProjectResources>>("/projects/resources");
-    return unwrap(res);
-  },
-  getByManager: async (managerId: string) => {
-    const res = await api.get<ApiResponse<Project[]>>(`/projects/by-manager/${managerId}`);
-    return unwrap(res);
-  },
-
-  // Members
-  addMember: (
-    projectId: string,
-    userId: string,
-    role: string,
-    allocationPercentage?: number,
-  ) =>
-    api.post<ApiResponse<ProjectMember>>(`/projects/${projectId}/members`, {
-      userId,
-      role,
-      allocationPercentage,
-    }),
-
-  removeMember: (projectId: string, userId: string) =>
-    api.delete(`/projects/${projectId}/members/${userId}`),
-
-  updateMember: (
-    projectId: string,
-    userId: string,
-    data: { role?: string; allocationPercentage?: number },
-  ) => api.put(`/projects/${projectId}/members/${userId}`, data),
-};
+export { projectsApi };

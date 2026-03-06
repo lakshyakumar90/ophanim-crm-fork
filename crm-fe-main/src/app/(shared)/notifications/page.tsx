@@ -10,6 +10,7 @@ import { Bell, Check, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { toLocaleStringIST } from "@/lib/date-utils";
 import { useAuth } from "@/providers/auth-provider";
+import { usePollingCoordinator } from "@/lib/polling-coordinator";
 
 interface Notification {
   id: string;
@@ -25,12 +26,19 @@ interface Notification {
 export default function NotificationsPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isLeader: isPollingLeader } = usePollingCoordinator();
 
-  // Add auto-refresh every 30 seconds
+  // Auto-refresh uses leader-only polling to avoid duplicate tab traffic.
   const { data, isLoading } = useSWR(
     "notifications",
     () => notificationsApi.list(),
-    { refreshInterval: 30000 },
+    {
+      refreshInterval: isPollingLeader ? 120000 : 0,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
   );
 
   const notifications: Notification[] = data?.data || data || [];

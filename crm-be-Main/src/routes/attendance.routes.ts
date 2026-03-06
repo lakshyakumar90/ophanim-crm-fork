@@ -3,6 +3,7 @@ import { authenticate } from "../middleware/auth.middleware.js";
 import {
   requireAdmin,
   requireManager,
+  requireHRAccess,
 } from "../middleware/authorization.middleware.js";
 import {
   validateBody,
@@ -29,7 +30,6 @@ import {
   ApiError,
 } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
-import { USER_ROLES } from "../config/constants.js";
 import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
 import {
@@ -58,22 +58,19 @@ router.post(
       location?: string | null;
       notes?: string | null;
     };
-    const targetUserId = body.userId || authReq.user.id;
 
-    if (
-      targetUserId !== authReq.user.id &&
-      authReq.user.role !== USER_ROLES.ADMIN
-    ) {
+    if (body.userId && body.userId !== authReq.user.id) {
       throw new ApiError(
         ERROR_CODES.FORBIDDEN,
         "You can only clock in for your own account",
       );
     }
 
-    const record = await attendanceService.clockIn(targetUserId, {
+    const record = await attendanceService.clockIn(authReq.user.id, {
       location: body.location,
       notes: body.notes,
     });
+    const today = await attendanceService.getMyTodayAttendance(authReq.user.id);
 
     sendCreated(res, {
       id: record.id,
@@ -82,6 +79,11 @@ router.post(
       status: record.status === "late" ? "Late" : "On-time",
       attendanceStatus: record.status,
       date: record.date,
+      session: record,
+      today: today?.today || {
+        totalHours: record.totalHours || 0,
+        sessionsCount: 1,
+      },
     });
   }),
 );
@@ -95,8 +97,16 @@ router.post(
   validateBody(clockOutSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
-    const record = await attendanceService.clockOut(authReq.user.id, req.body);
-    sendSuccess(res, record);
+    const session = await attendanceService.clockOut(authReq.user.id, req.body);
+    const today = await attendanceService.getMyTodayAttendance(authReq.user.id);
+    sendSuccess(res, {
+      ...session,
+      session,
+      today: today?.today || {
+        totalHours: session.totalHours || 0,
+        sessionsCount: 0,
+      },
+    });
   }),
 );
 
@@ -341,7 +351,7 @@ router.get(
  */
 router.post(
   "/holidays",
-  requireAdmin as any,
+  requireHRAccess() as any,
   validateBody(createHolidaySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const holiday = await attendanceService.createHoliday(req.body);
@@ -355,7 +365,7 @@ router.post(
  */
 router.delete(
   "/holidays/:id",
-  requireAdmin as any,
+  requireHRAccess() as any,
   validateParams(uuidParamSchema),
   asyncHandler(async (req: Request, res: Response) => {
     await attendanceService.deleteHoliday(req.params["id"] as string);
@@ -364,56 +374,19 @@ router.delete(
 );
 
 /**
- * POST /attendance/admin/clock-in/:userId
- * Admin clock in for any user (bypasses restrictions)
+ * POST /attendance/admin/restore/:id
+ * Restore a completed attendance session to ACTIVE (admin only)
  */
 router.post(
-  "/admin/clock-in/:userId",
+  "/admin/restore/:id",
   requireAdmin as any,
-  validateBody(clockInSchema),
+  validateParams(uuidParamSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
-    const userId = req.params["userId"] as string;
-    if (
-      !userId ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        userId,
-      )
-    ) {
-      throw new Error("Invalid user ID format");
-    }
-    const record = await attendanceService.adminClockIn(
-      userId,
+    const attendanceId = req.params["id"] as string;
+    const record = await attendanceService.restoreAttendanceByAdmin(
+      attendanceId,
       authReq.user.id,
-      req.body,
-    );
-    sendCreated(res, record);
-  }),
-);
-
-/**
- * POST /attendance/admin/clock-out/:userId
- * Admin clock out for any user (bypasses restrictions)
- */
-router.post(
-  "/admin/clock-out/:userId",
-  requireAdmin as any,
-  validateBody(clockOutSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as unknown as AuthenticatedRequest;
-    const userId = req.params["userId"] as string;
-    if (
-      !userId ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        userId,
-      )
-    ) {
-      throw new Error("Invalid user ID format");
-    }
-    const record = await attendanceService.adminClockOut(
-      userId,
-      authReq.user.id,
-      req.body,
     );
     sendSuccess(res, record);
   }),

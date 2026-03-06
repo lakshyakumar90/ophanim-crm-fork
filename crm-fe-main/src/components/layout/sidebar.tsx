@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 import { cn } from "@/lib/utils";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
 import { notificationsApi, leadsApi } from "@/lib/api";
+import { usePollingCoordinator } from "@/lib/polling-coordinator";
 import {
   LayoutDashboard,
   Users,
@@ -46,7 +47,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Department } from "@/types";
 import { Badge } from "@/components/ui/badge";
 
@@ -270,6 +271,12 @@ const hrItems: NavItem[] = [
     roles: ["admin", "manager"],
   },
   {
+    title: "Holidays",
+    href: "/hr/holidays",
+    icon: CalendarClock,
+    roles: ["admin", "manager"],
+  },
+  {
     title: "Analytics",
     href: "/hr/analytics",
     icon: BarChart3,
@@ -374,6 +381,24 @@ function GlobalSidebar({
   const [isDeliveryOpen, setIsDeliveryOpen] = useState(false);
   const [isDepartmentItemsOpen, setIsDepartmentItemsOpen] = useState(false);
   const [isHROpen, setIsHROpen] = useState(false);
+  const { isLeader: isPollingLeader, publish } = usePollingCoordinator(
+    (payload) => {
+      if (typeof payload.unreadCount === "number") {
+        void globalMutate(
+          "notifications-unread-count",
+          { count: payload.unreadCount },
+          { revalidate: false },
+        );
+      }
+      if (typeof payload.remindersCount === "number") {
+        void globalMutate(
+          "sidebar-reminders-count",
+          { count: payload.remindersCount },
+          { revalidate: false },
+        );
+      }
+    },
+  );
 
   // Check if user is a project-only user (PM/employee without department assignment)
   const isProjectOnlyUser =
@@ -446,17 +471,34 @@ function GlobalSidebar({
   const { data: unreadData } = useSWR(
     user ? "notifications-unread-count" : null,
     () => notificationsApi.getUnreadCount(),
-    { refreshInterval: 30000 }, // Refresh every 30 seconds
+    {
+      refreshInterval: isPollingLeader ? 120000 : 0,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
   );
   const unreadCount = unreadData?.count || 0;
 
   // Fetch active reminders count (not-done reminders, including overdue)
   const { data: remindersData } = useSWR(
-    user ? ["sidebar-reminders-count"] : null,
-    () => leadsApi.getAllReminders({ status: "pending", limit: 100 }),
-    { refreshInterval: 60000 }, // Refresh every minute
+    user ? "sidebar-reminders-count" : null,
+    () => leadsApi.getRemindersCount({ status: "pending" }),
+    {
+      refreshInterval: isPollingLeader ? 180000 : 0,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
   );
-  const remindersCount = remindersData?.data?.length || 0;
+  const remindersCount = remindersData?.count || 0;
+
+  useEffect(() => {
+    if (!user || !isPollingLeader) return;
+    publish({ unreadCount, remindersCount });
+  }, [isPollingLeader, publish, remindersCount, unreadCount, user]);
 
   const getInitials = (name: string) => {
     return name

@@ -13,6 +13,8 @@ import {
 import { uuidParamSchema } from "../validators/users.validator.js";
 import * as teamNotesService from "../services/team-notes.service.js";
 import * as teamsService from "../services/teams.service.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
+import { ApiError } from "../utils/responses.js";
 import { sendSuccess, sendCreated, sendNoContent } from "../utils/responses.js";
 import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
@@ -34,14 +36,10 @@ router.get(
 
     // Check access: Admin or Team Member
     if (authReq.user.role !== "admin" && authReq.user.teamId !== teamId) {
-       res.status(403).json({
-        success: false,
-        error: {
-          code: "FORBIDDEN",
-          message: "You can only view notes for your own team",
-        },
-      });
-      return;
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "You can only view notes for your own team",
+      );
     }
 
     const notes = await teamNotesService.getTeamNotes(teamId);
@@ -63,20 +61,16 @@ router.post(
 
     // Check access: Admin or Team Member
     if (authReq.user.role !== "admin" && authReq.user.teamId !== teamId) {
-        res.status(403).json({
-        success: false,
-        error: {
-          code: "FORBIDDEN",
-          message: "You can only post notes in your own team",
-        },
-      });
-      return;
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "You can only post notes in your own team",
+      );
     }
 
     const note = await teamNotesService.createTeamNote(
       teamId,
       authReq.user.id,
-      content
+      content,
     );
     sendCreated(res, note);
   }),

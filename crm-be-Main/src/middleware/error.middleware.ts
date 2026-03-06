@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { ApiError, sendError } from "../utils/responses.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/env.js";
 
@@ -44,7 +45,7 @@ export function errorMiddleware(
     // In development, expose actual error details for debugging
     if (config.server.isDevelopment) {
       const devError = new ApiError(
-        "SRV_001" as any,
+        ERROR_CODES.INTERNAL_ERROR,
         error.message || "An unexpected error occurred",
         { stack: error.stack }
       );

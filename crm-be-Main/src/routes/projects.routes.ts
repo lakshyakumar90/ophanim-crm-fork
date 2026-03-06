@@ -1,8 +1,11 @@
 import {
   Router,
+  type Request,
+  type Response,
   type RequestHandler,
   type Router as RouterType,
 } from "express";
+import multer from "multer";
 import { authenticate } from "../middleware/auth.middleware.js";
 import {
   requireRole,
@@ -11,6 +14,19 @@ import {
 import { asyncHandler } from "../middleware/error.middleware.js";
 import { USER_ROLES } from "../config/constants.js";
 import * as projectController from "../controllers/projects.controller.js";
+import type { AuthenticatedRequest } from "../types/api.types.js";
+import { sendSuccess, ApiError } from "../utils/responses.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
+import {
+  createNoteSchema,
+  updateNoteSchema,
+} from "../validators/notes.validator.js";
+import * as notesService from "../services/notes.service.js";
+import * as filesService from "../services/files.service.js";
+import {
+  getMyProjects,
+  getProjectDashboardStats,
+} from "../services/projects.service.js";
 
 const router: RouterType = Router();
 
@@ -76,6 +92,31 @@ router.get(
   asyncHandler(projectController.list) as RequestHandler,
 );
 
+// Get my projects (for team members)
+router.get(
+  "/my-projects",
+  requireRole(USER_ROLES.EMPLOYEE) as RequestHandler,
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const projects = await getMyProjects(authReq.user.id);
+    sendSuccess(res, projects);
+  }) as RequestHandler,
+);
+
+// Get Project Dashboard Stats
+router.get(
+  "/:id/dashboard-stats",
+  requireRole(
+    USER_ROLES.ADMIN,
+    USER_ROLES.MANAGER,
+    USER_ROLES.EMPLOYEE,
+  ) as RequestHandler,
+  asyncHandler(async (req: Request, res: Response) => {
+    const stats = await getProjectDashboardStats(req.params.id as string);
+    sendSuccess(res, stats);
+  }) as RequestHandler,
+);
+
 router.get(
   "/:id",
   requireRole(
@@ -120,51 +161,9 @@ router.delete(
   asyncHandler(projectController.removeMember) as RequestHandler,
 );
 
-// Get my projects (for team members)
-router.get(
-  "/my-projects",
-  requireRole(USER_ROLES.EMPLOYEE) as RequestHandler,
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as unknown as AuthenticatedRequest;
-    // We can call the service directly or via controller. Using controller is cleaner but service is quicker for now.
-    // Ideally should be in controller.projects.ts->myProjects
-    // Let's add it inline for now as per previous pattern for simple gets
-    const projects = await import("../services/projects.service.js").then((s) =>
-      s.getMyProjects(authReq.user.id),
-    );
-    sendSuccess(res, projects);
-  }) as RequestHandler,
-);
-
-// Get Project Dashboard Stats
-router.get(
-  "/:id/dashboard-stats",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(async (req: Request, res: Response) => {
-    const stats = await import("../services/projects.service.js").then((s) =>
-      s.getProjectDashboardStats(req.params.id as string),
-    );
-    sendSuccess(res, stats);
-  }) as RequestHandler,
-);
-
 // =========================================
 // Notes Routes
 // =========================================
-
-import * as notesService from "../services/notes.service.js";
-import {
-  createNoteSchema,
-  updateNoteSchema,
-} from "../validators/notes.validator.js";
-import { sendSuccess, ApiError } from "../utils/responses.js";
-import { ERROR_CODES } from "../utils/error-codes.js";
-import type { Request, Response } from "express";
-import type { AuthenticatedRequest } from "../types/api.types.js";
 
 // Get notes for a project
 router.get(
@@ -292,8 +291,6 @@ router.post(
 // =========================================
 // File Routes
 // =========================================
-import * as filesService from "../services/files.service.js";
-import multer from "multer";
 
 // Configure multer for file uploads (in-memory storage)
 const upload = multer({

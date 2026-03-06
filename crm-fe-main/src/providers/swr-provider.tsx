@@ -10,6 +10,8 @@ export function SWRProvider({ children }: { children: ReactNode }) {
       value={{
         revalidateOnFocus: false, // Huge CPU saver
         revalidateOnReconnect: false, // User requested no auto-polling
+        refreshWhenHidden: false,
+        refreshWhenOffline: false,
         refreshInterval: 0, // Disable polling by default
         shouldRetryOnError: false,
         onError: (error) => {

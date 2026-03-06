@@ -66,7 +66,10 @@ export async function getNotifications(
 
   let baseQuery = supabaseAdmin
     .from("notifications")
-    .select("*", { count: "exact" })
+    .select(
+      "id, user_id, title, message, type, related_entity_type, related_entity_id, is_read, action_url, priority, created_at",
+      { count: "exact" },
+    )
     .eq("user_id", userId);
 
   if (query.unreadOnly === "true") {

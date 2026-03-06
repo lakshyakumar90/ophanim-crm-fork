@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { toast } from "sonner";
@@ -15,33 +15,39 @@ import {
   getTodayIST,
   nowIST,
   formatStoredTime,
-  formatIST,
+  formatHoursToReadable,
 } from "@/lib/date-utils";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   ArrowLeft,
-  Calendar,
   Clock,
   Timer,
   CheckCircle,
   AlertCircle,
   TrendingUp,
   User,
-  LogIn,
-  LogOut,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
 } from "lucide-react";
-import { format, subDays } from "date-fns";
 import {
-  BarChart,
-  Bar,
+  format,
+  startOfMonth,
+  endOfMonth,
+  setMonth,
+  setYear,
+  getMonth,
+  getYear,
+} from "date-fns";
+import {
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -59,70 +65,288 @@ const statusColors: Record<string, string> = {
   half_day: "bg-orange-100 text-orange-700",
   absent: "bg-red-100 text-red-700",
   leave: "bg-blue-100 text-blue-700",
+  holiday: "bg-violet-100 text-violet-700",
 };
 
 const statusIcons: Record<string, string> = {
-  present: "🟢",
-  late: "🟡",
-  half_day: "🟠",
-  absent: "🔴",
-  leave: "🔵",
+  present: "P",
+  late: "L",
+  half_day: "H",
+  absent: "A",
+  leave: "LV",
+  holiday: "HD",
 };
 
-const CHART_COLORS = ["#22c55e", "#eab308", "#f97316", "#ef4444", "#3b82f6"];
+type SessionRecord = {
+  id: string;
+  date: string;
+  status: string;
+  clockInTime: string | null;
+  clockOutTime: string | null;
+  totalHours: number | null;
+  location: string | null;
+};
+
+type UserHistoryPayload = {
+  records?: SessionRecord[];
+  daily?: Array<{
+    date: string;
+    status: string;
+    totalHours: number;
+    firstClockIn: string | null;
+    lastClockOut: string | null;
+    location: string | null;
+    sessionsCount: number;
+    sessions: Array<{
+      id: string;
+      clockInTime: string | null;
+      clockOutTime: string | null;
+      totalHours: number | null;
+      location: string | null;
+      status: string;
+    }>;
+  }>;
+  summary?: {
+    present?: number;
+    late?: number;
+    halfDay?: number;
+    absent?: number;
+    leave?: number;
+    holiday?: number;
+    totalHours?: number;
+    avgHours?: number;
+  };
+};
+
+type GroupedDay = {
+  date: string;
+  status: string;
+  firstClockIn: string | null;
+  lastClockOut: string | null;
+  totalHours: number;
+  sessionCount: number;
+  location: string | null;
+  sessions: Array<{
+    id: string;
+    clockInTime: string | null;
+    clockOutTime: string | null;
+    totalHours: number;
+    location: string | null;
+    status: string;
+  }>;
+};
+
+function getInitials(name: string): string {
+  return (
+    name
+      ?.split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "U"
+  );
+}
+
+function safeSessionHours(record: SessionRecord): number {
+  if (typeof record.totalHours === "number") return Math.max(0, record.totalHours);
+  if (!record.clockInTime || !record.clockOutTime) return 0;
+  const diffMs =
+    new Date(record.clockOutTime).getTime() - new Date(record.clockInTime).getTime();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return 0;
+  return Math.round((diffMs / 3600000) * 100) / 100;
+}
+
+function deriveDayStatus(sessions: GroupedDay["sessions"], totalHours: number): string {
+  if (sessions.length === 0) return "absent";
+  if (totalHours < 4) return "half_day";
+  if (sessions.some((s) => s.status === "late")) return "late";
+  return "present";
+}
+
+function listDates(start: string, end: string): string[] {
+  const out: string[] = [];
+  const cursor = new Date(`${start}T00:00:00+05:30`);
+  const endDate = new Date(`${end}T00:00:00+05:30`);
+  while (cursor.getTime() <= endDate.getTime()) {
+    out.push(format(cursor, "yyyy-MM-dd"));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
 
 export default function UserAttendancePage() {
   const { userId } = useParams();
   const router = useRouter();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
-  const [isClockingIn, setIsClockingIn] = useState(false);
-  const [isClockingOut, setIsClockingOut] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  const [filterMode, setFilterMode] = useState<"month" | "custom">("month");
+  const [monthCursor, setMonthCursor] = useState<Date>(nowIST());
+  const [customRange, setCustomRange] = useState(() => {
+    const today = nowIST();
+    return {
+      from: format(startOfMonth(today), "yyyy-MM-dd"),
+      to: format(today, "yyyy-MM-dd"),
+    };
+  });
 
-  // Calculate date range (last 30 days)
-  const endDate = getTodayIST();
-  const startDate = format(subDays(nowIST(), 30), "yyyy-MM-dd");
+  const { startDate, endDate } = useMemo(() => {
+    if (filterMode === "custom") {
+      const from = customRange.from || format(startOfMonth(nowIST()), "yyyy-MM-dd");
+      const to = customRange.to || getTodayIST();
+      return from <= to ? { startDate: from, endDate: to } : { startDate: to, endDate: from };
+    }
 
-  // Fetch user info
+    const monthStart = format(startOfMonth(monthCursor), "yyyy-MM-dd");
+    const monthEnd = format(endOfMonth(monthCursor), "yyyy-MM-dd");
+    const today = getTodayIST();
+    return {
+      startDate: monthStart,
+      endDate: monthEnd > today ? today : monthEnd,
+    };
+  }, [filterMode, monthCursor, customRange]);
+
   const { data: userData, isLoading: loadingUser } = useSWR(
     userId ? ["user-detail", userId] : null,
     () => usersApi.get(userId as string),
   );
 
-  // Fetch user attendance history
   const {
     data: historyData,
     isLoading: loadingHistory,
     mutate: mutateHistory,
   } = useSWR(
     userId ? ["attendance-history", userId, startDate, endDate] : null,
-    () =>
-      attendanceApi
-        .getUserHistory(userId as string, startDate, endDate),
+    () => attendanceApi.getUserHistory(userId as string, startDate, endDate),
   );
 
-  // Get today's date string for fetching today's attendance
+  const history = historyData as UserHistoryPayload | undefined;
   const today = getTodayIST();
-
-  // Calculate yesterday's date for night shift users
-  const yesterday = new Date(nowIST());
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = formatIST(yesterday, "yyyy-MM-dd");
-
-  // Derive today's attendance from history data
-  // For night shift users who clock in between 00:00-04:15, their attendance is on yesterday's date
-  // Priority: today's record first, then yesterday's (for night shift users)
-  const todayRecord = historyData?.records?.find((r: any) => r.date === today);
-  const yesterdayRecord = historyData?.records?.find((r: any) => r.date === yesterdayStr);
-  
-  // Prefer today's record. For night shift, use yesterday only if that session is still active.
-  const todayAttendance =
-    todayRecord ||
-    (userData?.shiftType === "night_shift" && yesterdayRecord && !yesterdayRecord.clockOutTime
-      ? yesterdayRecord
-      : null);
+  const todayAttendance = history?.records?.find((r) => r.date === today);
   const isClockedIn = !!todayAttendance?.clockInTime;
   const isClockedOut = !!todayAttendance?.clockOutTime;
+
+  const groupedDays = useMemo(() => {
+    if (Array.isArray(history?.daily) && history.daily.length > 0) {
+      return history.daily.map((day) => ({
+        date: day.date,
+        status: day.status,
+        firstClockIn: day.firstClockIn,
+        lastClockOut: day.lastClockOut,
+        totalHours: day.totalHours,
+        sessionCount: day.sessionsCount,
+        location: day.location,
+        sessions: (day.sessions || []).map((s) => ({
+          id: s.id,
+          clockInTime: s.clockInTime,
+          clockOutTime: s.clockOutTime,
+          totalHours: typeof s.totalHours === "number" ? s.totalHours : 0,
+          location: s.location,
+          status: s.status,
+        })),
+      }));
+    }
+
+    const map = new Map<string, GroupedDay>();
+    const records = (history?.records || []) as SessionRecord[];
+    for (const record of records) {
+      if (!record.clockInTime) continue;
+      const key = record.date;
+      const existing = map.get(key) || {
+        date: key,
+        status: "present",
+        firstClockIn: null,
+        lastClockOut: null,
+        totalHours: 0,
+        sessionCount: 0,
+        location: null,
+        sessions: [],
+      };
+
+      const sessionHours = safeSessionHours(record);
+      existing.totalHours = Math.round((existing.totalHours + sessionHours) * 100) / 100;
+      existing.sessionCount += 1;
+      if (!existing.firstClockIn || new Date(record.clockInTime) < new Date(existing.firstClockIn)) {
+        existing.firstClockIn = record.clockInTime;
+      }
+      if (
+        record.clockOutTime &&
+        (!existing.lastClockOut || new Date(record.clockOutTime) > new Date(existing.lastClockOut))
+      ) {
+        existing.lastClockOut = record.clockOutTime;
+      }
+      if (!existing.location && record.location) {
+        existing.location = record.location;
+      } else if (existing.location && record.location && existing.location !== record.location) {
+        existing.location = "Multiple";
+      }
+
+      existing.sessions.push({
+        id: record.id,
+        clockInTime: record.clockInTime,
+        clockOutTime: record.clockOutTime,
+        totalHours: sessionHours,
+        location: record.location,
+        status: record.status,
+      });
+      map.set(key, existing);
+    }
+
+    const days = Array.from(map.values()).map((day) => {
+      day.sessions.sort((a, b) => {
+        const aTime = a.clockInTime ? new Date(a.clockInTime).getTime() : 0;
+        const bTime = b.clockInTime ? new Date(b.clockInTime).getTime() : 0;
+        return aTime - bTime;
+      });
+      day.status = deriveDayStatus(day.sessions, day.totalHours);
+      return day;
+    });
+
+    return days.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [history?.daily, history?.records]);
+
+  const chartData = useMemo(() => {
+    const byDate = new Map(groupedDays.map((d) => [d.date, d.totalHours]));
+    return listDates(startDate, endDate).map((d) => ({
+      date: d,
+      label: format(new Date(`${d}T00:00:00+05:30`), "MMM d"),
+      hours: byDate.get(d) || 0,
+      readable: formatHoursToReadable(byDate.get(d) || 0, "0m"),
+    }));
+  }, [groupedDays, startDate, endDate]);
+
+  const pieData = history?.summary
+    ? [
+        { name: "Present", value: history.summary.present ?? 0, color: "#22c55e" },
+        { name: "Late", value: history.summary.late ?? 0, color: "#eab308" },
+        { name: "Half Day", value: history.summary.halfDay ?? 0, color: "#f97316" },
+        { name: "Absent", value: history.summary.absent ?? 0, color: "#ef4444" },
+        { name: "Leave", value: history.summary.leave ?? 0, color: "#3b82f6" },
+        { name: "Holiday", value: history.summary.holiday ?? 0, color: "#8b5cf6" },
+      ].filter((item) => item.value > 0)
+    : [];
+
+  const handleAdminRestore = async () => {
+    if (!todayAttendance?.id) return;
+    setIsRestoring(true);
+    try {
+      await attendanceApi.adminRestoreAttendance(todayAttendance.id);
+      toast.success(`Restored ${userData?.fullName || "user"} session successfully`);
+      mutateHistory();
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
+    } catch (error: unknown) {
+      const errorMessage =
+        (error as { response?: { data?: { error?: { message?: string } } } })?.response
+          ?.data?.error?.message || "Failed to restore attendance";
+      toast.error(errorMessage);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   if (!isAdmin && !isManager) {
     return (
@@ -130,9 +354,7 @@ export default function UserAttendancePage() {
         <div className="text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold">Access Denied</h2>
-          <p className="text-muted-foreground">
-            You don't have permission to view this page.
-          </p>
+          <p className="text-muted-foreground">You don&apos;t have permission to view this page.</p>
           <Button onClick={() => router.push("/attendance")} className="mt-4">
             Go Back
           </Button>
@@ -141,198 +363,164 @@ export default function UserAttendancePage() {
     );
   }
 
-  const user = userData;
-  const history = historyData;
-
-  // Admin clock in handler
-  const handleAdminClockIn = async () => {
-    if (!userId) return;
-    setIsClockingIn(true);
-    try {
-      if (isClockedOut && todayAttendance?.id) {
-        await attendanceApi.adminRestoreAttendance(todayAttendance.id);
-        toast.success(`Restored ${user?.fullName || "user"} session successfully!`);
-      } else {
-        await attendanceApi.adminClockIn(userId as string, {
-          location: "Office",
-        });
-        toast.success(`Clocked in ${user?.fullName || "user"} successfully!`);
-      }
-      // Invalidate all relevant cache keys
-      mutateHistory();
-      mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
-      mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
-      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
-      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.error?.message || "Failed to clock in user",
-      );
-    } finally {
-      setIsClockingIn(false);
-    }
-  };
-
-  // Admin clock out handler
-  const handleAdminClockOut = async () => {
-    if (!userId) return;
-    setIsClockingOut(true);
-    try {
-      await attendanceApi.adminClockOut(userId as string, {});
-      toast.success(`✅ Clocked out ${user?.fullName || "user"} successfully!`);
-      // Invalidate all relevant cache keys
-      mutateHistory();
-      mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
-      mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
-      mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
-      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.error?.message || "Failed to clock out user",
-      );
-    } finally {
-      setIsClockingOut(false);
-    }
-  };
-
-  const getInitials = (name: string) => {
-    return (
-      name
-        ?.split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2) || "U"
-    );
-  };
-
-  // Prepare chart data
-  const pieData = history?.summary
-    ? [
-        { name: "Present", value: history.summary.present ?? 0, color: "#22c55e" },
-        { name: "Late", value: history.summary.late ?? 0, color: "#eab308" },
-        { name: "Half Day", value: history.summary.halfDay ?? 0, color: "#f97316" },
-        { name: "Absent", value: history.summary.absent ?? 0, color: "#ef4444" },
-        { name: "Leave", value: history.summary.leave ?? 0, color: "#3b82f6" },
-      ].filter((item) => item.value > 0)
-    : [];
-
-  // Weekly hours bar chart data
-  const weeklyData = history?.records
-    ? (() => {
-        const weeks: Record<
-          string,
-          { week: string; hours: number; days: number }
-        > = {};
-        history.records.forEach((record: any) => {
-          const weekStart = format(new Date(record.date), "'Week 'w");
-          if (!weeks[weekStart]) {
-            weeks[weekStart] = { week: weekStart, hours: 0, days: 0 };
-          }
-          weeks[weekStart].hours += record.totalHours || 0;
-          weeks[weekStart].days += 1;
-        });
-        return Object.values(weeks).slice(-4).reverse();
-      })()
-    : [];
+  const currentMonthLabel = format(monthCursor, "MMMM yyyy");
+  const yearOptions = Array.from({ length: 6 }, (_, idx) => getYear(nowIST()) - 3 + idx);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push("/attendance")}
-        >
+        <Button variant="ghost" size="icon" onClick={() => router.push("/attendance")}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         {loadingUser ? (
           <Skeleton className="h-16 w-64" />
-        ) : user ? (
+        ) : userData ? (
           <div className="flex items-center gap-4">
             <Avatar className="h-14 w-14">
-              <AvatarImage src={user.avatarUrl} />
+              <AvatarImage src={userData.avatarUrl} />
               <AvatarFallback className="text-lg">
-                {getInitials(user.fullName)}
+                {getInitials(userData.fullName)}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="text-2xl font-bold">{user.fullName}</h1>
+              <h1 className="text-2xl font-bold">{userData.fullName}</h1>
               <div className="flex items-center gap-2">
                 <Badge variant="secondary" className="capitalize">
-                  {user.role}
+                  {userData.role}
                 </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {user.email}
-                </span>
+                <span className="text-sm text-muted-foreground">{userData.email}</span>
               </div>
             </div>
           </div>
         ) : (
           <div>
             <h1 className="text-2xl font-bold">User Not Found</h1>
-            <p className="text-muted-foreground">
-              The requested user could not be found.
-            </p>
+            <p className="text-muted-foreground">The requested user could not be found.</p>
           </div>
         )}
       </div>
 
-      {/* Admin Controls */}
-      {isAdmin && user && (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={filterMode === "month" ? "default" : "outline"}
+                onClick={() => setFilterMode("month")}
+              >
+                Month
+              </Button>
+              <Button
+                size="sm"
+                variant={filterMode === "custom" ? "default" : "outline"}
+                onClick={() => setFilterMode("custom")}
+              >
+                Custom Range
+              </Button>
+            </div>
+
+            {filterMode === "month" ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setMonthCursor((prev) => setMonth(prev, getMonth(prev) - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="text-sm font-medium min-w-[140px] text-center">{currentMonthLabel}</div>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setMonthCursor((prev) => setMonth(prev, getMonth(prev) + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <select
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={getMonth(monthCursor)}
+                  onChange={(e) =>
+                    setMonthCursor((prev) => setMonth(prev, Number(e.target.value)))
+                  }
+                >
+                  {Array.from({ length: 12 }, (_, m) => (
+                    <option key={m} value={m}>
+                      {format(new Date(2026, m, 1), "MMMM")}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={getYear(monthCursor)}
+                  onChange={(e) =>
+                    setMonthCursor((prev) => setYear(prev, Number(e.target.value)))
+                  }
+                >
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={customRange.from}
+                  max={customRange.to || getTodayIST()}
+                  onChange={(e) =>
+                    setCustomRange((prev) => ({
+                      ...prev,
+                      from: e.target.value,
+                    }))
+                  }
+                />
+                <span className="text-muted-foreground text-sm">to</span>
+                <input
+                  type="date"
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={customRange.to}
+                  min={customRange.from}
+                  max={getTodayIST()}
+                  onChange={(e) =>
+                    setCustomRange((prev) => ({
+                      ...prev,
+                      to: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            )}
+          </div>
+          <div className="mt-3 text-sm text-muted-foreground">
+            Selected range:{" "}
+            {format(new Date(`${startDate}T00:00:00+05:30`), "MMM d, yyyy")} -{" "}
+            {format(new Date(`${endDate}T00:00:00+05:30`), "MMM d, yyyy")}
+          </div>
+        </CardContent>
+      </Card>
+
+      {isAdmin && userData && (
         <Card className="bg-gradient-to-br from-violet-50 to-purple-100 border-purple-200">
           <CardContent className="py-4">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
-                <h3 className="font-semibold text-purple-900">
-                  Admin Controls
-                </h3>
+                <h3 className="font-semibold text-purple-900">Admin Controls</h3>
                 <p className="text-sm text-purple-700">
-                  {!isClockedIn && "User has not clocked in today"}
-                  {isClockedIn && !isClockedOut && (
-                    <>
-                      Clocked in at{" "}
-                      <span className="font-medium">
-                        <span className="font-medium">
-                          {formatStoredTime(todayAttendance.clockInTime)}
-                        </span>
-                      </span>
-                    </>
-                  )}
-                  {isClockedIn && isClockedOut && (
-                    <>
-                      Day complete •{" "}
-                      <span className="font-medium">
-                        {todayAttendance.totalHours}h worked
-                      </span>
-                    </>
-                  )}
+                  Manual clock-in/clock-out is disabled. Restore is available for accidental
+                  completion before shift auto-logout.
                 </p>
               </div>
-              <div className="flex gap-3">
-                <Button
-                  onClick={handleAdminClockIn}
-                  disabled={isClockingIn || (isClockedIn && !isClockedOut)}
-                  className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
-                >
-                  <LogIn className="mr-2 h-4 w-4" />
-                  {isClockingIn
-                    ? "Clocking In..."
-                    : isClockedOut
-                      ? "Clock In Again"
-                      : "Clock In"}
-                </Button>
-                <Button
-                  onClick={handleAdminClockOut}
-                  disabled={isClockingOut || !isClockedIn || isClockedOut}
-                  variant="destructive"
-                  className="disabled:opacity-50"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  {isClockingOut ? "Clocking Out..." : "Clock Out"}
-                </Button>
-              </div>
+              <Button
+                onClick={handleAdminRestore}
+                disabled={isRestoring || !isClockedIn || !isClockedOut}
+                className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50"
+              >
+                {isRestoring ? "Restoring..." : "Restore Session"}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -340,8 +528,8 @@ export default function UserAttendancePage() {
 
       {loadingHistory ? (
         <div className="grid gap-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {[...Array(5)].map((_, i) => (
               <Skeleton key={i} className="h-24" />
             ))}
           </div>
@@ -349,7 +537,6 @@ export default function UserAttendancePage() {
         </div>
       ) : history ? (
         <>
-          {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <Card>
               <CardContent className="pt-4">
@@ -404,7 +591,7 @@ export default function UserAttendancePage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold">
-                      {history.summary?.totalHours ?? 0}h
+                      {formatHoursToReadable(history.summary?.totalHours ?? 0)}
                     </p>
                     <p className="text-xs text-muted-foreground">Total Hours</p>
                   </div>
@@ -419,7 +606,7 @@ export default function UserAttendancePage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold">
-                      {history.summary?.avgHours ?? 0}h
+                      {formatHoursToReadable(history.summary?.avgHours ?? 0)}
                     </p>
                     <p className="text-xs text-muted-foreground">Avg/Day</p>
                   </div>
@@ -428,14 +615,10 @@ export default function UserAttendancePage() {
             </Card>
           </div>
 
-          {/* Charts Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Attendance Distribution Pie Chart */}
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">
-                  Attendance Distribution
-                </CardTitle>
+                <CardTitle className="text-base">Attendance Distribution</CardTitle>
               </CardHeader>
               <CardContent>
                 {pieData.length > 0 ? (
@@ -470,107 +653,138 @@ export default function UserAttendancePage() {
               </CardContent>
             </Card>
 
-            {/* Weekly Hours Bar Chart */}
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Weekly Hours</CardTitle>
+                <CardTitle className="text-base">Daily Worked Hours</CardTitle>
               </CardHeader>
               <CardContent>
-                {weeklyData.length > 0 ? (
+                {chartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={weeklyData}>
+                    <AreaChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="week" tick={{ fontSize: 12 }} />
+                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} />
                       <Tooltip
                         formatter={(value: number | undefined) => [
-                          `${(value ?? 0).toFixed(1)}h`,
-                          "Hours",
+                          formatHoursToReadable(value ?? 0, "0m"),
+                          "Worked",
                         ]}
+                        labelFormatter={(_, payload) => {
+                          const date = payload?.[0]?.payload?.date;
+                          if (!date) return "";
+                          return format(new Date(`${date}T00:00:00+05:30`), "EEE, MMM d, yyyy");
+                        }}
                       />
-                      <Bar
+                      <Area
+                        type="monotone"
                         dataKey="hours"
+                        stroke="#8b5cf6"
                         fill="#8b5cf6"
-                        radius={[4, 4, 0, 0]}
+                        fillOpacity={0.2}
                       />
-                    </BarChart>
+                    </AreaChart>
                   </ResponsiveContainer>
                 ) : (
                   <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                    No weekly data available
+                    No chart data available
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Attendance History Table */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Attendance History (Last 30 Days)
-                <Badge variant="secondary">
-                  {history.records?.length ?? 0} records
-                </Badge>
+                <CalendarDays className="h-4 w-4" />
+                Attendance History
+                <Badge variant="secondary">{groupedDays.length} days</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {!history.records || history.records.length === 0 ? (
+              {groupedDays.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No attendance records found for this period.</p>
                 </div>
               ) : (
-                <ScrollArea className="h-[400px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Clock In</TableHead>
-                        <TableHead>Clock Out</TableHead>
-                        <TableHead>Hours</TableHead>
-                        <TableHead>Location</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {history.records.map((record: any) => (
-                        <TableRow key={record.id}>
-                          <TableCell className="font-medium">
-                            {formatIST(record.date, "EEE, MMM d, yyyy")}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              className={
-                                statusColors[record.status] ||
-                                "bg-gray-100 text-gray-700"
-                              }
-                            >
-                              {statusIcons[record.status]}{" "}
-                              {record.status?.replace("_", " ")}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {record.clockInTime
-                              ? formatStoredTime(record.clockInTime)
-                              : "--:--"}
-                          </TableCell>
-                          <TableCell>
-                            {record.clockOutTime
-                              ? formatStoredTime(record.clockOutTime)
-                              : "--:--"}
-                          </TableCell>
-                          <TableCell>
-                            {record.totalHours ? `${record.totalHours}h` : "--"}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {record.location || "--"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                <ScrollArea className="h-[520px] pr-2">
+                  <div className="space-y-3">
+                    {groupedDays.map((day) => (
+                      <Collapsible
+                        key={day.date}
+                        open={expandedDay === day.date}
+                        onOpenChange={(open) => setExpandedDay(open ? day.date : null)}
+                      >
+                        <div className="rounded-lg border">
+                          <CollapsibleTrigger asChild>
+                            <button className="w-full text-left p-4 hover:bg-muted/40 transition-colors">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-2">
+                                  <p className="font-semibold">
+                                    {format(new Date(`${day.date}T00:00:00+05:30`), "EEE, MMM d, yyyy")}
+                                  </p>
+                                  <Badge
+                                    className={
+                                      statusColors[day.status] || "bg-gray-100 text-gray-700"
+                                    }
+                                  >
+                                    {statusIcons[day.status]} {day.status.replace("_", " ")}
+                                  </Badge>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                                    <p>
+                                      First clock-in:{" "}
+                                      {day.firstClockIn ? formatStoredTime(day.firstClockIn) : "--:--"}
+                                    </p>
+                                    <p>
+                                      Last clock-out:{" "}
+                                      {day.lastClockOut ? formatStoredTime(day.lastClockOut) : "--:--"}
+                                    </p>
+                                    <p>Total: {formatHoursToReadable(day.totalHours)}</p>
+                                    <p>Location: {day.location || "--"}</p>
+                                  </div>
+                                </div>
+                                <ChevronDown
+                                  className={`h-4 w-4 mt-1 transition-transform ${
+                                    expandedDay === day.date ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </div>
+                            </button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="px-4 pb-4">
+                              <div className="rounded-md border">
+                                <div className="grid grid-cols-4 gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b">
+                                  <span>Session</span>
+                                  <span>Clock In</span>
+                                  <span>Clock Out</span>
+                                  <span>Duration</span>
+                                </div>
+                                {day.sessions.map((session, idx) => (
+                                  <div
+                                    key={session.id || `${day.date}-${idx}`}
+                                    className="grid grid-cols-4 gap-2 px-3 py-2 text-sm border-b last:border-b-0"
+                                  >
+                                    <span className="text-muted-foreground">#{idx + 1}</span>
+                                    <span>
+                                      {session.clockInTime ? formatStoredTime(session.clockInTime) : "--:--"}
+                                    </span>
+                                    <span>
+                                      {session.clockOutTime
+                                        ? formatStoredTime(session.clockOutTime)
+                                        : "Active"}
+                                    </span>
+                                    <span>{formatHoursToReadable(session.totalHours)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </CollapsibleContent>
+                        </div>
+                      </Collapsible>
+                    ))}
+                  </div>
                 </ScrollArea>
               )}
             </CardContent>
@@ -581,12 +795,9 @@ export default function UserAttendancePage() {
           <CardContent className="py-12">
             <div className="text-center">
               <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold">
-                Unable to Load Attendance Data
-              </h2>
+              <h2 className="text-xl font-semibold">Unable to Load Attendance Data</h2>
               <p className="text-muted-foreground mt-2">
-                There was an error loading attendance history. Please try again
-                later.
+                There was an error loading attendance history. Please try again later.
               </p>
               <Button onClick={() => router.refresh()} className="mt-4">
                 Retry
@@ -598,5 +809,3 @@ export default function UserAttendancePage() {
     </div>
   );
 }
-
-

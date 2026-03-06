@@ -3,6 +3,7 @@ import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
 import { logger } from "../utils/logger.js";
 import { nowIST, getTimestampIST } from "../utils/date-utils.js";
+import crypto from "crypto";
 
 const OTP_EXPIRY_MINUTES = 10;
 const OTP_LENGTH = 6;
@@ -13,7 +14,7 @@ type OTPType = "email_verification" | "password_reset";
  * Generate a random 6-digit OTP
  */
 function generateOTPCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 /**

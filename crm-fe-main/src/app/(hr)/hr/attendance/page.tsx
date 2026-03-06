@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Clock, Calendar, Users, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { api } from "@/lib/api";
 
 interface AttendanceStats {
   presentToday: number;
@@ -42,9 +43,6 @@ interface HRAnalytics {
   attendanceStats: AttendanceStats;
 }
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
-
 export default function HRAttendancePage() {
   const [analytics, setAnalytics] = useState<HRAnalytics | null>(null);
   const [onLeaveList, setOnLeaveList] = useState<
@@ -55,24 +53,13 @@ export default function HRAttendancePage() {
 
   const fetchData = async () => {
     try {
-      const headers = {
-        Authorization: `Bearer ${localStorage.getItem("crm_access_token")}`,
-      };
-
       const [analyticsRes, onLeaveRes] = await Promise.all([
-        fetch(`${API_URL}/hr/analytics`, { headers }),
-        fetch(`${API_URL}/hr/on-leave-today`, { headers }),
+        api.get("/hr/analytics"),
+        api.get("/hr/on-leave-today"),
       ]);
 
-      if (analyticsRes.ok) {
-        const data = await analyticsRes.json();
-        setAnalytics(data.data);
-      }
-
-      if (onLeaveRes.ok) {
-        const data = await onLeaveRes.json();
-        setOnLeaveList(data.data || []);
-      }
+      setAnalytics(analyticsRes.data?.data ?? null);
+      setOnLeaveList(onLeaveRes.data?.data ?? []);
     } catch (error) {
       console.error("Failed to fetch HR attendance data:", error);
     } finally {

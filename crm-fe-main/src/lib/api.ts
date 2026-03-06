@@ -6,14 +6,21 @@ import axios, {
 import * as sq from "./supabase-queries";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === "production"
+    ? ""
+    : "http://localhost:5000/api/v1");
+
+if (!API_BASE_URL) {
+  throw new Error("NEXT_PUBLIC_API_URL must be configured in production");
+}
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = "crm_access_token";
 const REFRESH_TOKEN_KEY = "crm_refresh_token";
 
 // Create axios instance
-const api: AxiosInstance = axios.create({
+export const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
@@ -481,6 +488,22 @@ export const leadsApi = {
       };
     }
   },
+  getRemindersCount: async (params?: {
+    userId?: string;
+    status?: "pending" | "sent" | "all";
+    date?: string;
+  }) => {
+    try {
+      return await sq.getRemindersCount(params);
+    } catch (error) {
+      console.error(
+        "Supabase reminders count read failed, falling back to API",
+        error,
+      );
+      const res = await api.get("/leads/reminders/count", { params });
+      return unwrap(res);
+    }
+  },
   getReminders: async (id: string) => {
     try {
       const sqRes = await sq.getLeadReminders(id);
@@ -598,10 +621,41 @@ export const projectsApi = {
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/projects/${id}`, data),
   delete: (id: string) => api.delete(`/projects/${id}`),
-  addMember: (projectId: string, data: { userId: string; role: string }) =>
-    api.post(`/projects/${projectId}/members`, data),
+  addMember: (
+    projectId: string,
+    dataOrUserId: { userId: string; role: string; allocationPercentage?: number } | string,
+    role?: string,
+    allocationPercentage?: number,
+  ) => {
+    const payload =
+      typeof dataOrUserId === "string"
+        ? { userId: dataOrUserId, role, allocationPercentage }
+        : dataOrUserId;
+    return api.post(`/projects/${projectId}/members`, payload);
+  },
+  updateMember: (
+    projectId: string,
+    userId: string,
+    data: { role?: string; allocationPercentage?: number },
+  ) => api.put(`/projects/${projectId}/members/${userId}`, data),
   removeMember: (projectId: string, userId: string) =>
     api.delete(`/projects/${projectId}/members/${userId}`),
+  getStats: async () => {
+    const res = await api.get("/projects/stats");
+    return unwrap(res);
+  },
+  getIdleProjects: async () => {
+    const res = await api.get("/projects/idle");
+    return unwrap(res);
+  },
+  getResources: async () => {
+    const res = await api.get("/projects/resources");
+    return unwrap(res);
+  },
+  getByManager: async (managerId: string) => {
+    const res = await api.get(`/projects/by-manager/${managerId}`);
+    return unwrap(res);
+  },
 };
 
 // =====================================================
@@ -623,16 +677,8 @@ export const attendanceApi = {
   createHoliday: (data: { name: string; date: string; isOptional?: boolean }) =>
     api.post("/attendance/holidays", data),
   deleteHoliday: (id: string) => api.delete(`/attendance/holidays/${id}`),
-  adminClockIn: (
-    userId: string,
-    data?: { location?: string; notes?: string },
-  ) => api.post(`/attendance/admin/clock-in/${userId}`, data || {}),
-  adminClockOut: (
-    userId: string,
-    data?: { breakDuration?: number; notes?: string },
-  ) => api.post(`/attendance/admin/clock-out/${userId}`, data || {}),
   adminRestoreAttendance: (attendanceId: string) =>
-    api.post(`/admin/restore-attendance/${attendanceId}`),
+    api.post(`/attendance/admin/restore/${attendanceId}`),
 
   // Reads - Supabase direct with backend fallback
   getToday: async () => {

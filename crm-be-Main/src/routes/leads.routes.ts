@@ -25,6 +25,7 @@ import {
   changeStatusSchema,
   createCommentSchema,
   updateCommentSchema,
+  createLeadReminderSchema,
 } from "../validators/leads.validator.js";
 import { uuidParamSchema } from "../validators/users.validator.js";
 import * as leadsService from "../services/leads.service.js";
@@ -191,6 +192,25 @@ router.get(
 
     const result = await leadsService.getAllReminders(query, authReq.user);
     sendPaginated(res, result.data, result.meta);
+  }),
+);
+
+/**
+ * GET /leads/reminders/count
+ * Get reminders count for authorized user (or filtered for admin)
+ */
+router.get(
+  "/reminders/count",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const { userId, status, date } = req.query as any;
+
+    const count = await leadsService.getRemindersCount(
+      { userId, status, date },
+      authReq.user,
+    );
+
+    sendSuccess(res, { count });
   }),
 );
 
@@ -414,6 +434,7 @@ router.get(
 router.post(
   "/:id/reminders",
   validateParams(uuidParamSchema),
+  validateBody(createLeadReminderSchema),
   checkResourceAccess("lead") as any,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;

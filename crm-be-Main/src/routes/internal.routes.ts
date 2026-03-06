@@ -1,25 +1,28 @@
 import { Router, Request, Response } from "express";
 import { supabaseAdmin } from "../config/supabase.js";
-import { SHIFT_TYPES } from "../config/constants.js";
+import { config } from "../config/env.js";
 import { getTimestampIST } from "../utils/date-utils.js";
 import { getCurrentTimestamp } from "../utils/helpers.js";
+import { logger } from "../utils/logger.js";
+import { internalRouteRateLimiter } from "../middleware/rate-limiter.middleware.js";
 
 const router: Router = Router();
+router.use(internalRouteRateLimiter);
 
 /**
  * Verify internal API request authorization using CRON_SECRET
  */
 function verifyInternalAuth(req: Request, res: Response): boolean {
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = config.cron.secret;
   if (!cronSecret) {
-    console.error("[Internal API] CRON_SECRET not configured");
+    logger.error("[Internal API] CRON_SECRET not configured");
     res.status(500).json({ error: "Server configuration error" });
     return false;
   }
 
   const authHeader = req.headers["x-cron-secret"];
   if (authHeader !== cronSecret) {
-    console.warn("[Internal API] Unauthorized request attempt");
+    logger.warn("[Internal API] Unauthorized request attempt");
     res.status(401).json({ error: "Unauthorized" });
     return false;
   }
@@ -38,7 +41,7 @@ router.post("/auto-logout", async (req: Request, res: Response) => {
     const now = new Date();
     const nowISO = getTimestampIST();
 
-    console.log(`[Auto-Logout] Starting processing at ${nowISO}`);
+    logger.info(`[Auto-Logout] Starting processing at ${nowISO}`);
 
     // Find all attendance records where:
     // 1. clock_out_time is NULL (still clocked in)
@@ -59,7 +62,7 @@ router.post("/auto-logout", async (req: Request, res: Response) => {
       .lte("shift_end_time", nowISO);
 
     if (fetchError) {
-      console.error("[Auto-Logout] Error fetching records:", fetchError);
+      logger.error({ error: fetchError }, "[Auto-Logout] Error fetching records");
       return res.status(500).json({
         success: false,
         error: "Database query failed",
@@ -67,7 +70,7 @@ router.post("/auto-logout", async (req: Request, res: Response) => {
     }
 
     if (!openRecords || openRecords.length === 0) {
-      console.log("[Auto-Logout] No records to process");
+      logger.info("[Auto-Logout] No records to process");
       return res.status(200).json({
         success: true,
         message: "No records to process",
@@ -76,7 +79,7 @@ router.post("/auto-logout", async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[Auto-Logout] Found ${openRecords.length} records to process`);
+  logger.info(`[Auto-Logout] Found ${openRecords.length} records to process`);
 
     let successCount = 0;
     let errorCount = 0;
@@ -150,11 +153,16 @@ router.post("/auto-logout", async (req: Request, res: Response) => {
       } catch (error: any) {
         errorCount++;
         errors.push(`User ${record.user_id}: ${error.message}`);
-        console.error(`[Auto-Logout] Error processing user ${record.user_id}:`, error);
+        logger.error(
+          { error, userId: record.user_id },
+          "[Auto-Logout] Error processing attendance record",
+        );
       }
     }
 
-    console.log(`[Auto-Logout] Completed: ${successCount} success, ${errorCount} errors`);
+    logger.info(
+      `[Auto-Logout] Completed: ${successCount} success, ${errorCount} errors`,
+    );
 
     return res.status(200).json({
       success: true,
@@ -165,7 +173,7 @@ router.post("/auto-logout", async (req: Request, res: Response) => {
       timestamp: nowISO,
     });
   } catch (error: any) {
-    console.error("[Auto-Logout] Unexpected error:", error);
+    logger.error({ error }, "[Auto-Logout] Unexpected error");
     return res.status(500).json({
       success: false,
       error: "Auto-logout processing failed",

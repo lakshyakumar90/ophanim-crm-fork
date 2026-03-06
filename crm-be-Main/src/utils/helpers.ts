@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 /**
  * Generate a unique UUID
@@ -30,13 +31,13 @@ export async function comparePassword(
  * Generate a random token
  */
 export function generateToken(length: number = 32): string {
-  const chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  if (length <= 0) return "";
+  // Base64url avoids unsafe URL chars while remaining cryptographically secure.
+  const bytesNeeded = Math.ceil((length * 3) / 4);
+  return crypto
+    .randomBytes(bytesNeeded)
+    .toString("base64url")
+    .slice(0, length);
 }
 
 /**

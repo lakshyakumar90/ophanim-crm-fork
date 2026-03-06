@@ -21,12 +21,15 @@ import {
   MANAGER_JOB_TITLES,
   JOB_TITLES,
 } from "../validators/users.validator.js";
+import { adminResetPasswordSchema } from "../validators/auth.validator.js";
 import * as usersService from "../services/users.service.js";
 import {
+  ApiError,
   sendSuccess,
   sendPaginated,
   sendNoContent,
 } from "../utils/responses.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
 import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
 import multer from "multer";
@@ -89,6 +92,7 @@ router.put(
  */
 router.patch(
   "/me/preferences",
+  validateBody(updateProfileSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
     const user = await usersService.updateProfile(authReq.user.id, req.body);
@@ -107,9 +111,7 @@ router.post(
     const authReq = req as unknown as AuthenticatedRequest;
     const file = (req as any).file;
     if (!file) {
-      // throw error
-      res.status(400).json({ error: "No file uploaded" });
-      return;
+      throw new ApiError(ERROR_CODES.MISSING_REQUIRED_FIELD, "No file uploaded");
     }
 
     // Upload to Supabase Storage
@@ -126,7 +128,10 @@ router.post(
         });
 
     if (uploadError) {
-      throw new Error("Failed to upload avatar: " + uploadError.message);
+      throw new ApiError(
+        ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        `Failed to upload avatar: ${uploadError.message}`,
+      );
     }
 
     // Get Public URL
@@ -357,14 +362,9 @@ router.patch(
   "/:id/password",
   requireAdmin as any,
   validateParams(uuidParamSchema),
+  validateBody(adminResetPasswordSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 8) {
-      res
-        .status(400)
-        .json({ error: { message: "Password must be at least 8 characters" } });
-      return;
-    }
     // Import auth service dynamically to avoid circular deps
     const authService = await import("../services/auth.service.js");
     await authService.adminResetPassword(

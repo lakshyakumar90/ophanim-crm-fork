@@ -106,16 +106,6 @@ export interface Department {
   updatedAt: string;
 }
 
-// Task filters
-export interface TaskFilters extends DateRangeFilter {
-  status?: string | string[];
-  priority?: string | string[];
-  assignedTo?: string;
-  relatedLeadId?: string;
-  overdue?: boolean;
-  dueToday?: boolean;
-}
-
 // Attendance filters
 export interface AttendanceFilters extends DateRangeFilter {
   userId?: string;

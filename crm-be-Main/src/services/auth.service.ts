@@ -1,5 +1,5 @@
 import jwt, { type SignOptions } from "jsonwebtoken";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config/env.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { ApiError } from "../utils/responses.js";
@@ -33,16 +33,26 @@ import type {
 } from "../types/api.types.js";
 import type { UserRole } from "../config/constants.js";
 
+type GlobalAuthVerifyClient = typeof globalThis & {
+  __supabaseAuthVerifyClient?: SupabaseClient;
+};
+
 /**
- * Create a disposable Supabase client for password verification.
- * This prevents signInWithPassword() from polluting the shared
- * supabaseAdmin singleton's auth state (which would downgrade it
- * from service_role to an authenticated user session).
+ * Shared Supabase auth-verify client for password verification.
+ * Keeps auth checks isolated from supabaseAdmin and avoids per-call allocations.
  */
-function createAuthVerifyClient() {
-  return createClient(config.supabase.url, config.supabase.anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+function getAuthVerifyClient(): SupabaseClient {
+  const host = globalThis as GlobalAuthVerifyClient;
+  if (!host.__supabaseAuthVerifyClient) {
+    host.__supabaseAuthVerifyClient = createClient(
+      config.supabase.url,
+      config.supabase.anonKey,
+      {
+        auth: { autoRefreshToken: false, persistSession: false },
+      },
+    );
+  }
+  return host.__supabaseAuthVerifyClient;
 }
 
 /**
@@ -109,11 +119,13 @@ function getAccessTokenExpiresIn(): number {
  * Login user
  */
 export async function login(input: LoginInput): Promise<LoginResponse> {
-  // Verify credentials via Supabase Auth (disposable client to avoid polluting supabaseAdmin)
-  const { error: authError } = await createAuthVerifyClient().auth.signInWithPassword({
-    email: input.email.toLowerCase(),
-    password: input.password,
-  });
+  // Verify credentials via dedicated anon client (does not mutate supabaseAdmin auth state).
+  const { error: authError } = await getAuthVerifyClient().auth.signInWithPassword(
+    {
+      email: input.email.toLowerCase(),
+      password: input.password,
+    },
+  );
 
   if (authError) {
     throw new ApiError(ERROR_CODES.AUTH_INVALID_CREDENTIALS);
@@ -523,11 +535,13 @@ export async function changePassword(
     throw new ApiError(ERROR_CODES.NOT_FOUND, "User not found");
   }
 
-  // Verify current password via Supabase Auth (disposable client to avoid polluting supabaseAdmin)
-  const { error: verifyError } = await createAuthVerifyClient().auth.signInWithPassword({
-    email: userRecord.email,
-    password: input.currentPassword,
-  });
+  // Verify current password via dedicated anon client.
+  const { error: verifyError } = await getAuthVerifyClient().auth.signInWithPassword(
+    {
+      email: userRecord.email,
+      password: input.currentPassword,
+    },
+  );
 
   if (verifyError) {
     throw new ApiError(

@@ -1,4 +1,4 @@
-import express, { type Application } from "express";
+﻿import express, { type Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { config } from "./config/env.js";
@@ -10,6 +10,7 @@ import {
 } from "./middleware/error.middleware.js";
 import { defaultRateLimiter } from "./middleware/rate-limiter.middleware.js";
 import { logger } from "./utils/logger.js";
+import { supabaseAdmin } from "./config/supabase.js";
 
 // Import routes
 import healthRoutes from "./routes/health.routes.js";
@@ -111,34 +112,65 @@ app.use(notFoundMiddleware);
 
 // Global error handler
 app.use(errorMiddleware);
-
 // Start server (only when not running as serverless function)
 const PORT = config.server.port;
 
+async function verifyAttendanceSchema(): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("attendance")
+    .select("id,clock_in_time,clock_out_time")
+    .limit(1);
+
+  if (error) {
+    const projectRef = (() => {
+      try {
+        return new URL(config.supabase.url).host.split(".")[0];
+      } catch {
+        return "unknown";
+      }
+    })();
+    throw new Error(
+      `Attendance schema check failed for project ${projectRef}: ${error.message}`,
+    );
+  }
+}
+
 // Check if running in Vercel serverless environment
 if (!process.env.VERCEL) {
-  if (config.workers.enableReminderWorker) {
-    // Import and start reminder service only when explicitly enabled.
-    import("./services/reminder.service.js").then(
-      ({ startReminderService }) => {
-        startReminderService();
-      },
-    ).catch((err) => {
-      logger.error("Failed to start reminder service", err);
-    });
-  } else {
-    logger.info("Reminder worker disabled (ENABLE_REMINDER_WORKER=false)");
-  }
+  (async () => {
+    try {
+      await verifyAttendanceSchema();
 
-  const server = app.listen(PORT, () => {
-    logger.info(`🚀 CRM Backend server running on port ${PORT}`);
-    logger.info(`📍 API available at http://localhost:${PORT}${API_PREFIX}`);
-    logger.info(`💚 Health check at http://localhost:${PORT}/health`);
-    logger.info(`🔧 Environment: ${config.server.nodeEnv}`);
-  });
+      if (config.workers.enableReminderWorker) {
+        // Import and start reminder service only when explicitly enabled.
+        import("./services/reminder.service.js").then(
+          ({ startReminderService }) => {
+            startReminderService();
+          },
+        ).catch((err) => {
+          logger.error("Failed to start reminder service", err);
+        });
+      } else {
+        logger.info("Reminder worker disabled (ENABLE_REMINDER_WORKER=false)");
+      }
 
-  // Set timeout to 5 minutes for long-running imports
-  server.setTimeout(300000);
+      const server = app.listen(PORT, () => {
+        logger.info(`CRM Backend server running on port ${PORT}`);
+        logger.info(`API available at http://localhost:${PORT}${API_PREFIX}`);
+        logger.info(`Health check at http://localhost:${PORT}/health`);
+        logger.info(`Environment: ${config.server.nodeEnv}`);
+      });
+
+      // Set timeout to 5 minutes for long-running imports
+      server.setTimeout(300000);
+    } catch (error) {
+      logger.error(
+        { error, supabaseUrl: config.supabase.url },
+        "Startup schema verification failed",
+      );
+      process.exit(1);
+    }
+  })();
 }
 
 // Export for Vercel serverless

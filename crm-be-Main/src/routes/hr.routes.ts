@@ -178,6 +178,32 @@ router.get(
 );
 
 /**
+ * POST /hr/leaves
+ * Create a leave request on behalf of an employee (HR/Admin only)
+ * Body: { leaveTypeId, startDate, endDate, reason?, targetUserId }
+ */
+router.post(
+  "/leaves",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const { leaveTypeId, startDate, endDate, reason, targetUserId } = req.body;
+
+    if (!leaveTypeId || !startDate || !endDate) {
+      throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "leaveTypeId, startDate, and endDate are required");
+    }
+    if (!targetUserId) {
+      throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "targetUserId is required");
+    }
+
+    const leave = await leaveService.createLeaveRequest(
+      { leaveTypeId, startDate, endDate, reason },
+      targetUserId,
+    );
+    sendSuccess(res, leave);
+  }),
+);
+
+/**
  * POST /hr/leaves/:id/approve
  * Approve a leave request
  */

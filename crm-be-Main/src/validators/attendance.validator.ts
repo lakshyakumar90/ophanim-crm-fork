@@ -19,9 +19,9 @@ export const manualAttendanceSchema = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
-  clockInTime: z.string().datetime().optional().nullable(),
+  clockInTime: z.string().datetime(),
   clockOutTime: z.string().datetime().optional().nullable(),
-  status: z.enum(["present", "late", "half_day", "absent", "leave", "holiday"]),
+  status: z.enum(["present", "late", "half_day"]),
   notes: z.string().max(500).optional().nullable(),
 });
 
@@ -30,9 +30,7 @@ export const updateAttendanceSchema = z.object({
   clockInTime: z.string().datetime().optional().nullable(),
   clockOutTime: z.string().datetime().optional().nullable(),
   breakDuration: z.number().int().min(0).optional().nullable(),
-  status: z
-    .enum(["present", "late", "half_day", "absent", "leave", "holiday"])
-    .optional(),
+  status: z.enum(["present", "late", "half_day"]).optional(),
   notes: z.string().max(500).optional().nullable(),
 });
 
@@ -75,6 +73,9 @@ export const createHolidaySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
   isOptional: z.boolean().default(false),
+  departmentId: z.string().uuid().optional().nullable(),
+  teamId: z.string().uuid().optional().nullable(),
+  role: z.string().max(50).optional().nullable(),
 });
 
 // Types

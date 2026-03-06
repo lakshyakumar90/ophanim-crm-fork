@@ -39,29 +39,4 @@ router.get("/ready", async (_req, res) => {
   }
 });
 
-import { supabaseAdmin } from "../config/supabase.js";
-
-router.get("/update-rules-temp", async (req, res) => {
-  const { data, error } = await supabaseAdmin
-    .from("attendance_rules")
-    .update({
-      work_start_time: "19:00",
-      work_end_time: "04:00",
-      late_threshold_minutes: 15,
-    })
-    .eq("id", "1") // Assuming id 1 or we update all. Usually single row.
-    .select();
-
-  // If no row, insert one
-  if (!data || data.length === 0) {
-    await supabaseAdmin.from("attendance_rules").insert({
-      work_start_time: "19:00",
-      work_end_time: "04:00",
-      late_threshold_minutes: 15,
-    });
-  }
-
-  res.json({ success: true, data, error });
-});
-
 export default router;
