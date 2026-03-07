@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { expensesApi, type Expense } from "@/lib/finance-api";
@@ -12,6 +13,7 @@ import { Receipt, ArrowLeft, Check, X, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
@@ -34,6 +36,15 @@ export default function ExpenseDetailPage() {
   } = useSWR<Expense>(user && expenseId ? ["expense", expenseId] : null, () =>
     expensesApi.get(expenseId),
   );
+
+  const refreshExpenseData = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: refreshExpenseData,
+    enabled: Boolean(user && expenseId),
+  });
 
   const handleApprove = async () => {
     try {

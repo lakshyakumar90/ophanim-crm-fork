@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { teamsApi } from "@/lib/api";
@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import type { Team } from "@/types";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function GlobalTeamsPage() {
   const router = useRouter();
@@ -52,6 +53,14 @@ export default function GlobalTeamsPage() {
   const { data, isLoading, error, mutate } = useSWR("teams", () =>
     teamsApi.list(),
   );
+
+  const refreshTeamsData = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: refreshTeamsData,
+  });
 
   const allTeams = (data || []) as Team[];
 

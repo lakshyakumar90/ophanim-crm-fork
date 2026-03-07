@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import useSWR from "swr";
 import { tasksApi } from "@/lib/api";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
@@ -38,6 +38,7 @@ import {
 import { useRouter } from "next/navigation";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
 import type { Task } from "@/types";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const priorityConfig = {
   high: {
@@ -76,7 +77,7 @@ export default function ProjectTasksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     setIsLoading(true);
     try {
       const tasksResult = await tasksApi.list({ limit: 200 });
@@ -87,11 +88,17 @@ export default function ProjectTasksPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchTasks();
-  }, []);
+    void fetchTasks();
+  }, [fetchTasks]);
+
+  useHeaderRefresh({
+    onRefresh: fetchTasks,
+    enabled: Boolean(user),
+    isRefreshing: isLoading,
+  });
 
   // Filter tasks that are project-related (have a projectId)
   const projectTasks = tasks.filter(

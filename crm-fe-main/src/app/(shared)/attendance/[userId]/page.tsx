@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { toast } from "sonner";
@@ -58,6 +58,7 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const statusColors: Record<string, string> = {
   present: "bg-green-100 text-green-700",
@@ -220,6 +221,22 @@ export default function UserAttendancePage() {
     userId ? ["attendance-history", userId, startDate, endDate] : null,
     () => attendanceApi.getUserHistory(userId as string, startDate, endDate),
   );
+
+  const refreshAttendanceUserData = useCallback(async () => {
+    await Promise.all([
+      mutate(["user-detail", userId]),
+      mutate(["attendance-history", userId, startDate, endDate]),
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-users"),
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics"),
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today"),
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary"),
+    ]);
+  }, [endDate, startDate, userId]);
+
+  useHeaderRefresh({
+    onRefresh: refreshAttendanceUserData,
+    enabled: Boolean(userId),
+  });
 
   const history = historyData as UserHistoryPayload | undefined;
   const today = getTodayIST();

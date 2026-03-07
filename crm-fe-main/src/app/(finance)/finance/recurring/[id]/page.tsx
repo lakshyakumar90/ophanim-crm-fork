@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { recurringApi, type RecurringSchedule } from "@/lib/finance-api";
@@ -21,6 +22,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const FREQUENCY_LABELS: Record<string, string> = {
   weekly: "Weekly",
@@ -45,6 +47,15 @@ export default function RecurringScheduleDetailPage() {
     user && scheduleId ? ["recurring-schedule", scheduleId] : null,
     () => recurringApi.get(scheduleId),
   );
+
+  const refreshRecurringSchedule = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: refreshRecurringSchedule,
+    enabled: Boolean(user && scheduleId),
+  });
 
   const handlePause = async () => {
     try {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useState, useCallback } from "react";
+import useSWR, { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import { activitiesApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
@@ -42,6 +42,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 interface ActivityLog {
   id: string;
@@ -185,6 +186,18 @@ export default function ActivityPage() {
     isAdmin ? ["activityStats", currentDepartment?.id] : null,
     () => activitiesApi.getStats({ departmentId: currentDepartment?.id }),
   );
+
+  const refreshActivityData = useCallback(async () => {
+    await Promise.all([
+      mutate(["activities", resourceType, currentDepartment?.id]),
+      mutate(["activityStats", currentDepartment?.id]),
+    ]);
+  }, [currentDepartment?.id, resourceType]);
+
+  useHeaderRefresh({
+    onRefresh: refreshActivityData,
+    enabled: isAdmin,
+  });
 
   const statCards = [
     {

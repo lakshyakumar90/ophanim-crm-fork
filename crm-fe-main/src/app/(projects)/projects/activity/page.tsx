@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useState, useCallback } from "react";
+import useSWR, { mutate } from "swr";
 import { activitiesApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 // --- Types & Constants (Reused) ---
 
@@ -183,6 +184,18 @@ export default function ProjectActivityPage() {
         resourceType: "project",
       }),
   );
+
+  const refreshProjectActivity = useCallback(async () => {
+    await Promise.all([
+      mutate(["projectActivities", resourceType, departmentId]),
+      mutate(["projectActivityStats", departmentId]),
+    ]);
+  }, [departmentId, resourceType]);
+
+  useHeaderRefresh({
+    onRefresh: refreshProjectActivity,
+    enabled: Boolean(user),
+  });
 
   const activities: ActivityLog[] = data?.data || [];
 

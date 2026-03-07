@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useState, useCallback } from "react";
+import useSWR, { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import { tasksApi } from "@/lib/api";
 import { useIsManager } from "@/providers/auth-provider";
@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import type { Task } from "@/types";
 import { toLocaleDateStringIST, nowIST } from "@/lib/date-utils";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const statusColors = {
   todo: "bg-muted text-foreground",
@@ -55,6 +56,14 @@ export default function TasksPage() {
         status: status !== "all" ? status : undefined,
       })
   );
+
+  const refreshTasksData = useCallback(async () => {
+    await mutate(["tasks", page, status]);
+  }, [page, status]);
+
+  useHeaderRefresh({
+    onRefresh: refreshTasksData,
+  });
 
   const tasks = data?.data || [];
   const meta = data?.meta;

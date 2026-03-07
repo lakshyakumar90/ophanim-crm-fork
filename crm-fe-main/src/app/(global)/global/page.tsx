@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { useAuth, useIsAdmin } from "@/providers/auth-provider";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +28,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { TodayReminders } from "@/components/dashboard/today-reminders";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
@@ -52,11 +53,17 @@ export default function GlobalDashboardPage() {
     fetchEnhancedDashboard,
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await mutate();
     setTimeout(() => setIsRefreshing(false), 500);
-  };
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: handleRefresh,
+    isRefreshing,
+    enabled: Boolean(user && isAdmin),
+  });
 
   if (!isAdmin) {
     return (

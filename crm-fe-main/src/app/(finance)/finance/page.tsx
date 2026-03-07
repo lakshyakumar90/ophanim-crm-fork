@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useState, useCallback } from "react";
+import useSWR, { mutate as globalMutate } from "swr";
 import { financeDashboardApi, approvalsApi } from "@/lib/finance-api";
 import { useAuth } from "@/providers/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +22,7 @@ import {
   ArrowDownRight,
 } from "lucide-react";
 import Link from "next/link";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function FinanceDashboardPage() {
   const { user } = useAuth();
@@ -39,11 +40,16 @@ export default function FinanceDashboardPage() {
         .getActivity(undefined, 8),
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await mutate();
+    await Promise.all([mutate(), globalMutate("finance-activity")]);
     setTimeout(() => setIsRefreshing(false), 500);
-  };
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: handleRefresh,
+    isRefreshing,
+  });
 
   if (isLoading) {
     return <DashboardSkeleton />;

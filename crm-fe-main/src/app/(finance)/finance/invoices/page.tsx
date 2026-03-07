@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { invoicesApi, type Invoice } from "@/lib/finance-api";
 import { useAuth } from "@/providers/auth-provider";
@@ -43,6 +43,7 @@ import {
 import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -71,11 +72,17 @@ export default function InvoicesPage() {
         })
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await mutate();
     setTimeout(() => setIsRefreshing(false), 500);
-  };
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: handleRefresh,
+    isRefreshing,
+    enabled: Boolean(user),
+  });
 
   const handleApprove = async (id: string) => {
     try {

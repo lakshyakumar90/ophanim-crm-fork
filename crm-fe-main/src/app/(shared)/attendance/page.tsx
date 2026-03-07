@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useMemo, useEffect, Fragment } from "react";
+import { useState, useMemo, useEffect, Fragment, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { attendanceApi } from "@/lib/api";
@@ -87,6 +87,7 @@ import {
   parseStoredIST,
   formatHoursToReadable,
 } from "@/lib/date-utils";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 type DateRangeType =
   | "today"
@@ -331,6 +332,31 @@ export default function AttendancePage() {
       attendanceApi
         .getUsersToday(startDate, currentDepartment?.id),
   );
+
+  const refreshAttendanceData = useCallback(async () => {
+    const refreshers: Promise<unknown>[] = [
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-weekly"),
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-today"),
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-summary"),
+      mutate((key) => Array.isArray(key) && key[0] === "attendance-rule"),
+      mutate((key) => Array.isArray(key) && key[0] === "my-history"),
+      mutate((key) => Array.isArray(key) && key[0] === "my-month-summary"),
+      mutate((key) => Array.isArray(key) && key[0] === "holidays-current-year"),
+    ];
+
+    if (isAdmin) {
+      refreshers.push(
+        mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics"),
+        mutate((key) => Array.isArray(key) && key[0] === "attendance-users"),
+      );
+    }
+
+    await Promise.all(refreshers);
+  }, [isAdmin]);
+
+  useHeaderRefresh({
+    onRefresh: refreshAttendanceData,
+  });
 
   useEffect(() => {
     if (todayData?.clockInTime && !todayData.clockOutTime) {
@@ -1752,5 +1778,4 @@ export default function AttendancePage() {
     </div>
   );
 }
-
 

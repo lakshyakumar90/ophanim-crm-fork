@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { emailRequestsApi, type EmailRequest } from "@/lib/finance-api";
@@ -12,6 +13,7 @@ import { Mail, ArrowLeft, Check, X, Send, Clock } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -38,6 +40,15 @@ export default function EmailRequestDetailPage() {
     user && emailId ? ["email-request", emailId] : null,
     () => emailRequestsApi.get(emailId),
   );
+
+  const refreshEmailRequest = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: refreshEmailRequest,
+    enabled: Boolean(user && emailId),
+  });
 
   const handleApprove = async () => {
     try {

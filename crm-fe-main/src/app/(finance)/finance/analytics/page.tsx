@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import useSWR from "swr";
 import { financeAnalyticsApi } from "@/lib/finance-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,7 @@ import {
   Bar,
   Legend,
 } from "recharts";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const COLORS = [
   "#10b981",
@@ -79,11 +80,17 @@ export default function FinanceAnalyticsPage() {
     () => financeAnalyticsApi.get(),
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await mutate();
     setTimeout(() => setIsRefreshing(false), 500);
-  };
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: handleRefresh,
+    isRefreshing,
+    enabled: Boolean(user && user.role !== "employee"),
+  });
 
   if (!user || user.role === "employee") {
     return null;

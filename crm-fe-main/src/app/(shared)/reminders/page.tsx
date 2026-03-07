@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 import { format } from "date-fns";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { leadsApi, usersApi } from "@/lib/api";
@@ -49,6 +49,7 @@ import {
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function RemindersPage() {
   const { user } = useAuth();
@@ -89,6 +90,17 @@ export default function RemindersPage() {
         status: filterStatus,
       }),
   );
+
+  const refreshRemindersData = useCallback(async () => {
+    await Promise.all([
+      mutate(),
+      globalMutate((key) => Array.isArray(key) && key[0] === "users-list"),
+    ]);
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: refreshRemindersData,
+  });
 
   const reminders = remindersData?.data || [];
   const meta = remindersData?.meta;

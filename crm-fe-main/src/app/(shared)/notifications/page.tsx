@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { toLocaleStringIST } from "@/lib/date-utils";
 import { useAuth } from "@/providers/auth-provider";
 import { usePollingCoordinator } from "@/lib/polling-coordinator";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 interface Notification {
   id: string;
@@ -42,6 +43,14 @@ export default function NotificationsPage() {
   );
 
   const notifications: Notification[] = data?.data || data || [];
+
+  useHeaderRefresh({
+    onRefresh: () =>
+      Promise.all([
+        mutate("notifications"),
+        mutate("notifications-unread-count"),
+      ]).then(() => undefined),
+  });
 
   const handleMarkAsRead = async (id: string) => {
     try {

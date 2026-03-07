@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { paymentsApi } from "@/lib/finance-api";
 import { useAuth } from "@/providers/auth-provider";
@@ -26,6 +26,7 @@ import {
 import { CircleDollarSign, Search, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const STATUS_COLORS: Record<string, string> = {
   success:
@@ -58,11 +59,17 @@ export default function PaymentsPage() {
         })
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await mutate();
     setTimeout(() => setIsRefreshing(false), 500);
-  };
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: handleRefresh,
+    isRefreshing,
+    enabled: Boolean(user),
+  });
 
   const payments = data?.data || [];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import useSWR from "swr";
 import {
   expensesApi,
@@ -46,6 +46,7 @@ import {
 import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
@@ -71,11 +72,17 @@ export default function ExpensesPage() {
         })
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await mutate();
     setTimeout(() => setIsRefreshing(false), 500);
-  };
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: handleRefresh,
+    isRefreshing,
+    enabled: Boolean(user),
+  });
 
   const handleApprove = async (id: string) => {
     try {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { leadsApi, usersApi } from "@/lib/api";
@@ -78,6 +78,7 @@ import {
   LeadReminderWidget,
   SetReminderButton,
 } from "@/components/leads/lead-reminder-widget";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 import { cn } from "@/lib/utils";
 
 const activityTypeIcons: Record<
@@ -182,6 +183,20 @@ export default function LeadDetailPage() {
       usersApi
         .list({ limit: 100, departmentSlug: "sales" }),
   );
+
+  const refreshLeadData = useCallback(async () => {
+    await Promise.all([
+      mutateLead(),
+      mutateActivities(),
+      mutateComments(),
+      mutateReminders(),
+    ]);
+  }, [mutateActivities, mutateComments, mutateLead, mutateReminders]);
+
+  useHeaderRefresh({
+    onRefresh: refreshLeadData,
+    enabled: Boolean(id),
+  });
 
   // Handle the nested data structure properly - filter to active sales employees
   const allUsers = usersData?.data || [];

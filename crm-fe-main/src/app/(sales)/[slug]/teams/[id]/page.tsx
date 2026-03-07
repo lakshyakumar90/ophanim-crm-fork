@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { teamsApi } from "@/lib/api";
@@ -27,10 +28,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useState } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TeamDiscussion } from "@/app/(shared)/components/TeamDiscussion";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function TeamDetailPage() {
   const { id, slug } = useParams();
@@ -53,6 +54,15 @@ export default function TeamDetailPage() {
     id ? `team-members-${id}` : null,
     () => teamsApi.getMembers(id as string),
   );
+
+  const refreshTeamData = useCallback(async () => {
+    await Promise.all([mutate(`team-${id}`), mutate(`team-members-${id}`)]);
+  }, [id]);
+
+  useHeaderRefresh({
+    onRefresh: refreshTeamData,
+    enabled: Boolean(id),
+  });
 
   const team = teamData;
   const members = membersData || [];

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import useSWR from "swr";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import useSWR, { mutate as globalMutate } from "swr";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { leadsApi, usersApi, teamsApi } from "@/lib/api";
@@ -80,6 +80,7 @@ import {
   DropResult,
 } from "@hello-pangea/dnd";
 import { toast } from "sonner";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const ALL_COLUMNS = [
   { key: "leadName", label: "Lead Name" },
@@ -415,6 +416,39 @@ export default function LeadsPage() {
       return loaded.filter(Boolean) as Lead[];
     },
   );
+
+  const refreshLeadsData = useCallback(async () => {
+    const refreshers: Promise<unknown>[] = [
+      globalMutate("users-list"),
+      globalMutate("leads-user-stats"),
+      globalMutate("teams-list"),
+      globalMutate(["pending-reminders"]),
+    ];
+
+    if (isKanbanView) {
+      refreshers.push(kanbanMutate());
+    } else {
+      refreshers.push(tableMutate());
+    }
+
+    if (reminderLeadFetchIds.length > 0 && (!isKanbanView || kanbanTeamId === "all")) {
+      refreshers.push(
+        globalMutate((key) => Array.isArray(key) && key[0] === "reminder-leads"),
+      );
+    }
+
+    await Promise.all(refreshers);
+  }, [
+    isKanbanView,
+    kanbanMutate,
+    kanbanTeamId,
+    reminderLeadFetchIds.length,
+    tableMutate,
+  ]);
+
+  useHeaderRefresh({
+    onRefresh: refreshLeadsData,
+  });
 
   const tableLeads = useMemo(() => {
     if (isKanbanView) return leads;

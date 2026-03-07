@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import useSWR from "swr";
+import { useState, useMemo, useCallback } from "react";
+import useSWR, { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { emailApi, leadsApi } from "@/lib/api";
@@ -30,6 +30,7 @@ import {
   Search,
 } from "lucide-react";
 import Link from "next/link";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function EmailComposePage() {
   const router = useRouter();
@@ -50,6 +51,14 @@ export default function EmailComposePage() {
     "leads-for-email",
     () => leadsApi.list({ limit: 500 }),
   );
+
+  const refreshEmailData = useCallback(async () => {
+    await Promise.all([mutate("email-info"), mutate("leads-for-email")]);
+  }, []);
+
+  useHeaderRefresh({
+    onRefresh: refreshEmailData,
+  });
 
   const leads = leadsData?.data || [];
   const isConfigured = emailInfo?.isConfigured;

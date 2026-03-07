@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { useRouter, useParams } from "next/navigation";
 import { teamsApi } from "@/lib/api";
@@ -34,6 +34,7 @@ import type { Team } from "@/types";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { useDepartment } from "@/providers/department-context";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function TeamsPage() {
   const router = useRouter();
@@ -50,6 +51,14 @@ export default function TeamsPage() {
   } = useSWR("teams", () =>
     teamsApi.list(),
   );
+
+  const refreshTeamsData = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: refreshTeamsData,
+  });
 
   const allTeams: Team[] = (data || []) as Team[];
 

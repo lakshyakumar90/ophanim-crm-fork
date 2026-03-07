@@ -1,7 +1,8 @@
 "use client";
 
+import { useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { usersApi, activitiesApi } from "@/lib/api";
 import { useIsAdmin } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import {
   Activity,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function UserDetailPage() {
   const params = useParams();
@@ -41,6 +43,18 @@ export default function UserDetailPage() {
     () =>
       activitiesApi.list({ userId, limit: 50 }).then((res) => res?.data || []),
   );
+
+  const refreshUserData = useCallback(async () => {
+    await Promise.all([
+      mutate(["user", userId]),
+      mutate(["user-activities", userId]),
+    ]);
+  }, [userId]);
+
+  useHeaderRefresh({
+    onRefresh: refreshUserData,
+    enabled: isAdmin,
+  });
 
   if (!isAdmin) {
     router.push("/");

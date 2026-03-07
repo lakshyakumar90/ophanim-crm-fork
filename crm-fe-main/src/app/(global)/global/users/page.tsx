@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { usersApi } from "@/lib/api";
@@ -44,6 +44,7 @@ import {
   Filter,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 // Job title options for filter - all job titles combined
 const JOB_TITLES = [
@@ -92,6 +93,15 @@ export default function UsersPage() {
               : undefined,
         })
   );
+
+  const refreshUsersData = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: refreshUsersData,
+    enabled: isAdmin,
+  });
 
   const users = data?.data || [];
   const meta = data?.meta || { total: 0, pages: 1 };

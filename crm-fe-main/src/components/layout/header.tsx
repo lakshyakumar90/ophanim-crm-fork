@@ -22,11 +22,17 @@ import { useTheme } from "next-themes";
 import { DepartmentSwitcher } from "@/components/layout/department-switcher";
 import { GlobalSearch } from "@/components/search/global-search";
 import { usePollingCoordinator } from "@/lib/polling-coordinator";
+import { useHeaderRefreshController } from "@/providers/header-refresh-provider";
 
 export function Header() {
   const router = useRouter();
   const { user, logout, refreshUser } = useAuth();
   const { theme, setTheme } = useTheme();
+  const {
+    enabled: isPageRefreshEnabled,
+    isRefreshing: isPageRefreshing,
+    triggerRefresh,
+  } = useHeaderRefreshController();
   const { isLeader: isPollingLeader, publish } = usePollingCoordinator(
     (payload) => {
       if (typeof payload.unreadCount === "number") {
@@ -82,6 +88,19 @@ export function Header() {
 
   const unreadCount = unreadData?.count || 0;
 
+  const handleRefresh = async () => {
+    if (!isPageRefreshEnabled || isPageRefreshing) {
+      return;
+    }
+
+    try {
+      await triggerRefresh();
+      await mutateUnreadCount();
+    } catch (error) {
+      console.error("Failed to refresh page data", error);
+    }
+  };
+
   useEffect(() => {
     if (!user || !isPollingLeader) return;
     publish({ unreadCount });
@@ -123,15 +142,18 @@ export function Header() {
       <div className="flex items-center gap-2">
         <DepartmentSwitcher />
 
-        {/* Refresh Notifications */}
+        {/* Refresh Page Data */}
         <Button
           variant="ghost"
           size="icon"
           className="text-muted-foreground hover:bg-accent mr-1"
-          onClick={() => mutateUnreadCount()}
-          title="Refresh Notifications"
+          onClick={handleRefresh}
+          title={
+            isPageRefreshEnabled ? "Refresh current page data" : "No page data to refresh"
+          }
+          disabled={!isPageRefreshEnabled || isPageRefreshing}
         >
-          <RefreshCw className="h-4 w-4" />
+          <RefreshCw className={`h-4 w-4 ${isPageRefreshing ? "animate-spin" : ""}`} />
         </Button>
 
         {/* Notifications */}

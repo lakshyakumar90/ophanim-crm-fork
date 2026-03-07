@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import useSWR, { mutate } from "swr";
 import { attendanceApi } from "@/lib/api";
 import { toast } from "sonner";
@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/table";
 import { CalendarDays, Plus, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const currentYear = new Date().getFullYear();
 const yearOptions = [currentYear - 1, currentYear, currentYear + 1];
@@ -73,6 +74,14 @@ export default function HRHolidaysPage() {
     ["hr-holidays", year],
     () => attendanceApi.getHolidays(year),
   );
+
+  const refreshHolidays = useCallback(async () => {
+    await mutate(["hr-holidays", year]);
+  }, [year]);
+
+  useHeaderRefresh({
+    onRefresh: refreshHolidays,
+  });
 
   const holidayList: any[] = Array.isArray(holidays) ? holidays : [];
 

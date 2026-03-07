@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -51,6 +51,7 @@ import {
 import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -86,6 +87,15 @@ export default function InvoiceDetailPage() {
   } = useSWR<Invoice>(user && invoiceId ? ["invoice", invoiceId] : null, () =>
     invoicesApi.get(invoiceId),
   );
+
+  const refreshInvoiceData = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: refreshInvoiceData,
+    enabled: Boolean(user && invoiceId),
+  });
 
   const handleApprove = async () => {
     try {

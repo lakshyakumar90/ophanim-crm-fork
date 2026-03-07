@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useState, useCallback } from "react";
+import useSWR, { mutate as globalMutate } from "swr";
 import { dashboardApi, leadsApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
@@ -33,6 +33,7 @@ import {
   FileText,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -49,11 +50,16 @@ export default function DashboardPage() {
       .list({ limit: 5, sortBy: "updated_at", sortOrder: "desc" }),
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await mutate();
+    await Promise.all([mutate(), globalMutate("recent-leads")]);
     setTimeout(() => setIsRefreshing(false), 500);
-  };
+  }, [mutate]);
+
+  useHeaderRefresh({
+    onRefresh: handleRefresh,
+    isRefreshing,
+  });
 
   if (isLoading) {
     return <DashboardSkeleton />;

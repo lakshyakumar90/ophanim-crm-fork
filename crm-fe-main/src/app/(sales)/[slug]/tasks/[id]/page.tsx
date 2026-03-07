@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { tasksApi } from "@/lib/api";
@@ -21,13 +22,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
 import type { Task, TaskComment } from "@/types";
 import {
   toLocaleDateStringIST,
   toLocaleStringIST,
   nowIST,
 } from "@/lib/date-utils";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 const statusColors = {
   todo: "bg-slate-100 text-slate-700",
@@ -59,6 +60,15 @@ export default function TaskDetailPage() {
     id ? `task-comments-${id}` : null,
     () => tasksApi.getComments(id as string),
   );
+
+  const refreshTaskData = useCallback(async () => {
+    await Promise.all([mutate(`task-${id}`), mutate(`task-comments-${id}`)]);
+  }, [id]);
+
+  useHeaderRefresh({
+    onRefresh: refreshTaskData,
+    enabled: Boolean(id),
+  });
 
   const task = taskData as Task;
   const comments = (commentsData || []) as TaskComment[];
