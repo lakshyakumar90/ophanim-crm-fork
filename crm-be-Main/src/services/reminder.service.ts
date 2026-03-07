@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../config/supabase.js";
 import { nowIST, getTimestampIST } from "../utils/date-utils.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * Process lead reminders at multiple stages:
@@ -48,10 +49,7 @@ async function processLeadReminder30Min(
     .lte("reminder_at", windowEnd.toISOString()); // reminder_at <= 35 min from now
 
   if (error) {
-    console.error(
-      "[Reminder Service] Error fetching 30min lead reminders:",
-      error,
-    );
+    logger.error({ error }, "[Reminder Service] Error fetching 30min lead reminders");
     return;
   }
 
@@ -71,10 +69,7 @@ async function processLeadReminder30Min(
       });
 
     if (notifError) {
-      console.error(
-        `[Reminder Service] Failed to create 30min notification:`,
-        notifError.message,
-      );
+      logger.error({ error: notifError }, "[Reminder Service] Failed to create 30min notification");
       continue;
     }
 
@@ -83,7 +78,7 @@ async function processLeadReminder30Min(
       .update({ sent_30min: true })
       .eq("id", reminder.id);
 
-    console.log(`[Reminder Service] Sent 30min reminder for lead: ${leadName}`);
+    logger.info({ leadName }, "[Reminder Service] Sent 30min reminder for lead");
   }
 }
 
@@ -111,10 +106,7 @@ async function processLeadReminder5Min(
     .lte("reminder_at", windowEnd.toISOString()); // reminder_at <= 10 min from now
 
   if (error) {
-    console.error(
-      "[Reminder Service] Error fetching 5min lead reminders:",
-      error,
-    );
+    logger.error({ error }, "[Reminder Service] Error fetching 5min lead reminders");
     return;
   }
 
@@ -134,10 +126,7 @@ async function processLeadReminder5Min(
       });
 
     if (notifError) {
-      console.error(
-        `[Reminder Service] Failed to create 5min notification:`,
-        notifError.message,
-      );
+      logger.error({ error: notifError }, "[Reminder Service] Failed to create 5min notification");
       continue;
     }
 
@@ -146,7 +135,7 @@ async function processLeadReminder5Min(
       .update({ sent_5min: true })
       .eq("id", reminder.id);
 
-    console.log(`[Reminder Service] Sent 5min reminder for lead: ${leadName}`);
+    logger.info({ leadName }, "[Reminder Service] Sent 5min reminder for lead");
   }
 }
 
@@ -164,10 +153,7 @@ async function processLeadReminderAtTime(nowTimestamp: string): Promise<void> {
     .lte("reminder_at", nowTimestamp);
 
   if (error) {
-    console.error(
-      "[Reminder Service] Error fetching at-time lead reminders:",
-      error,
-    );
+    logger.error({ error }, "[Reminder Service] Error fetching at-time lead reminders");
     return;
   }
 
@@ -187,10 +173,7 @@ async function processLeadReminderAtTime(nowTimestamp: string): Promise<void> {
       });
 
     if (notifError) {
-      console.error(
-        `[Reminder Service] Failed to create at-time notification:`,
-        notifError.message,
-      );
+      logger.error({ error: notifError }, "[Reminder Service] Failed to create at-time notification");
       continue;
     }
 
@@ -199,9 +182,7 @@ async function processLeadReminderAtTime(nowTimestamp: string): Promise<void> {
       .update({ sent_at_time: true, is_sent: true })
       .eq("id", reminder.id);
 
-    console.log(
-      `[Reminder Service] Sent at-time reminder for lead: ${leadName}`,
-    );
+    logger.info({ leadName }, "[Reminder Service] Sent at-time reminder for lead");
   }
 }
 
@@ -222,10 +203,7 @@ async function processLeadReminderOverdue(now: Date): Promise<void> {
     .lte("reminder_at", fiveMinutesAgo);
 
   if (error) {
-    console.error(
-      "[Reminder Service] Error fetching overdue lead reminders:",
-      error,
-    );
+    logger.error({ error }, "[Reminder Service] Error fetching overdue lead reminders");
     return;
   }
 
@@ -245,10 +223,7 @@ async function processLeadReminderOverdue(now: Date): Promise<void> {
       });
 
     if (notifError) {
-      console.error(
-        `[Reminder Service] Failed to create overdue notification:`,
-        notifError.message,
-      );
+      logger.error({ error: notifError }, "[Reminder Service] Failed to create overdue notification");
       continue;
     }
 
@@ -257,9 +232,7 @@ async function processLeadReminderOverdue(now: Date): Promise<void> {
       .update({ sent_overdue: true })
       .eq("id", reminder.id);
 
-    console.log(
-      `[Reminder Service] Sent overdue reminder for lead: ${leadName}`,
-    );
+    logger.info({ leadName }, "[Reminder Service] Sent overdue reminder for lead");
   }
 }
 
@@ -304,7 +277,7 @@ async function processTaskReminder30Min(
     .gt("due_date", nowTimestamp);
 
   if (error) {
-    console.error("[Reminder Service] Error fetching 30min tasks:", error);
+    logger.error({ error }, "[Reminder Service] Error fetching 30min tasks");
     return;
   }
 
@@ -322,10 +295,7 @@ async function processTaskReminder30Min(
       });
 
     if (notifError) {
-      console.error(
-        `[Reminder Service] Failed to create 30min task notification:`,
-        notifError.message,
-      );
+      logger.error({ error: notifError }, "[Reminder Service] Failed to create 30min task notification");
       continue;
     }
 
@@ -334,9 +304,7 @@ async function processTaskReminder30Min(
       .update({ reminder_sent_30min: true })
       .eq("id", task.id);
 
-    console.log(
-      `[Reminder Service] Sent 30min reminder for task: ${task.title}`,
-    );
+    logger.info({ taskTitle: task.title }, "[Reminder Service] Sent 30min reminder for task");
   }
 }
 
@@ -361,7 +329,7 @@ async function processTaskReminder5Min(
     .gt("due_date", nowTimestamp);
 
   if (error) {
-    console.error("[Reminder Service] Error fetching 5min tasks:", error);
+    logger.error({ error }, "[Reminder Service] Error fetching 5min tasks");
     return;
   }
 
@@ -379,10 +347,7 @@ async function processTaskReminder5Min(
       });
 
     if (notifError) {
-      console.error(
-        `[Reminder Service] Failed to create 5min task notification:`,
-        notifError.message,
-      );
+      logger.error({ error: notifError }, "[Reminder Service] Failed to create 5min task notification");
       continue;
     }
 
@@ -391,9 +356,7 @@ async function processTaskReminder5Min(
       .update({ reminder_sent_5min: true })
       .eq("id", task.id);
 
-    console.log(
-      `[Reminder Service] Sent 5min reminder for task: ${task.title}`,
-    );
+    logger.info({ taskTitle: task.title }, "[Reminder Service] Sent 5min reminder for task");
   }
 }
 
@@ -412,7 +375,7 @@ async function processTaskReminderAtTime(nowTimestamp: string): Promise<void> {
     .lte("due_date", nowTimestamp);
 
   if (error) {
-    console.error("[Reminder Service] Error fetching at-time tasks:", error);
+    logger.error({ error }, "[Reminder Service] Error fetching at-time tasks");
     return;
   }
 
@@ -430,10 +393,7 @@ async function processTaskReminderAtTime(nowTimestamp: string): Promise<void> {
       });
 
     if (notifError) {
-      console.error(
-        `[Reminder Service] Failed to create at-time task notification:`,
-        notifError.message,
-      );
+      logger.error({ error: notifError }, "[Reminder Service] Failed to create at-time task notification");
       continue;
     }
 
@@ -442,9 +402,7 @@ async function processTaskReminderAtTime(nowTimestamp: string): Promise<void> {
       .update({ reminder_sent_at_time: true, reminder_sent: true })
       .eq("id", task.id);
 
-    console.log(
-      `[Reminder Service] Sent at-time reminder for task: ${task.title}`,
-    );
+    logger.info({ taskTitle: task.title }, "[Reminder Service] Sent at-time reminder for task");
   }
 }
 
@@ -466,7 +424,7 @@ async function processTaskReminderOverdue(now: Date): Promise<void> {
     .lte("due_date", fiveMinutesAgo);
 
   if (error) {
-    console.error("[Reminder Service] Error fetching overdue tasks:", error);
+    logger.error({ error }, "[Reminder Service] Error fetching overdue tasks");
     return;
   }
 
@@ -484,10 +442,7 @@ async function processTaskReminderOverdue(now: Date): Promise<void> {
       });
 
     if (notifError) {
-      console.error(
-        `[Reminder Service] Failed to create overdue task notification:`,
-        notifError.message,
-      );
+      logger.error({ error: notifError }, "[Reminder Service] Failed to create overdue task notification");
       continue;
     }
 
@@ -496,9 +451,7 @@ async function processTaskReminderOverdue(now: Date): Promise<void> {
       .update({ reminder_sent_overdue: true })
       .eq("id", task.id);
 
-    console.log(
-      `[Reminder Service] Sent overdue reminder for task: ${task.title}`,
-    );
+    logger.info({ taskTitle: task.title }, "[Reminder Service] Sent overdue reminder for task");
   }
 }
 
@@ -507,7 +460,7 @@ async function processTaskReminderOverdue(now: Date): Promise<void> {
  * On Vercel, this is handled by cron jobs instead
  */
 export function startReminderService(): void {
-  console.log("[Reminder Service] Starting reminder service...");
+  logger.info("[Reminder Service] Starting reminder service...");
 
   // Run immediately on startup
   processTaskReminders();
@@ -522,5 +475,5 @@ export function startReminderService(): void {
     5 * 60 * 1000,
   );
 
-  console.log("[Reminder Service] Reminder service started (runs every 5 min)");
+  logger.info("[Reminder Service] Reminder service started (runs every 5 min)");
 }
