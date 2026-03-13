@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../config/supabase.js";
 import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
+import { logActivity } from "./activity-events.service.js";
 import { USER_ROLES } from "../config/constants.js";
 import {
   parsePaginationParams,
@@ -326,6 +327,20 @@ export async function createTask(
     created_at: getTimestampIST(),
   });
 
+  await logActivity({
+    actorId: createdBy,
+    entityType: "task",
+    entityId: data.id,
+    entityName: input.title,
+    eventType: "task_created",
+    source: "task",
+    metadata: {
+      priority: input.priority || "medium",
+      status: input.status || "todo",
+      assigned_to: assignedTo,
+    },
+  });
+
   return mapTaskRowToRecord(data as unknown as TaskRow);
 }
 
@@ -429,6 +444,19 @@ export async function updateTask(
     created_at: getTimestampIST(),
   });
 
+  await logActivity({
+    actorId: updatedBy,
+    entityType: "task",
+    entityId: taskId,
+    entityName: data.title,
+    eventType: action === "complete" ? "task_completed" : action === "status_change" ? "task_status_changed" : "task_updated",
+    source: "task",
+    metadata: {
+      from_status: currentTask.status,
+      to_status: data.status,
+    },
+  });
+
   return mapTaskRowToRecord(data as unknown as TaskRow);
 }
 
@@ -490,6 +518,19 @@ export async function reassignTask(
     created_at: getTimestampIST(),
   });
 
+  await logActivity({
+    actorId: reassignedBy,
+    entityType: "task",
+    entityId: taskId,
+    entityName: currentTask.title,
+    eventType: "task_reassigned",
+    source: "task",
+    metadata: {
+      from_user: currentTask.assignedTo,
+      to_user: input.assignTo,
+    },
+  });
+
   return mapTaskRowToRecord(data as unknown as TaskRow);
 }
 
@@ -518,6 +559,14 @@ export async function deleteTask(
     title: "Task deleted",
     description: "Task deleted",
     created_at: getTimestampIST(),
+  });
+
+  await logActivity({
+    actorId: deletedBy,
+    entityType: "task",
+    entityId: taskId,
+    eventType: "task_deleted",
+    source: "task",
   });
 }
 
@@ -554,18 +603,55 @@ export async function addTaskComment(
   userId: string,
 ): Promise<void> {
   // Verify task exists
-  await getTaskById(taskId);
+  const task = await getTaskById(taskId);
 
-  const { error } = await supabaseAdmin.from("comments").insert({
-    entity_type: "task",
-    entity_id: taskId,
-    user_id: userId,
-    content: input.commentText,
-  });
+  const { data: commentData, error } = await supabaseAdmin
+    .from("comments")
+    .insert({
+      entity_type: "task",
+      entity_id: taskId,
+      user_id: userId,
+      content: input.commentText,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
+
+  const commentPreview =
+    input.commentText.length > 120
+      ? `${input.commentText.slice(0, 117).trimEnd()}...`
+      : input.commentText;
+
+  await supabaseAdmin.from("user_activities").insert({
+    user_id: userId,
+    entity_type: "task",
+    entity_id: taskId,
+    activity_type: "comment",
+    title: "Task comment added",
+    description: `Commented on task: ${task.title}`,
+    metadata: {
+      comment_id: commentData.id,
+      comment_preview: commentPreview,
+      commented_on: task.title,
+    },
+    created_at: getTimestampIST(),
+  });
+
+  await logActivity({
+    actorId: userId,
+    entityType: "task",
+    entityId: taskId,
+    entityName: task.title,
+    eventType: "comment_added",
+    source: "task",
+    metadata: {
+      comment_id: commentData.id,
+      comment_preview: commentPreview,
+    },
+  });
 }
 
 /**

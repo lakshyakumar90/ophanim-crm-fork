@@ -375,7 +375,7 @@ export const leadsApi = {
   bulkUpdate: (ids: string[], data: Record<string, unknown>) =>
     api.post("/leads/bulk-update", { ids, data }),
   bulkDelete: (leadIds: string[]) =>
-    api.post("/leads/bulk-delete", { leadIds }),
+    api.post("/leads/bulk-delete", { ids: leadIds }),
   getActivities: async (id: string) => {
     try {
       return await sq.getLeadActivities(id);
@@ -413,25 +413,9 @@ export const leadsApi = {
     status?: "pending" | "sent" | "all";
     date?: string;
   }) => {
+    // Always use the backend API first — it enforces role-based access control.
+    // The Supabase client query has no user filter and would expose all users' reminders.
     try {
-      const sqRes = await sq.getAllReminders(params);
-      const rows = sqRes?.data || [];
-      const hasMissingLeadInfo = rows.some((r: any) => {
-        const leadId = r?.leadId || r?.lead_id;
-        const leadName =
-          r?.lead?.leadName ||
-          r?.lead?.lead_name ||
-          r?.leads?.leadName ||
-          r?.leads?.lead_name;
-        return Boolean(leadId) && !leadName;
-      });
-
-      if (!hasMissingLeadInfo) {
-        return sqRes;
-      }
-
-      // Supabase can return reminders without joined lead details under some role policies.
-      // Fall back to backend (service role) to resolve lead names consistently.
       const res = await api.get("/leads/reminders/all", { params });
       const payload = unwrap(res);
       if (Array.isArray(payload)) {
@@ -452,40 +436,10 @@ export const leadsApi = {
       if (payload && Array.isArray(payload.data)) {
         return payload;
       }
-      return sqRes;
+      return { data: [], meta: { total: 0, page: params?.page || 1, limit: params?.limit || 20, totalPages: 0 } };
     } catch (error) {
-      console.error("Supabase reminders read failed, falling back to API", error);
-      const res = await api.get("/leads/reminders/all", { params });
-      const payload = unwrap(res);
-      if (Array.isArray(payload)) {
-        const page = params?.page || 1;
-        const limit = params?.limit || payload.length || 1;
-        return {
-          data: payload,
-          meta: {
-            total: payload.length,
-            page,
-            limit,
-            totalPages: Math.max(1, Math.ceil(payload.length / limit)),
-            hasPrevPage: page > 1,
-            hasNextPage: page * limit < payload.length,
-          },
-        };
-      }
-      if (payload && Array.isArray(payload.data)) {
-        return payload;
-      }
-      return {
-        data: [],
-        meta: {
-          total: 0,
-          page: params?.page || 1,
-          limit: params?.limit || 20,
-          totalPages: 0,
-          hasPrevPage: false,
-          hasNextPage: false,
-        },
-      };
+      console.error("Backend reminders fetch failed", error);
+      return { data: [], meta: { total: 0, page: params?.page || 1, limit: params?.limit || 20, totalPages: 0 } };
     }
   },
   getRemindersCount: async (params?: {
@@ -494,36 +448,20 @@ export const leadsApi = {
     date?: string;
   }) => {
     try {
-      return await sq.getRemindersCount(params);
-    } catch (error) {
-      console.error(
-        "Supabase reminders count read failed, falling back to API",
-        error,
-      );
       const res = await api.get("/leads/reminders/count", { params });
       return unwrap(res);
+    } catch (error) {
+      console.error("Backend reminders count failed", error);
+      return { count: 0 };
     }
   },
   getReminders: async (id: string) => {
     try {
-      const sqRes = await sq.getLeadReminders(id);
-      const hasMissingLeadInfo = (sqRes || []).some((r: any) => {
-        const leadId = r?.leadId || r?.lead_id;
-        const leadName =
-          r?.lead?.leadName ||
-          r?.lead?.lead_name ||
-          r?.leads?.leadName ||
-          r?.leads?.lead_name;
-        return Boolean(leadId) && !leadName;
-      });
-      if (!hasMissingLeadInfo) return sqRes;
-
       const res = await api.get(`/leads/${id}/reminders`);
       return unwrap(res);
     } catch (error) {
-      console.error("Supabase lead reminders read failed, falling back to API", error);
-      const res = await api.get(`/leads/${id}/reminders`);
-      return unwrap(res);
+      console.error("Backend lead reminders fetch failed, falling back to Supabase", error);
+      return await sq.getLeadReminders(id);
     }
   },
   createReminder: (id: string, reminderAt: string, note?: string) =>
@@ -831,10 +769,17 @@ export const dashboardApi = {
 
 export const csvApi = {
   getTemplate: () => api.get("/csv/leads/template", { responseType: "blob" }),
-  importLeads: (csvData: string, assignTo?: string, status?: string) =>
-    api.post("/csv/leads/import", { csvData, assignTo, status }),
+  importLeads: (
+    csvData: string,
+    assignTo?: string,
+    status?: string,
+    rowActions?: Record<number, "import" | "skip" | "update">,
+  ) => api.post("/csv/leads/import", { csvData, assignTo, status, rowActions }),
+  previewCheck: (csvData: string) =>
+    api.post("/csv/leads/preview-check", { csvData }),
   exportLeads: (params?: Record<string, unknown>) =>
     api.get("/csv/leads/export", { params, responseType: "blob" }),
+  getDuplicateLeads: () => api.get("/csv/leads/duplicates"),
 };
 
 // =====================================================
@@ -853,14 +798,27 @@ export const activitiesApi = {
     endDate?: string;
     departmentId?: string;
     includeAuth?: boolean;
+    scope?: "self" | "team" | "department" | "all-crm" | "member";
+    commentsOnly?: boolean;
+    /** Opt-in to cursor-based pagination from the activity_events table */
+    useEventsFeed?: boolean;
+    /** Cursor from previous page's meta.nextCursor.createdAt */
+    cursorTime?: string;
+    /** Cursor from previous page's meta.nextCursor.id */
+    cursorId?: string;
   }) => {
-    try {
-      return await sq.getActivityLogs(params);
-    } catch (error) {
-      console.error("Supabase activities read failed, falling back to API", error);
-      const res = await api.get("/activities", { params });
-      return unwrap(res);
+    const { useEventsFeed, cursorTime, cursorId, ...rest } = params ?? {};
+    const queryParams: Record<string, unknown> = { ...rest };
+    if (useEventsFeed) {
+      queryParams.use_events_feed = "true";
+      if (cursorTime) queryParams.cursor_time = cursorTime;
+      if (cursorId) queryParams.cursor_id = cursorId;
     }
+    const res = await api.get("/activities", { params: queryParams });
+    return {
+      data: res.data.data,
+      meta: res.data.meta,
+    };
   },
   getLeadActivities: async (params?: {
     page?: number;
@@ -879,6 +837,12 @@ export const activitiesApi = {
   getStats: async (params?: {
     departmentId?: string;
     resourceType?: string;
+    teamId?: string;
+    userId?: string;
+    startDate?: string;
+    endDate?: string;
+    scope?: "self" | "team" | "department" | "all-crm" | "member";
+    commentsOnly?: boolean;
   }) => {
     const response = await api.get("/activities/stats", { params });
     return unwrap(response);

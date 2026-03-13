@@ -1,6 +1,6 @@
 import { Router, type Router as RouterType } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
-import { requireManager } from "../middleware/authorization.middleware.js";
+import { requireAdmin, requireManager } from "../middleware/authorization.middleware.js";
 import {
   exportRateLimiter,
   bulkOperationRateLimiter,
@@ -46,7 +46,7 @@ router.post(
   bulkOperationRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
-    const { csvData, assignTo, status } = req.body;
+    const { csvData, assignTo, status, rowActions } = req.body;
 
     if (!csvData) {
       throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "CSV data is required");
@@ -58,9 +58,49 @@ router.post(
       assignTo,
       authReq.user.departmentId,
       status,
+      rowActions,
     );
 
     sendCreated(res, result);
+  }),
+);
+
+/**
+ * POST /csv/leads/preview-check
+ * Parse CSV and return duplicate check results (no import happens)
+ */
+router.post(
+  "/leads/preview-check",
+  requireManager as any,
+  bulkOperationRateLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const { csvData } = req.body;
+
+    if (!csvData) {
+      throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "CSV data is required");
+    }
+
+    const result = await csvService.checkDuplicates(
+      csvData,
+      authReq.user.departmentId,
+    );
+
+    sendSuccess(res, result);
+  }),
+);
+
+/**
+ * GET /csv/leads/duplicates
+ * Admin-only: get all leads that share email or phone with another lead
+ */
+router.get(
+  "/leads/duplicates",
+  requireAdmin as any,
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const result = await csvService.getDuplicateLeads(authReq.user);
+    sendSuccess(res, result);
   }),
 );
 

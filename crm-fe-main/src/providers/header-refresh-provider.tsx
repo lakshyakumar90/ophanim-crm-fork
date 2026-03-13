@@ -72,11 +72,22 @@ export function HeaderRefreshProvider({ children }: { children: ReactNode }) {
         return current;
       }
 
+      const newEnabled = options?.enabled ?? true;
+      const newIsRefreshing = options?.isRefreshing;
+
+      if (
+        current.refresh === refresh &&
+        current.enabled === newEnabled &&
+        current.isRefreshing === newIsRefreshing
+      ) {
+        return current;
+      }
+
       return {
         id,
         refresh,
-        enabled: options?.enabled ?? true,
-        isRefreshing: options?.isRefreshing,
+        enabled: newEnabled,
+        isRefreshing: newIsRefreshing,
       };
     });
   }, []);
@@ -159,23 +170,33 @@ export function useHeaderRefresh(options: {
   const registrationIdRef = useRef<symbol | null>(null);
   const { enabled = true, isRefreshing, onRefresh } = options;
 
+  // Keep the latest onRefresh in a ref so its identity change doesn't
+  // need to be a useEffect dependency (avoids infinite re-render loops
+  // when callers pass an inline or useCallback-derived function that
+  // recreates every render due to unstable deps like array keys).
+  const onRefreshRef = useRef<RefreshHandler>(onRefresh);
+  onRefreshRef.current = onRefresh;
+
+  // Stable wrapper — never changes identity, always delegates to the ref.
+  const stableRefresh = useCallback<RefreshHandler>(() => onRefreshRef.current(), []);
+
   useEffect(() => {
     if (!registrationIdRef.current) {
-      registrationIdRef.current = registerRefreshHandler(onRefresh, {
+      registrationIdRef.current = registerRefreshHandler(stableRefresh, {
         enabled,
         isRefreshing,
       });
       return;
     }
 
-    updateRefreshHandler(registrationIdRef.current, onRefresh, {
+    updateRefreshHandler(registrationIdRef.current, stableRefresh, {
       enabled,
       isRefreshing,
     });
   }, [
     enabled,
     isRefreshing,
-    onRefresh,
+    stableRefresh,
     registerRefreshHandler,
     updateRefreshHandler,
   ]);

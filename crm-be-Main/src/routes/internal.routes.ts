@@ -5,6 +5,7 @@ import { getTimestampIST } from "../utils/date-utils.js";
 import { getCurrentTimestamp } from "../utils/helpers.js";
 import { logger } from "../utils/logger.js";
 import { internalRouteRateLimiter } from "../middleware/rate-limiter.middleware.js";
+import { logActivity } from "../services/activity-events.service.js";
 
 const router: Router = Router();
 router.use(internalRouteRateLimiter);
@@ -147,6 +148,18 @@ router.post("/auto-logout", async (req: Request, res: Response) => {
             auto_logged_out: true,
           },
           created_at: nowISO,
+        });
+
+        await logActivity({
+          actorId: record.user_id,
+          entityType: "attendance",
+          entityId: record.id,
+          eventType: "auto_clock_out",
+          source: "attendance",
+          metadata: {
+            clock_out_time: clockOutTime,
+            total_hours: totalHours,
+          },
         });
 
         successCount++;

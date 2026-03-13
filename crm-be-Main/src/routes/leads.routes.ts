@@ -26,6 +26,7 @@ import {
   createCommentSchema,
   updateCommentSchema,
   createLeadReminderSchema,
+  leadCommentParamSchema,
 } from "../validators/leads.validator.js";
 import { uuidParamSchema } from "../validators/users.validator.js";
 import * as leadsService from "../services/leads.service.js";
@@ -381,7 +382,7 @@ router.post(
 router.put(
   "/:id/comments/:commentId",
   requireAdmin as any,
-  validateParams(uuidParamSchema),
+  validateParams(leadCommentParamSchema),
   validateBody(updateCommentSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
@@ -401,6 +402,7 @@ router.put(
 router.delete(
   "/:id/comments/:commentId",
   requireAdmin as any,
+  validateParams(leadCommentParamSchema),
   asyncHandler(async (req: Request, res: Response) => {
     await leadsService.deleteLeadComment(req.params["commentId"] as string);
     sendNoContent(res);

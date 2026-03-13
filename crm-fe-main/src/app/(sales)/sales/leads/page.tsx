@@ -124,7 +124,7 @@ const KANBAN_STATUSES: LeadStatus[] = [
 
 export default function LeadsPage() {
   const router = useRouter();
-  const { slug } = useParams();
+  
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const isManager = useIsManager();
@@ -915,7 +915,7 @@ export default function LeadsPage() {
                 Export
               </Button>
               <Button
-                onClick={() => router.push(`/${slug}/leads/new`)}
+                onClick={() => router.push(`/sales/leads/new`)}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -1188,7 +1188,7 @@ export default function LeadsPage() {
                                         <div className="flex items-start gap-2">
                                           <div className="flex-1 min-w-0">
                                             <Link
-                                              href={`/${slug}/leads/${lead.id}`}
+                                              href={`/sales/leads/${lead.id}`}
                                               className="block"
                                               onClick={(e) =>
                                                 e.stopPropagation()
@@ -1403,7 +1403,7 @@ export default function LeadsPage() {
                                 ? "bg-green-200/60 hover:bg-green-200 border-l-2 border-l-green-500"
                                 : ""
                         }`}
-                        onClick={() => router.push(`/${slug}/leads/${lead.id}`)}
+                        onClick={() => router.push(`/sales/leads/${lead.id}`)}
                       >
                         {/* Checkbox cell for Admin */}
                         {isAdmin && (
@@ -1436,7 +1436,7 @@ export default function LeadsPage() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
                                 onClick={() =>
-                                  router.push(`/${slug}/leads/${lead.id}`)
+                                  router.push(`/sales/leads/${lead.id}`)
                                 }
                               >
                                 <Eye className="mr-2 h-4 w-4" />
@@ -1445,7 +1445,7 @@ export default function LeadsPage() {
                               {(isAdmin || lead.assignedTo === user?.id) && (
                                 <DropdownMenuItem
                                   onClick={() =>
-                                    router.push(`/${slug}/leads/${lead.id}/edit`)
+                                    router.push(`/sales/leads/${lead.id}/edit`)
                                   }
                                 >
                                   <Pencil className="mr-2 h-4 w-4" />

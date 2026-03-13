@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../config/supabase.js";
 import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
+import { logActivity } from "./activity-events.service.js";
 import { USER_ROLES, BULK_LIMITS } from "../config/constants.js";
 import {
   parsePaginationParams,
@@ -34,8 +35,18 @@ interface LeadRecord {
   businessName: string | null;
   email: string | null;
   phone: string | null;
+  alternatePhone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
   status: string;
   source: string | null;
+  leadValue: number | null;
+  industry: string | null;
+  designation: string | null;
+  description: string | null;
+  tags: string | null;
   assignedTo: string | null;
   website: string | null;
   country: string | null;
@@ -61,8 +72,18 @@ interface LeadRow {
   business_name: string | null;
   email: string | null;
   phone: string | null;
+  alternate_phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
   status: string;
   source: string | null;
+  lead_value: number | null;
+  industry: string | null;
+  designation: string | null;
+  description: string | null;
+  tags: string | null;
   assigned_to: string | null;
   website: string | null;
   country: string | null;
@@ -70,7 +91,6 @@ interface LeadRow {
   nal_reason: string | null;
   client_response: string | null;
   lead_type: string | null;
-
   created_by: string;
   converted_at: string | null;
   is_deleted: boolean;
@@ -90,8 +110,18 @@ function mapLeadRowToRecord(data: LeadRow): LeadRecord {
     businessName: data.business_name,
     email: data.email,
     phone: data.phone,
+    alternatePhone: data.alternate_phone,
+    address: data.address,
+    city: data.city,
+    state: data.state,
+    pincode: data.pincode,
     status: data.status,
     source: data.source,
+    leadValue: data.lead_value,
+    industry: data.industry,
+    designation: data.designation,
+    description: data.description,
+    tags: data.tags,
     assignedTo: data.assigned_to,
     website: data.website,
     country: data.country,
@@ -400,6 +430,20 @@ export async function updateLead(
       },
       created_at: getTimestampIST(),
     });
+
+    await logActivity({
+      actorId: updatedBy,
+      entityType: "lead",
+      entityId: leadId,
+      entityName: currentLead.leadName,
+      eventType: "status_changed",
+      source: "lead",
+      metadata: {
+        field: "status",
+        old_value: currentLead.status,
+        new_value: input.status,
+      },
+    });
   }
 
   // Build old and new values for only the fields that actually changed
@@ -524,6 +568,21 @@ export async function assignLead(
       changed_at: getTimestampIST(),
     },
     created_at: getTimestampIST(),
+  });
+
+  await logActivity({
+    actorId: assignedBy,
+    entityType: "lead",
+    entityId: leadId,
+    entityName: currentLead.leadName,
+    eventType: "assigned",
+    source: "lead",
+    metadata: {
+      from_user_id: currentLead.assignedTo,
+      from_user_name: previousAssigneeName,
+      to_user_id: input.assignTo,
+      to_user_name: newAssigneeName,
+    },
   });
 
   return mapLeadRowToRecord(data as unknown as LeadRow);
@@ -916,7 +975,7 @@ export async function addLeadActivity(
   input: CreateActivityInput,
   userId: string,
 ): Promise<void> {
-  await getLeadById(leadId);
+  const lead = await getLeadById(leadId);
 
   const { error } = await supabaseAdmin.from("lead_activities").insert({
     lead_id: leadId,
@@ -932,6 +991,19 @@ export async function addLeadActivity(
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
+
+  await logActivity({
+    actorId: userId,
+    entityType: "lead",
+    entityId: leadId,
+    entityName: lead.leadName,
+    eventType: input.activityType,
+    source: "lead",
+    metadata: {
+      title: input.title,
+      description: input.description,
+    },
+  });
 
   // Note: last_contacted_at column was removed in migration 005_strict_schema_cleanup.sql
   // Activity logging is sufficient for tracking contact history
@@ -1173,7 +1245,7 @@ export async function addLeadComment(
   userId: string,
 ): Promise<LeadComment> {
   // First verify the lead exists
-  await getLeadById(leadId);
+  const lead = await getLeadById(leadId);
 
   const { data, error } = await supabaseAdmin
     .from("comments")
@@ -1195,7 +1267,38 @@ export async function addLeadComment(
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  // Comment stored in unified comments table
+  const commentPreview =
+    input.content.length > 120
+      ? `${input.content.slice(0, 117).trimEnd()}...`
+      : input.content;
+
+  await supabaseAdmin.from("user_activities").insert({
+    user_id: userId,
+    entity_type: "lead",
+    entity_id: leadId,
+    activity_type: "comment",
+    title: "Lead comment added",
+    description: `Commented on lead: ${lead.leadName}`,
+    metadata: {
+      comment_id: data.id,
+      comment_preview: commentPreview,
+      commented_on: lead.leadName,
+    },
+    created_at: getTimestampIST(),
+  });
+
+  await logActivity({
+    actorId: userId,
+    entityType: "lead",
+    entityId: leadId,
+    entityName: lead.leadName,
+    eventType: "comment_added",
+    source: "lead",
+    metadata: {
+      comment_id: data.id,
+      comment_preview: commentPreview,
+    },
+  });
 
   return mapCommentRowToRecord(data as CommentRow);
 }
@@ -1428,9 +1531,27 @@ export async function getAllReminders(
       { count: "exact" },
     );
 
-  // Access Control
+  // Access Control:
+  // - Admin: all reminders (or filter by userId param)
+  // - Non-admin: reminders they set OR reminders on leads they own
   if (authUser.role !== "admin") {
-    baseQuery = baseQuery.eq("user_id", authUser.id);
+    // Fetch IDs of leads assigned to this user
+    const { data: ownedLeads } = await supabaseAdmin
+      .from("leads")
+      .select("id")
+      .eq("assigned_to", authUser.id)
+      .eq("is_deleted", false);
+
+    const ownedLeadIds = (ownedLeads || []).map((l: { id: string }) => l.id);
+
+    if (ownedLeadIds.length > 0) {
+      // Show reminders they set OR reminders on their leads
+      baseQuery = baseQuery.or(
+        `user_id.eq.${authUser.id},lead_id.in.(${ownedLeadIds.join(",")})`,
+      );
+    } else {
+      baseQuery = baseQuery.eq("user_id", authUser.id);
+    }
   } else if (query.userId) {
     baseQuery = baseQuery.eq("user_id", query.userId);
   }
@@ -1502,9 +1623,23 @@ export async function getRemindersCount(
     .from("lead_reminders")
     .select("id", { count: "exact", head: true });
 
-  // Access Control
+  // Access Control: mirror getAllReminders - show own reminders + reminders on owned leads
   if (authUser.role !== "admin") {
-    baseQuery = baseQuery.eq("user_id", authUser.id);
+    const { data: ownedLeads } = await supabaseAdmin
+      .from("leads")
+      .select("id")
+      .eq("assigned_to", authUser.id)
+      .eq("is_deleted", false);
+
+    const ownedLeadIds = (ownedLeads || []).map((l: { id: string }) => l.id);
+
+    if (ownedLeadIds.length > 0) {
+      baseQuery = (baseQuery as any).or(
+        `user_id.eq.${authUser.id},lead_id.in.(${ownedLeadIds.join(",")})`,
+      );
+    } else {
+      baseQuery = baseQuery.eq("user_id", authUser.id);
+    }
   } else if (query.userId) {
     baseQuery = baseQuery.eq("user_id", query.userId);
   }

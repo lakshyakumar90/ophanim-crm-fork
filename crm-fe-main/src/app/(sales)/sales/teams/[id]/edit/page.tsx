@@ -39,7 +39,7 @@ const editTeamSchema = z.object({
 type EditTeamFormData = z.infer<typeof editTeamSchema>;
 
 export default function EditTeamPage() {
-  const { id, slug } = useParams();
+  const { id } = useParams();
   const router = useRouter();
   const isAdmin = useIsAdmin();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,7 +47,7 @@ export default function EditTeamPage() {
   // Redirect non-admins
   useEffect(() => {
     if (!isAdmin) {
-      router.replace(`/${slug}/teams`);
+      router.replace(`/sales/teams`);
       toast.error("Only admins can edit teams");
     }
   }, [isAdmin, router]);
@@ -102,7 +102,7 @@ export default function EditTeamPage() {
         managerId: data.managerId || null,
       });
       toast.success("Team updated successfully");
-      router.push(`/${slug}/teams/${id}`);
+      router.push(`/sales/teams/${id}`);
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message || "Failed to update team",
@@ -132,7 +132,7 @@ export default function EditTeamPage() {
         <Button
           variant="outline"
           className="mt-4"
-          onClick={() => router.push(`/${slug}/teams`)}
+          onClick={() => router.push(`/sales/teams`)}
         >
           Back to Teams
         </Button>
@@ -146,7 +146,7 @@ export default function EditTeamPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => router.push(`/${slug}/teams/${id}`)}
+          onClick={() => router.push(`/sales/teams/${id}`)}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -216,7 +216,7 @@ export default function EditTeamPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(`/${slug}/teams/${id}`)}
+                onClick={() => router.push(`/sales/teams/${id}`)}
                 disabled={isSubmitting}
               >
                 Cancel

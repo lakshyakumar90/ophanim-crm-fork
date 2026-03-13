@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import useSWR from "swr";
 import { toast } from "sonner";
 import { Download, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,8 +32,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { csvApi } from "@/lib/api";
+import { csvApi, usersApi } from "@/lib/api";
 import { getAllStatuses } from "@/lib/lead-status-config";
+import { UserSelector } from "@/components/shared/user-selector";
+import { useIsAdmin, useIsManager } from "@/providers/auth-provider";
 
 interface ExportLeadsDialogProps {
   open: boolean;
@@ -47,8 +50,20 @@ export function ExportLeadsDialog({
 }: ExportLeadsDialogProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [exportScope, setExportScope] = useState<"all" | "user">("all");
+  const [assignedTo, setAssignedTo] = useState<string>("");
   const [removeAfterExport, setRemoveAfterExport] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  const isAdmin = useIsAdmin();
+  const isManager = useIsManager();
+  const canFilterByUser = isAdmin || isManager;
+
+  const { data: usersData } = useSWR(
+    canFilterByUser && open ? "users-for-export" : null,
+    () => usersApi.list({ limit: 500 }),
+  );
+  const users = usersData?.data || [];
 
   const handleExport = async () => {
     // If remove is checked, show confirmation first
@@ -64,6 +79,9 @@ export function ExportLeadsDialog({
       const params: Record<string, string> = {};
       if (selectedStatus !== "all") {
         params.status = selectedStatus;
+      }
+      if (exportScope === "user" && assignedTo) {
+        params.assignedTo = assignedTo;
       }
       if (removeAfterExport) {
         params.removeAfterExport = "true";
@@ -97,6 +115,8 @@ export function ExportLeadsDialog({
       onSuccess?.();
       onOpenChange(false);
       setSelectedStatus("all");
+      setExportScope("all");
+      setAssignedTo("");
       setRemoveAfterExport(false);
     } catch (error: any) {
       console.error("Export error:", error);
@@ -113,11 +133,56 @@ export function ExportLeadsDialog({
           <DialogHeader>
             <DialogTitle>Export Leads</DialogTitle>
             <DialogDescription>
-              Export leads to CSV file. You can filter by status.
+              Export leads to CSV file. Filter by status or export leads
+              assigned to a specific user.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {/* Export Scope - only for admin/manager */}
+            {canFilterByUser && (
+              <div className="space-y-2">
+                <Label>Export Scope</Label>
+                <div className="flex rounded-md border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => { setExportScope("all"); setAssignedTo(""); }}
+                    className={`flex-1 px-3 py-1.5 text-sm transition-colors ${
+                      exportScope === "all"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    All Leads
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExportScope("user")}
+                    className={`flex-1 px-3 py-1.5 text-sm transition-colors border-l ${
+                      exportScope === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    User Wise
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* User Selector - shown when scope is "user" */}
+            {canFilterByUser && exportScope === "user" && (
+              <div className="space-y-2">
+                <Label>Select User</Label>
+                <UserSelector
+                  users={users}
+                  value={assignedTo}
+                  onValueChange={setAssignedTo}
+                  placeholder="Select a user..."
+                />
+              </div>
+            )}
+
             {/* Status Filter */}
             <div className="space-y-2">
               <Label>Filter by Status</Label>

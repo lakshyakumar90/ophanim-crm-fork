@@ -38,6 +38,7 @@ import {
   Users2,
   UserCircle,
   ClipboardList,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -136,14 +137,20 @@ const getDepartmentNavItems = (slug: string): NavItem[] => {
       return deliveryItems;
     default:
       return [
-        { title: "Dashboard", href: `/${slug}`, icon: LayoutDashboard },
-        { title: "Leads", href: `/${slug}/leads`, icon: Target },
-        { title: "Tasks", href: `/${slug}/tasks`, icon: CheckSquare },
-        { title: "Teams", href: `/${slug}/teams`, icon: UsersRound },
+        { title: "Dashboard", href: `/sales`, icon: LayoutDashboard },
+        { title: "Leads", href: `/sales/leads`, icon: Target },
+        { title: "Tasks", href: `/sales/tasks`, icon: CheckSquare },
+        { title: "Teams", href: `/sales/teams`, icon: UsersRound },
         {
           title: "Analytics",
-          href: `/${slug}/analytics`,
+          href: `/sales/analytics`,
           icon: PieChart,
+          roles: ["admin"],
+        },
+        {
+          title: "Duplicate Leads",
+          href: "/global/duplicate-leads",
+          icon: Copy,
           roles: ["admin"],
         },
       ];
@@ -434,9 +441,8 @@ function GlobalSidebar({
     },
     {
       title: "Activity",
-      href: "/global/activity",
+      href: "/activity",
       icon: Activity,
-      roles: ["admin"],
     },
     {
       title: "Notifications",

@@ -3,6 +3,7 @@ import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
 import { USER_ROLES, type UserRole } from "../config/constants.js";
 import { getTimestampIST } from "../utils/date-utils.js";
+import { logActivity } from "./activity-events.service.js";
 import {
   parsePaginationParams,
   calculatePaginationMeta,
@@ -332,6 +333,15 @@ export async function updateUser(
     title: "Profile updated",
     description: description,
     metadata: { updates, input },
+  });
+
+  await logActivity({
+    actorId: userId,
+    entityType: "user",
+    entityId: userId,
+    eventType: "profile_updated",
+    source: "user",
+    metadata: { updates },
   });
 
   return mapUserRowToRecord(data as unknown as UserRow);

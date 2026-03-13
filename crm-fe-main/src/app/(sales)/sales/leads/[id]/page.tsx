@@ -56,6 +56,7 @@ import {
   ChevronDown,
   ChevronUp,
   Bell,
+  Tag,
 } from "lucide-react";
 import type { Lead, LeadActivity, LeadStatus } from "@/types";
 import {
@@ -123,7 +124,7 @@ function formatActivityDescription(activity: LeadActivity): string | null {
 }
 
 export default function LeadDetailPage() {
-  const { id, slug } = useParams();
+  const { id } = useParams();
   const router = useRouter();
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
@@ -245,6 +246,7 @@ export default function LeadDetailPage() {
       setSelectedUserId("");
       setIsReassignDialogOpen(false);
       mutateLead();
+      mutateActivities();
     } catch (error: any) {
       const message =
         error.response?.data?.error?.message || "Failed to assign lead";
@@ -376,7 +378,7 @@ export default function LeadDetailPage() {
         <Button
           variant="outline"
           className="mt-4"
-          onClick={() => router.push(`/${slug}/leads`)}
+          onClick={() => router.push(`/sales/leads`)}
         >
           Back to Leads
         </Button>
@@ -396,7 +398,7 @@ export default function LeadDetailPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => router.push(`/${slug}/leads`)}
+              onClick={() => router.push(`/sales/leads`)}
               className="shrink-0"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -465,7 +467,7 @@ export default function LeadDetailPage() {
               </Button>
             )}
             {canEditLead && (
-              <Button onClick={() => router.push(`/${slug}/leads/${id}/edit`)}>
+              <Button onClick={() => router.push(`/sales/leads/${id}/edit`)}>
                 <Pencil className="w-4 h-4 mr-2" />
                 Edit Lead
               </Button>
@@ -564,8 +566,11 @@ export default function LeadDetailPage() {
                     <CardTitle className="text-base">Info</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* Contact Section */}
+                    {/* Contact */}
                     <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Contact
+                      </p>
                       {lead.email && (
                         <div className="flex items-center gap-2">
                           <Mail className="h-4 w-4 text-slate-400 shrink-0" />
@@ -588,58 +593,104 @@ export default function LeadDetailPage() {
                           </a>
                         </div>
                       )}
-                      {lead.country && (
+                      {lead.alternatePhone && (
                         <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-slate-400 shrink-0" />
-                          <span className="text-sm">{lead.country}</span>
-                        </div>
-                      )}
-                      {lead.website && (
-                        <div className="flex items-center gap-2">
-                          <Globe className="h-4 w-4 text-slate-400 shrink-0" />
+                          <Phone className="h-4 w-4 text-slate-300 shrink-0" />
                           <a
-                            href={
-                              lead.website.startsWith("http")
-                                ? lead.website
-                                : `https://${lead.website}`
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline text-sm truncate"
+                            href={`tel:${lead.alternatePhone}`}
+                            className="text-blue-500 hover:underline text-sm"
                           >
-                            {lead.website}
+                            {lead.alternatePhone}{" "}
+                            <span className="text-xs text-muted-foreground">
+                              (alt)
+                            </span>
                           </a>
                         </div>
                       )}
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-                        <span className="text-sm flex-1">
-                          Timezone: {lead.timezone || "NA"}
-                        </span>
-                        {canEditLead && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => router.push(`/${slug}/leads/${id}/edit`)}
-                          >
-                            <Pencil className="h-3 w-3 mr-1" />
-                            Edit
-                          </Button>
-                        )}
-                      </div>
                     </div>
 
-                    {/* Divider */}
-                    <div className="border-t border-slate-200" />
+                    {(lead.address || lead.city || lead.state || lead.country || lead.pincode) && (
+                      <>
+                        <div className="border-t border-slate-100" />
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Location
+                          </p>
+                          {lead.address && (
+                            <div className="flex items-start gap-2">
+                              <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                              <span className="text-sm">{lead.address}</span>
+                            </div>
+                          )}
+                          {(lead.city || lead.state || lead.country || lead.pincode) && (
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-slate-300 shrink-0" />
+                              <span className="text-sm text-muted-foreground">
+                                {[lead.city, lead.state, lead.pincode, lead.country]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
 
-                    {/* Details Section */}
+                    {(lead.industry || lead.designation || lead.website) && (
+                      <>
+                        <div className="border-t border-slate-100" />
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Business
+                          </p>
+                          {lead.industry && (
+                            <div className="flex items-center gap-2">
+                              <Building className="h-4 w-4 text-slate-400 shrink-0" />
+                              <span className="text-sm">{lead.industry}</span>
+                            </div>
+                          )}
+                          {lead.designation && (
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-slate-400 shrink-0" />
+                              <span className="text-sm">{lead.designation}</span>
+                            </div>
+                          )}
+                          {lead.website && (
+                            <div className="flex items-center gap-2">
+                              <Globe className="h-4 w-4 text-slate-400 shrink-0" />
+                              <a
+                                href={
+                                  lead.website.startsWith("http")
+                                    ? lead.website
+                                    : `https://${lead.website}`
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline text-sm truncate"
+                              >
+                                {lead.website}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    <div className="border-t border-slate-100" />
+
+                    {/* Lead Details */}
                     <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Details
+                      </p>
                       {lead.source && (
                         <div className="flex items-center gap-2">
                           <User className="h-4 w-4 text-slate-400 shrink-0" />
                           <span className="capitalize text-sm">
-                            Source: {lead.source.replace("_", " ")}
+                            Source:{" "}
+                            <span className="font-medium">
+                              {lead.source.replace(/_/g, " ")}
+                            </span>
                           </span>
                         </div>
                       )}
@@ -647,22 +698,111 @@ export default function LeadDetailPage() {
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4 text-slate-400 shrink-0" />
                           <span className="capitalize text-sm">
-                            Type: {lead.leadType.replace("_", " ")}
+                            Type:{" "}
+                            <span className="font-medium">
+                              {lead.leadType.replace(/_/g, " ")}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                      {lead.leadValue != null && (
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-slate-400 shrink-0" />
+                          <span className="text-sm">
+                            Value:{" "}
+                            <span className="font-medium">
+                              ₹{Number(lead.leadValue).toLocaleString()}
+                            </span>
                           </span>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+                        <Clock className="h-4 w-4 text-slate-400 shrink-0" />
                         <span className="text-sm">
-                          Created {toLocaleDateStringIST(lead.createdAt)}
+                          Timezone:{" "}
+                          <span className="font-medium">
+                            {lead.timezone || "Not set"}
+                          </span>
                         </span>
+                        {canEditLead && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs ml-auto"
+                            onClick={() =>
+                              router.push(`/sales/leads/${id}/edit`)
+                            }
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        )}
                       </div>
+                      {lead.tags && (
+                        <div className="flex items-start gap-2">
+                          <Tag className="h-4 w-4 text-slate-400 shrink-0 mt-1" />
+                          <div className="flex flex-wrap gap-1">
+                            {lead.tags
+                              .split(/[,;]/)
+                              .map((t: string) => t.trim())
+                              .filter(Boolean)
+                              .map((tag: string) => (
+                                <Badge
+                                  key={tag}
+                                  variant="secondary"
+                                  className="text-xs"
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Divider */}
-                    <div className="border-t border-slate-200" />
+                    {lead.description && (
+                      <>
+                        <div className="border-t border-slate-100" />
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Description
+                          </p>
+                          <p className="text-sm text-slate-600 whitespace-pre-wrap">
+                            {lead.description}
+                          </p>
+                        </div>
+                      </>
+                    )}
 
-                    {/* Status Section */}
+                    <div className="border-t border-slate-100" />
+
+                    {/* Timestamps */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+                        <span className="text-xs text-muted-foreground">
+                          Created:{" "}
+                          <span className="text-foreground">
+                            {toLocaleDateStringIST(lead.createdAt)}
+                          </span>
+                        </span>
+                      </div>
+                      {lead.updatedAt && lead.updatedAt !== lead.createdAt && (
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-slate-300 shrink-0" />
+                          <span className="text-xs text-muted-foreground">
+                            Last updated:{" "}
+                            <span className="text-foreground">
+                              {toLocaleDateStringIST(lead.updatedAt)}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-100" />
+
+                    {/* Status */}
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-medium text-slate-700">
                         Status:
@@ -688,10 +828,9 @@ export default function LeadDetailPage() {
                       )}
                     </div>
 
-                    {/* Divider */}
-                    <div className="border-t border-slate-200" />
+                    <div className="border-t border-slate-100" />
 
-                    {/* Assigned To Section */}
+                    {/* Assigned To */}
                     <div className="space-y-2">
                       <span className="text-sm font-medium text-slate-700">
                         Assigned To:

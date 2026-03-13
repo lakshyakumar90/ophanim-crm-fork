@@ -2,6 +2,7 @@ import { supabaseAdmin } from "../config/supabase.js";
 import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
 import { getCurrentTimestamp } from "../utils/helpers.js";
+import { logActivity } from "./activity-events.service.js";
 import type { UserRole } from "../config/constants.js";
 import type { AuthUser } from "../types/api.types.js";
 
@@ -209,6 +210,15 @@ export async function createTeam(input: {
     description: `Created team: ${input.name}`,
   });
 
+  await logActivity({
+    actorId: input.managerId || data.id,
+    entityType: "team",
+    entityId: data.id,
+    entityName: input.name,
+    eventType: "team_created",
+    source: "team",
+  });
+
   return mapTeamRowToRecord(data as unknown as TeamRow);
 }
 
@@ -262,6 +272,16 @@ export async function updateTeam(
     },
   });
 
+  await logActivity({
+    actorId: input.managerId || data.manager_id || data.id,
+    entityType: "team",
+    entityId: teamId,
+    entityName: data.name,
+    eventType: "team_updated",
+    source: "team",
+    metadata: { updates: Object.keys(input) },
+  });
+
   return mapTeamRowToRecord(data as unknown as TeamRow);
 }
 
@@ -290,6 +310,7 @@ export async function deleteTeam(teamId: string): Promise<void> {
     title: "Team deleted",
     description: "Team deleted",
   });
+  // Note: logActivity dual-write skipped — no user context available in deleteTeam
 }
 
 /**
@@ -361,6 +382,15 @@ export async function addUserToTeam(
     title: "User joined team",
     description: "User added to team",
   });
+
+  await logActivity({
+    actorId: userId,
+    entityType: "team",
+    entityId: teamId,
+    eventType: "team_joined",
+    source: "team",
+    metadata: { user_id: userId },
+  });
 }
 
 /**
@@ -384,6 +414,14 @@ export async function removeUserFromTeam(userId: string): Promise<void> {
     activity_type: "team_leave",
     title: "User left team",
     description: "User removed from team",
+  });
+
+  await logActivity({
+    actorId: userId,
+    entityType: "team",
+    eventType: "team_left",
+    source: "team",
+    metadata: { user_id: userId },
   });
 }
 

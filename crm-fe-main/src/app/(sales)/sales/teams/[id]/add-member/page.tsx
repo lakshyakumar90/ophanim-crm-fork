@@ -55,7 +55,7 @@ export default function AddMemberPage() {
   const router = useRouter();
   const params = useParams();
   const teamId = params?.id as string;
-  const slug = params?.slug as string;
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -137,7 +137,7 @@ export default function AddMemberPage() {
     try {
       await teamsApi.addMember(teamId, selectedUser.id);
       toast.success("Member added successfully");
-      router.push(`/${slug}/teams/${teamId}`);
+      router.push(`/sales/teams/${teamId}`);
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message || "Failed to add member",
@@ -155,7 +155,7 @@ export default function AddMemberPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => router.push(`/${slug}/teams/${teamId}`)}
+          onClick={() => router.push(`/sales/teams/${teamId}`)}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -351,7 +351,7 @@ export default function AddMemberPage() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push(`/${slug}/teams/${teamId}`)}
+          onClick={() => router.push(`/sales/teams/${teamId}`)}
         >
           Cancel
         </Button>

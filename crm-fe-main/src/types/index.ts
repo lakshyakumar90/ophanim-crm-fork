@@ -38,6 +38,11 @@ export interface Lead {
   businessName: string | null;
   email: string | null;
   phone: string | null;
+  alternatePhone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
   website: string | null;
   country: string | null;
   timezone: string | null;
@@ -45,6 +50,11 @@ export interface Lead {
   source: string | null;
   clientResponse: string | null;
   leadType: string | null;
+  industry: string | null;
+  designation: string | null;
+  leadValue: number | null;
+  description: string | null;
+  tags: string | null;
   status: LeadStatusType;
   assignedTo: string | null;
   departmentId?: string;

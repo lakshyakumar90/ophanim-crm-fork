@@ -6,6 +6,7 @@ import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
 import * as otpService from "./otp.service.js";
 import * as emailService from "./email.service.js";
+import { logActivity } from "./activity-events.service.js";
 import {
   hashPassword,
   comparePassword,
@@ -181,6 +182,16 @@ export async function login(input: LoginInput): Promise<LoginResponse> {
     description: `${user.full_name} logged in`,
     metadata: { email: user.email },
     created_at: getTimestampIST(),
+  });
+
+  await logActivity({
+    actorId: user.id,
+    entityType: "user",
+    entityId: user.id,
+    entityName: user.full_name,
+    eventType: "login",
+    source: "auth",
+    metadata: { email: user.email },
   });
 
   return {
@@ -514,6 +525,14 @@ export async function logout(
     activity_type: "logout",
     title: "User logged out",
     created_at: getTimestampIST(),
+  });
+
+  await logActivity({
+    actorId: userId,
+    entityType: "user",
+    entityId: userId,
+    eventType: "logout",
+    source: "auth",
   });
 }
 

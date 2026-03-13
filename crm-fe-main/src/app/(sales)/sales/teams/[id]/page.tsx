@@ -34,7 +34,7 @@ import { TeamDiscussion } from "@/app/(shared)/components/TeamDiscussion";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function TeamDetailPage() {
-  const { id, slug } = useParams();
+  const { id } = useParams();
   const router = useRouter();
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
@@ -113,7 +113,7 @@ export default function TeamDetailPage() {
         <p className="text-muted-foreground mb-4">
           You are not a member of this team and cannot view its details.
         </p>
-        <Button variant="outline" onClick={() => router.push(`/${slug}/teams`)}>
+        <Button variant="outline" onClick={() => router.push(`/sales/teams`)}>
           Back to Teams
         </Button>
       </div>
@@ -127,7 +127,7 @@ export default function TeamDetailPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push(`/${slug}/teams`)}
+            onClick={() => router.push(`/sales/teams`)}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -140,13 +140,13 @@ export default function TeamDetailPage() {
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => router.push(`/${slug}/teams/${id}/edit`)}
+              onClick={() => router.push(`/sales/teams/${id}/edit`)}
             >
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </Button>
             <Button
-              onClick={() => router.push(`/${slug}/teams/${id}/add-member`)}
+              onClick={() => router.push(`/sales/teams/${id}/add-member`)}
             >
               <UserPlus className="w-4 h-4 mr-2" />
               Add Member

@@ -38,7 +38,7 @@ import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function TeamsPage() {
   const router = useRouter();
-  const { slug } = useParams();
+  
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
   const { currentDepartment, isLoading: isDeptLoading } = useDepartment();
@@ -93,7 +93,7 @@ export default function TeamsPage() {
         </div>
         {isAdmin && (
           <Button
-            onClick={() => router.push(`/${slug}/teams/new`)}
+            onClick={() => router.push(`/sales/teams/new`)}
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -122,7 +122,7 @@ export default function TeamsPage() {
             <Card
               key={team.id}
               className="hover:shadow-lg transition-shadow cursor-pointer group"
-              onClick={() => router.push(`/${slug}/teams/${team.id}`)}
+              onClick={() => router.push(`/sales/teams/${team.id}`)}
             >
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="flex items-center gap-3">
@@ -154,7 +154,7 @@ export default function TeamsPage() {
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(`/${slug}/teams/${team.id}/edit`);
+                          router.push(`/sales/teams/${team.id}/edit`);
                         }}
                       >
                         <Pencil className="mr-2 h-4 w-4" />

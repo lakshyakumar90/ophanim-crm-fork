@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { tasksApi, usersApi, leadsApi, teamsApi } from "@/lib/api";
-import { projectsApi } from "@/lib/projects-api";
+import { tasksApi, usersApi } from "@/lib/api";
 import useSWR from "swr";
 import { getTodayIST } from "@/lib/date-utils";
-import { useAuth, useIsManager, useIsAdmin } from "@/providers/auth-provider";
+import { useAuth, useIsManager } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,22 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Loader2, Bell, Calendar, Clock, Check, ChevronsUpDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowLeft, Loader2, Bell, Calendar, Clock } from "lucide-react";
+import { Task } from "@/types";
 
 const taskSchema = z.object({
   title: z.string().min(3, "Title is required"),
@@ -47,10 +33,6 @@ const taskSchema = z.object({
   dueDate: z.string().optional(),
   taskType: z.string().optional(),
   reminderBeforeMinutes: z.number().optional().nullable(),
-  relatedLeadId: z.string().optional().nullable(),
-  projectId: z.string().optional().nullable(),
-  relatedTeamId: z.string().optional().nullable(),
-  relatedUserId: z.string().optional().nullable(),
 });
 
 type TaskFormData = z.infer<typeof taskSchema>;
@@ -68,15 +50,12 @@ const HOURS = Array.from({ length: 12 }, (_, i) =>
 );
 const MINUTES = ["00", "15", "30", "45"];
 
-export default function NewTaskPage() {
+export default function EditTaskPage() {
   const router = useRouter();
-  const params = useParams();
-  const slug = params?.slug as string;
+  const { id } = useParams();
   const { user } = useAuth();
   const isManager = useIsManager();
-  const isAdmin = useIsAdmin();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [openLeadCombo, setOpenLeadCombo] = useState(false);
 
   // Due date/time state
   const [dueDate, setDueDate] = useState("");
@@ -84,43 +63,28 @@ export default function NewTaskPage() {
   const [dueMinute, setDueMinute] = useState("00");
   const [duePeriod, setDuePeriod] = useState<"AM" | "PM">("AM");
 
-  // Determine context
-  const isSalesOrFinance = slug === "sales" || slug === "finance";
-  const isHR = slug === "hr";
-  // Admins can select projects from any context if they wish, or explicitly in PM context
-  const canSelectProject = slug === "project-management" || isAdmin;
+  // Fetch task details
+  const { data: taskData, isLoading: loadingTask } = useSWR(
+    id ? `task-${id}` : null,
+    () => tasksApi.get(id as string),
+  );
 
-  // Data Fetching
+  const task = taskData as Task;
+
+  // Only fetch users list for managers/admins
   const { data: usersData, isLoading: loadingUsers } = useSWR(
-    isManager || isHR ? "users-list" : null,
+    isManager ? "users-list" : null,
     () => usersApi.list(),
   );
 
-  const { data: leadsData } = useSWR(
-    isSalesOrFinance ? "leads-list" : null,
-    () => leadsApi.list({ limit: 100 }),
-  );
-
-  const { data: projectsData } = useSWR(
-    canSelectProject ? "projects-list" : null,
-    () => projectsApi.list(),
-  );
-
-  const { data: teamsData } = useSWR(isHR ? "teams-list" : null, () =>
-    teamsApi.list(),
-  );
-
-  // Handle nested data logic
+  // Handle nested data structure
   const users = usersData?.data || [];
-  const leads = leadsData?.data || [];
-  const projects = Array.isArray(projectsData) ? projectsData : [];
-  const teams = Array.isArray(teamsData) ? teamsData : [];
 
   const {
     register,
     handleSubmit,
     setValue,
-    watch,
+    reset,
     formState: { errors },
   } = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -132,37 +96,77 @@ export default function NewTaskPage() {
     },
   });
 
-  const selectedLeadId = watch("relatedLeadId");
+  // Populate form when task data loads
+  useEffect(() => {
+    if (task) {
+      reset({
+        title: task.title,
+        description: task.description || "",
+        assignedTo: task.assignedTo,
+        priority: task.priority as "low" | "medium" | "high",
+        taskType: task.taskType || "general",
+        reminderBeforeMinutes: task.reminderBeforeMinutes,
+      });
 
-  // Build due date ISO string
+      if (task.dueDate) {
+        // Parse ISO string (e.g. 2023-10-27T09:00:00.000Z)
+        // Taking the parts directly as it was constructed
+        const [datePart, timePart] = task.dueDate.split("T");
+        setDueDate(datePart);
+
+        if (timePart) {
+          const time = timePart.substring(0, 5); // HH:mm
+          const [hStr, mStr] = time.split(":");
+          let h = parseInt(hStr);
+          const m = mStr;
+
+          let period: "AM" | "PM" = "AM";
+          if (h >= 12) {
+            period = "PM";
+            if (h > 12) h -= 12;
+          }
+          if (h === 0) h = 12;
+
+          setDueHour(h.toString().padStart(2, "0"));
+          setDueMinute(m);
+          setDuePeriod(period);
+        }
+      }
+    }
+  }, [task, reset]);
+
+  // Build due date ISO string from separate fields
   const buildDueDateISO = (): string | undefined => {
     if (!dueDate) return undefined;
+
     let hour24 = parseInt(dueHour);
-    if (duePeriod === "PM" && hour24 !== 12) hour24 += 12;
-    else if (duePeriod === "AM" && hour24 === 12) hour24 = 0;
+    if (duePeriod === "PM" && hour24 !== 12) {
+      hour24 += 12;
+    } else if (duePeriod === "AM" && hour24 === 12) {
+      hour24 = 0;
+    }
+
+    // Construct ISO string directly to avoid timezone issues
+    // We treat this as "IST time" but stored as ISO string with Z
     const hourStr = hour24.toString().padStart(2, "0");
     const minuteStr = dueMinute.padStart(2, "0");
+
     return `${dueDate}T${hourStr}:${minuteStr}:00.000Z`;
   };
 
   const onSubmit = async (data: TaskFormData) => {
     setIsSubmitting(true);
     try {
-      await tasksApi.create({
+      await tasksApi.update(id as string, {
         ...data,
         dueDate: buildDueDateISO(),
-        assignedTo: isManager ? data.assignedTo : user?.id,
-        // Ensure strictly typed optional fields are handled
-        relatedLeadId: data.relatedLeadId || undefined,
-        projectId: data.projectId || undefined,
-        relatedTeamId: data.relatedTeamId || undefined,
-        relatedUserId: data.relatedUserId || undefined,
+        assignedTo: isManager ? data.assignedTo : undefined, // Only update assignee if manager
       });
-      toast.success("Task created successfully");
-      router.push(`/${slug}/tasks`); // Redirect to current department tasks
+      toast.success("Task updated successfully");
+      router.push(`/sales/tasks/${id}`);
     } catch (error: any) {
       toast.error(
-        error.response?.data?.error?.message || "Failed to create task",
+        error.response?.data?.error?.message || "Failed to update task",
       );
     } finally {
       setIsSubmitting(false);
@@ -171,25 +175,42 @@ export default function NewTaskPage() {
 
   const today = getTodayIST();
 
+  if (loadingTask) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!task) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-slate-600">Task not found</p>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => router.push(`/sales/tasks`)}
+        >
+          Back to Tasks
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => router.push(`/${slug}/tasks`)}
+          onClick={() => router.push(`/sales/tasks/${id}`)}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            Create New Task
-          </h1>
-          <p className="text-muted-foreground">
-            {isManager
-              ? "Assign a new task to a team member"
-              : "Create a task for yourself"}
-          </p>
+          <h1 className="text-2xl font-bold text-foreground">Edit Task</h1>
+          <p className="text-muted-foreground">Update task details</p>
         </div>
       </div>
 
@@ -211,155 +232,14 @@ export default function NewTaskPage() {
               )}
             </div>
 
-            {/* Department Specific Fields */}
-            {isSalesOrFinance && (
-              <div className="space-y-2 flex flex-col">
-                <Label className="mb-2">Related Lead (Optional)</Label>
-                <Popover open={openLeadCombo} onOpenChange={setOpenLeadCombo}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openLeadCombo}
-                      className="w-full justify-between font-normal"
-                    >
-                      {selectedLeadId
-                        ? leads.find((lead: any) => lead.id === selectedLeadId)?.leadName
-                        : "Select a lead..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search lead..." />
-                      <CommandList>
-                        <CommandEmpty>No lead found.</CommandEmpty>
-                        <CommandGroup>
-                           <CommandItem
-                            value="none"
-                            onSelect={() => {
-                              setValue("relatedLeadId", null);
-                              setOpenLeadCombo(false);
-                            }}
-                          >
-                             <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                !selectedLeadId ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            None
-                          </CommandItem>
-                          {leads.map((lead: any) => (
-                            <CommandItem
-                              key={lead.id}
-                              value={lead.leadName}
-                              onSelect={() => {
-                                setValue("relatedLeadId", lead.id);
-                                setOpenLeadCombo(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  selectedLeadId === lead.id
-                                    ? "opacity-100"
-                                    : "opacity-0",
-                                )}
-                              />
-                              {lead.leadName}
-                              {lead.businessName && (
-                                <span className="ml-2 text-muted-foreground text-xs">
-                                  ({lead.businessName})
-                                </span>
-                              )}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
-
-            {canSelectProject && (
-              <div className="space-y-2">
-                <Label htmlFor="projectId">Related Project (Optional)</Label>
-                <Select
-                  onValueChange={(v) =>
-                    setValue("projectId", v === "none" ? null : v)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {projects.map((proj: any) => (
-                      <SelectItem key={proj.id} value={proj.id}>
-                        {proj.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {isHR && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="relatedTeamId">Related Team (Optional)</Label>
-                  <Select
-                    onValueChange={(v) =>
-                      setValue("relatedTeamId", v === "none" ? null : v)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {teams.map((team: any) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="relatedUserId">
-                    Related Employee (Optional)
-                  </Label>
-                  <Select
-                    onValueChange={(v) =>
-                      setValue("relatedUserId", v === "none" ? null : v)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select employee" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {users.map((u: any) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.fullName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
             {/* Only show assignee selector for managers */}
             {isManager && (
               <div className="space-y-2">
                 <Label htmlFor="assignedTo">Assign To</Label>
                 <Select
-                  defaultValue={user?.id}
+                  value={task.assignedTo || user?.id} // Use controlled value from form or task
                   onValueChange={(v) => setValue("assignedTo", v)}
+                  defaultValue={task.assignedTo}
                   disabled={loadingUsers}
                 >
                   <SelectTrigger>
@@ -396,7 +276,7 @@ export default function NewTaskPage() {
             <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
               <Select
-                defaultValue="medium"
+                defaultValue={task.priority}
                 onValueChange={(v) => setValue("priority", v as any)}
               >
                 <SelectTrigger>
@@ -510,7 +390,7 @@ export default function NewTaskPage() {
                 Reminder
               </Label>
               <Select
-                defaultValue="none"
+                defaultValue={task.reminderBeforeMinutes?.toString() ?? "none"}
                 onValueChange={(v) =>
                   setValue(
                     "reminderBeforeMinutes",
@@ -551,7 +431,7 @@ export default function NewTaskPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(`/${slug}/tasks`)}
+                onClick={() => router.push(`/sales/tasks/${id}`)}
               >
                 Cancel
               </Button>
@@ -563,10 +443,10 @@ export default function NewTaskPage() {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
+                    Updating...
                   </>
                 ) : (
-                  "Create Task"
+                  "Update Task"
                 )}
               </Button>
             </div>

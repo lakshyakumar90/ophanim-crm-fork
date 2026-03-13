@@ -57,46 +57,32 @@ export function BulkEditLeadsDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [source, setSource] = useState<string>("");
-  const [city, setCity] = useState<string>("");
-  const [state, setState] = useState<string>("");
   const [country, setCountry] = useState<string>("");
-  const [industry, setIndustry] = useState<string>("");
   const [assignTo, setAssignTo] = useState<string>("");
 
-  // Fetch users for assignment dropdown
   const { data: usersData, isLoading: loadingUsers } = useSWR(
     open ? "users-list" : null,
     () => usersApi.list({ limit: 100 }),
   );
 
-  // Handle the nested data structure properly
   const users = usersData?.data || [];
 
   const resetForm = () => {
     setStatus("");
     setSource("");
-    setCity("");
-    setState("");
     setCountry("");
-    setIndustry("");
     setAssignTo("");
   };
 
   const handleSubmit = async () => {
-    // Build update data - only include non-empty fields
     const data: Record<string, unknown> = {};
-
     if (status) data.status = status;
     if (source) data.source = source;
-    if (city.trim()) data.city = city.trim();
-    if (state.trim()) data.state = state.trim();
     if (country.trim()) data.country = country.trim();
-    if (industry.trim()) data.industry = industry.trim();
 
-    // Check if any field is set (including assignment)
     if (Object.keys(data).length === 0 && !assignTo) {
       toast.error(
-        "Please fill at least one field to update or select a user to assign"
+        "Please fill at least one field to update or select a user to assign",
       );
       return;
     }
@@ -106,7 +92,6 @@ export function BulkEditLeadsDialog({
       let updateSuccess = 0;
       let assignSuccess = 0;
 
-      // Handle bulk update (non-assignment fields)
       if (Object.keys(data).length > 0) {
         const response = await leadsApi.bulkUpdate(selectedIds, data);
         const result = response.data.data;
@@ -116,7 +101,6 @@ export function BulkEditLeadsDialog({
         }
       }
 
-      // Handle bulk assignment separately
       if (assignTo) {
         const assignResponse = await leadsApi.bulkAssign(selectedIds, assignTo);
         const assignResult = assignResponse.data.data;
@@ -126,7 +110,6 @@ export function BulkEditLeadsDialog({
         }
       }
 
-      // Show success messages
       if (updateSuccess > 0) {
         toast.success(`Successfully updated ${updateSuccess} lead(s)`);
       }
@@ -139,7 +122,7 @@ export function BulkEditLeadsDialog({
       onSuccess();
     } catch (error: any) {
       toast.error(
-        error.response?.data?.error?.message || "Failed to update leads"
+        error.response?.data?.error?.message || "Failed to update leads",
       );
     } finally {
       setIsSubmitting(false);
@@ -163,7 +146,7 @@ export function BulkEditLeadsDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          {/* Assign To (Admin Only) */}
+          {/* Assign To */}
           <div className="grid gap-2">
             <Label htmlFor="assignTo" className="flex items-center gap-2">
               Assign To
@@ -214,46 +197,15 @@ export function BulkEditLeadsDialog({
             </Select>
           </div>
 
-          {/* Industry */}
+          {/* Country */}
           <div className="grid gap-2">
-            <Label htmlFor="industry">Industry</Label>
+            <Label htmlFor="country">Country</Label>
             <Input
-              id="industry"
-              value={industry}
-              onChange={(e) => setIndustry(e.target.value)}
-              placeholder="Enter industry (optional)"
+              id="country"
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              placeholder="Enter country (optional)"
             />
-          </div>
-
-          {/* Location Row */}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="grid gap-2">
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="City"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="state">State</Label>
-              <Input
-                id="state"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                placeholder="State"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                placeholder="Country"
-              />
-            </div>
           </div>
         </div>
 

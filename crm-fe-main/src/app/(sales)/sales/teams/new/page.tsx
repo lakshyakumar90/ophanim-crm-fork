@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,8 +31,8 @@ type TeamFormData = z.infer<typeof teamSchema>;
 
 export default function NewTeamPage() {
   const router = useRouter();
-  const params = useParams();
-  const slug = params?.slug as string;
+  const slug = "sales";
+  
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [department, setDepartment] = useState<any>(null);
@@ -50,7 +50,7 @@ export default function NewTeamPage() {
 
   useEffect(() => {
     const loadData = async () => {
-      if (!slug) return;
+
 
       try {
         setLoading(true);
@@ -83,7 +83,7 @@ export default function NewTeamPage() {
     };
 
     loadData();
-  }, [slug]);
+  }, []);
 
   const onSubmit = async (data: TeamFormData) => {
     if (!department) {
@@ -98,7 +98,7 @@ export default function NewTeamPage() {
         departmentId: department.id,
       });
       toast.success("Team created successfully");
-      router.push(`/${slug}/teams`);
+      router.push(`/sales/teams`);
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message || "Failed to create team",
@@ -133,7 +133,7 @@ export default function NewTeamPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => router.push(`/${slug}/teams`)}
+          onClick={() => router.push(`/sales/teams`)}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -209,7 +209,7 @@ export default function NewTeamPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(`/${slug}/teams`)}
+                onClick={() => router.push(`/sales/teams`)}
               >
                 Cancel
               </Button>

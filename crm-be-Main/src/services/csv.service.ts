@@ -179,8 +179,6 @@ function validateLeadRow(
       lost: "not_interested",
       on_hold: "future_lead",
       unqualified: "not_a_lead",
-      // Map cold_lead to fresh_lead until DB migration is applied
-      cold_lead: "fresh_lead",
     };
     const mappedStatus = statusMap[status];
     if (!mappedStatus) {
@@ -242,6 +240,190 @@ function validateLeadRow(
   };
 }
 
+export interface DuplicateCheckRow {
+  rowIndex: number; // 1-based (excluding header)
+  leadName: string;
+  email: string | null;
+  phone: string | null;
+  isDuplicate: boolean;
+  duplicateLeadId: string | null;
+  duplicateLeadName: string | null;
+  action: "import" | "skip" | "update"; // default "import"
+}
+
+export interface PreviewCheckResult {
+  rows: DuplicateCheckRow[];
+  totalRows: number;
+  duplicateCount: number;
+}
+
+/**
+ * Parse CSV and check each row for duplicates by email or phone.
+ * Returns a preview list so the user can choose per-row action.
+ */
+export async function checkDuplicates(
+  csvContent: string,
+  departmentId?: string | null,
+): Promise<PreviewCheckResult> {
+  const rows = parseCsv(csvContent);
+
+  const result: DuplicateCheckRow[] = [];
+  let duplicateCount = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
+    const validation = validateLeadRow(row, i + 2);
+
+    const email = validation.data?.email as string | null ?? null;
+    const phone = validation.data?.phone as string | null ?? null;
+    const leadName = (validation.data?.lead_name as string) ?? row.lead_name ?? row.leadName ?? "Unknown";
+
+    let isDuplicate = false;
+    let duplicateLeadId: string | null = null;
+    let duplicateLeadName: string | null = null;
+
+    if (email || phone) {
+      // Build OR condition for email/phone match
+      const orParts: string[] = [];
+      if (email) orParts.push(`email.eq.${email}`);
+      if (phone) orParts.push(`phone.eq.${phone}`);
+
+      let q = supabaseAdmin
+        .from("leads")
+        .select("id, lead_name")
+        .eq("is_deleted", false);
+
+      if (departmentId) {
+        q = q.eq("department_id", departmentId);
+      }
+
+      q = q.or(orParts.join(",")).limit(1);
+
+      const { data } = await q;
+      if (data && data.length > 0) {
+        isDuplicate = true;
+        duplicateLeadId = data[0]!.id;
+        duplicateLeadName = data[0]!.lead_name;
+        duplicateCount++;
+      }
+    }
+
+    result.push({
+      rowIndex: i + 1,
+      leadName,
+      email,
+      phone,
+      isDuplicate,
+      duplicateLeadId,
+      duplicateLeadName,
+      action: isDuplicate ? "skip" : "import",
+    });
+  }
+
+  return {
+    rows: result,
+    totalRows: rows.length,
+    duplicateCount,
+  };
+}
+
+/**
+ * Get leads that are potential duplicates of each other in the system.
+ * Groups leads sharing the same email or phone.
+ */
+export async function getDuplicateLeads(
+  authUser: AuthUser,
+): Promise<{ groups: { email: string | null; phone: string | null; leads: { id: string; leadName: string; email: string | null; phone: string | null; status: string; createdAt: string }[] }[] }> {
+  // Find leads where email or phone occurs more than once
+  const { data: emailDupes } = await supabaseAdmin
+    .from("leads")
+    .select("email")
+    .eq("is_deleted", false)
+    .not("email", "is", null);
+
+  const { data: phoneDupes } = await supabaseAdmin
+    .from("leads")
+    .select("phone")
+    .eq("is_deleted", false)
+    .not("phone", "is", null);
+
+  // Count occurrences
+  const emailCounts: Record<string, number> = {};
+  (emailDupes || []).forEach((r: any) => {
+    if (r.email) emailCounts[r.email] = (emailCounts[r.email] || 0) + 1;
+  });
+
+  const phoneCounts: Record<string, number> = {};
+  (phoneDupes || []).forEach((r: any) => {
+    if (r.phone) phoneCounts[r.phone] = (phoneCounts[r.phone] || 0) + 1;
+  });
+
+  const duplicateEmails = Object.entries(emailCounts)
+    .filter(([, c]) => c > 1)
+    .map(([e]) => e);
+  const duplicatePhones = Object.entries(phoneCounts)
+    .filter(([, c]) => c > 1)
+    .map(([p]) => p);
+
+  if (duplicateEmails.length === 0 && duplicatePhones.length === 0) {
+    return { groups: [] };
+  }
+
+  // Fetch actual leads for duplicate email/phone groups
+  const groups: { email: string | null; phone: string | null; leads: any[] }[] = [];
+  const seenLeadIds = new Set<string>();
+
+  for (const email of duplicateEmails) {
+    const { data } = await supabaseAdmin
+      .from("leads")
+      .select("id, lead_name, email, phone, status, created_at")
+      .eq("is_deleted", false)
+      .eq("email", email)
+      .order("created_at", { ascending: true });
+
+    if (data && data.length > 1) {
+      const leads = data.map((l: any) => ({
+        id: l.id,
+        leadName: l.lead_name,
+        email: l.email,
+        phone: l.phone,
+        status: l.status,
+        createdAt: l.created_at,
+      }));
+      leads.forEach((l) => seenLeadIds.add(l.id));
+      groups.push({ email, phone: null, leads });
+    }
+  }
+
+  for (const phone of duplicatePhones) {
+    const { data } = await supabaseAdmin
+      .from("leads")
+      .select("id, lead_name, email, phone, status, created_at")
+      .eq("is_deleted", false)
+      .eq("phone", phone)
+      .order("created_at", { ascending: true });
+
+    if (data && data.length > 1) {
+      const leads = data
+        .filter((l: any) => !seenLeadIds.has(l.id))
+        .map((l: any) => ({
+          id: l.id,
+          leadName: l.lead_name,
+          email: l.email,
+          phone: l.phone,
+          status: l.status,
+          createdAt: l.created_at,
+        }));
+      if (leads.length > 1) {
+        leads.forEach((l) => seenLeadIds.add(l.id));
+        groups.push({ email: null, phone, leads });
+      }
+    }
+  }
+
+  return { groups };
+}
+
 /**
  * Import leads from CSV
  */
@@ -251,6 +433,7 @@ export async function importLeads(
   assignTo?: string,
   departmentId?: string | null,
   defaultStatus?: string,
+  rowActions?: Record<number, "import" | "skip" | "update">,
 ): Promise<ImportResult> {
   const rows = parseCsv(csvContent);
 
@@ -272,23 +455,53 @@ export async function importLeads(
   };
 
   const validLeads: Record<string, unknown>[] = [];
+  const updateLeads: { id: string; data: Record<string, unknown> }[] = [];
 
   // Validate all rows first
   for (let i = 0; i < rows.length; i++) {
+    const rowNumber = i + 1; // 1-based rowIndex used in rowActions
+    const action = rowActions?.[rowNumber] ?? "import";
+
+    // Skip rows marked as skip
+    if (action === "skip") {
+      result.total--;
+      continue;
+    }
+
     const validation = validateLeadRow(rows[i]!, i + 2); // +2 for header row and 1-indexing
     if (!validation.valid) {
       result.failed++;
       result.errors.push({ row: i + 2, error: validation.error! });
       console.log(`Row ${i + 2} validation failed:`, validation.error);
     } else {
-      // Override status if defaultStatus is provided
+      // Override status if a valid defaultStatus is provided
       const leadData = validation.data!;
-      if (
-        defaultStatus &&
-        (defaultStatus === "fresh_lead" || defaultStatus === "cold_lead")
-      ) {
+      if (defaultStatus && (Object.values(LEAD_STATUSES) as string[]).includes(defaultStatus)) {
         leadData.status = defaultStatus;
       }
+
+      if (action === "update" && rowActions) {
+        // Find the existing lead by email or phone to update it
+        const email = leadData.email as string | null;
+        const phone = leadData.phone as string | null;
+        if (email || phone) {
+          const orParts: string[] = [];
+          if (email) orParts.push(`email.eq.${email}`);
+          if (phone) orParts.push(`phone.eq.${phone}`);
+          const { data: existing } = await supabaseAdmin
+            .from("leads")
+            .select("id")
+            .eq("is_deleted", false)
+            .or(orParts.join(","))
+            .limit(1);
+          if (existing && existing.length > 0) {
+            updateLeads.push({ id: existing[0]!.id, data: leadData });
+            continue;
+          }
+        }
+        // If no match found, fall through to insert
+      }
+
       validLeads.push({
         ...leadData,
         created_by: createdBy,
@@ -296,6 +509,25 @@ export async function importLeads(
         department_id: departmentId || null,
         is_deleted: false,
       });
+    }
+  }
+
+  // Process updates
+  for (const { id, data } of updateLeads) {
+    try {
+      const { error } = await supabaseAdmin
+        .from("leads")
+        .update({ ...data, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) {
+        result.failed++;
+        result.errors.push({ row: 0, error: `Update failed for lead ${id}: ${error.message}` });
+      } else {
+        result.successful++;
+      }
+    } catch (err: any) {
+      result.failed++;
+      result.errors.push({ row: 0, error: `Update crashed for lead ${id}: ${err.message}` });
     }
   }
 
@@ -380,7 +612,13 @@ export async function exportLeads(
       website,
       description,
       tags,
-      created_at
+      timezone,
+      nal_reason,
+      client_response,
+      lead_type,
+      created_at,
+      updated_at,
+      assigned_user:users!assigned_to(full_name)
     `,
     )
     .eq("is_deleted", false);
@@ -435,7 +673,7 @@ export async function exportLeads(
 
   if (!data || data.length === 0) {
     return {
-      csv: "lead_name,business_name,email,phone,status,source,lead_value,city,state,country,created_at\n",
+      csv: "lead_name,business_name,email,phone,alternate_phone,address,city,state,country,pincode,status,source,lead_value,industry,designation,website,description,tags,timezone,nal_reason,client_response,lead_type,assigned_to_name,created_at,updated_at\n",
       exportedCount: 0,
       removedCount: 0,
     };
@@ -471,7 +709,13 @@ export async function exportLeads(
     website: lead.website || "",
     description: lead.description || "",
     tags: lead.tags || "",
+    timezone: lead.timezone || "",
+    nal_reason: lead.nal_reason || "",
+    client_response: lead.client_response || "",
+    lead_type: lead.lead_type || "",
+    assigned_to_name: lead.assigned_user?.full_name || "",
     created_at: lead.created_at,
+    updated_at: lead.updated_at || "",
   }));
 
   const csvContent = Papa.unparse(exportData);

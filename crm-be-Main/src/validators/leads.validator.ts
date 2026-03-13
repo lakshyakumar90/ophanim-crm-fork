@@ -151,3 +151,9 @@ export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
 export type CreateLeadReminderInput = z.infer<typeof createLeadReminderSchema>;
+
+// Param schema for routes that need both :id (lead) and :commentId
+export const leadCommentParamSchema = z.object({
+  id: z.string().uuid("Invalid lead ID format"),
+  commentId: z.string().uuid("Invalid comment ID format"),
+});

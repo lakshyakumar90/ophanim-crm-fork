@@ -2,6 +2,7 @@ import { supabaseAdmin } from "../config/supabase.js";
 import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
 import { USER_ROLES, SHIFT_TYPES } from "../config/constants.js";
+import { logActivity } from "./activity-events.service.js";
 import {
   parsePaginationParams,
   calculatePaginationMeta,
@@ -218,13 +219,27 @@ function calculateScheduledAutoLogoutTime(
     auto_logout_time?: string | null;
   } | null,
 ): Date {
-  const { shiftStart, autoLogoutAt } = getShiftDateTimes(
+  const { shiftStart, shiftEnd, autoLogoutAt } = getShiftDateTimes(
     effectiveDate,
     shiftType,
     rules,
   );
-  const lateByMs = Math.max(0, clockInTime.getTime() - shiftStart.getTime());
-  return new Date(autoLogoutAt.getTime() + lateByMs);
+
+  const isLate = clockInTime > shiftStart;
+
+  if (isLate) {
+    // Late clock-in: auto-logout exactly one shift-duration after clock-in.
+    // e.g. shift 9am-6pm (9 h), clock-in 10am → auto-logout 7pm.
+    const shiftDurationMs = shiftEnd.getTime() - shiftStart.getTime();
+    return new Date(clockInTime.getTime() + shiftDurationMs);
+  }
+
+  // On-time clock-in:
+  // - If the admin set an explicit auto_logout_time rule, honour it exactly.
+  // - Otherwise use shiftEnd directly (skip the 15-minute grace that was
+  //   added in getShiftDateTimes) so the logout time matches the shift end
+  //   (e.g. exactly 6pm for morning shift, exactly 4am for night shift).
+  return rules?.auto_logout_time ? autoLogoutAt : shiftEnd;
 }
 
 /**
@@ -834,6 +849,18 @@ export async function clockIn(
         created_at: getTimestampIST(),
       });
 
+      await logActivity({
+        actorId: userId,
+        entityType: "attendance",
+        entityId: lastCompleted.id,
+        eventType: "session_resumed",
+        source: "attendance",
+        metadata: {
+          merge_window_minutes: AUTO_MERGE_WINDOW_MINUTES,
+          shift_type: shiftType,
+        },
+      });
+
       return mapAttendanceRowToRecord(merged as unknown as AttendanceRow);
     }
   }
@@ -903,6 +930,19 @@ export async function clockIn(
       auto_logout_at: autoLogoutISO,
     },
     created_at: getTimestampIST(),
+  });
+
+  await logActivity({
+    actorId: userId,
+    entityType: "attendance",
+    entityId: data.id,
+    eventType: "clock_in",
+    source: "attendance",
+    metadata: {
+      status,
+      shift_type: shiftType,
+      location: input.location,
+    },
   });
 
   return mapAttendanceRowToRecord(data);
@@ -977,6 +1017,19 @@ export async function clockOut(
       shift_type: shiftType,
     },
     created_at: getTimestampIST(),
+  });
+
+  await logActivity({
+    actorId: userId,
+    entityType: "attendance",
+    entityId: existing.id,
+    eventType: "clock_out",
+    source: "attendance",
+    metadata: {
+      total_hours: totalHours,
+      status,
+      shift_type: shiftType,
+    },
   });
 
   return mapAttendanceRowToRecord(data as unknown as AttendanceRow);

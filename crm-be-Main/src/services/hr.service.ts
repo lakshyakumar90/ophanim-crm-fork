@@ -19,6 +19,9 @@ export interface HREmployeeRecord {
   isActive: boolean;
   createdAt: string;
   shiftType: string | null;
+  timezone: string | null;
+  country: string | null;
+  address: string | null;
 }
 
 // HR Analytics data
@@ -64,6 +67,9 @@ export async function getEmployeeDirectory(
       is_active,
       created_at,
       shift_type,
+      timezone,
+      country,
+      address,
       teams:team_id (
         id,
         name,
@@ -106,6 +112,9 @@ export async function getEmployeeDirectory(
       isActive: user.is_active,
       createdAt: user.created_at,
       shiftType: user.shift_type || null,
+      timezone: user.timezone || null,
+      country: user.country || null,
+      address: user.address || null,
     };
   });
 }
@@ -130,6 +139,9 @@ export async function getEmployeeById(
       is_active,
       created_at,
       shift_type,
+      timezone,
+      country,
+      address,
       teams:team_id (
         id,
         name,
@@ -163,12 +175,17 @@ export async function getEmployeeById(
     isActive: user.is_active,
     createdAt: user.created_at,
     shiftType: user.shift_type || null,
+    timezone: user.timezone || null,
+    country: user.country || null,
+    address: user.address || null,
   };
 }
 
 /**
- * Update employee profile (HR Manager+ only)
- * Cannot change role or system-level fields
+ * Update employee profile with role-based field restrictions:
+ *  - employee (self only): timezone, country, address
+ *  - manager:             fullName, jobTitle
+ *  - admin:               all fields
  */
 export async function updateEmployeeProfile(
   employeeId: string,
@@ -177,31 +194,70 @@ export async function updateEmployeeProfile(
     jobTitle?: string;
     teamId?: string | null;
     isActive?: boolean;
+    timezone?: string | null;
+    country?: string | null;
+    address?: string | null;
   },
   authUser: AuthUser,
 ): Promise<HREmployeeRecord> {
-  // HR Employees cannot edit, only HR Managers and Admin
   if (authUser.role === USER_ROLES.EMPLOYEE) {
-    throw new ApiError(
-      ERROR_CODES.FORBIDDEN,
-      "HR Employees cannot edit employee profiles",
-    );
+    if (employeeId !== authUser.id) {
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "Employees can only edit their own profile",
+      );
+    }
+    // Employees may only update their own timezone, country, and address
+    const updateData: Record<string, unknown> = {};
+    if (input.timezone !== undefined) updateData.timezone = input.timezone;
+    if (input.country !== undefined) updateData.country = input.country;
+    if (input.address !== undefined) updateData.address = input.address;
+
+    if (Object.keys(updateData).length === 0) {
+      // Nothing allowed to update — return current record unchanged
+      return getEmployeeById(employeeId);
+    }
+
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update(updateData)
+      .eq("id", employeeId);
+
+    if (error) throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+    return getEmployeeById(employeeId);
   }
 
+  if (authUser.role === USER_ROLES.MANAGER) {
+    const updateData: Record<string, unknown> = {};
+    if (input.fullName !== undefined) updateData.full_name = input.fullName;
+    if (input.jobTitle !== undefined) updateData.job_title = input.jobTitle;
+
+    if (Object.keys(updateData).length > 0) {
+      const { error } = await supabaseAdmin
+        .from("users")
+        .update(updateData)
+        .eq("id", employeeId);
+      if (error) throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+    }
+    return getEmployeeById(employeeId);
+  }
+
+  // Admin: all fields
   const updateData: Record<string, unknown> = {};
   if (input.fullName !== undefined) updateData.full_name = input.fullName;
   if (input.jobTitle !== undefined) updateData.job_title = input.jobTitle;
   if (input.teamId !== undefined) updateData.team_id = input.teamId;
   if (input.isActive !== undefined) updateData.is_active = input.isActive;
+  if (input.timezone !== undefined) updateData.timezone = input.timezone;
+  if (input.country !== undefined) updateData.country = input.country;
+  if (input.address !== undefined) updateData.address = input.address;
 
   const { error } = await supabaseAdmin
     .from("users")
     .update(updateData)
     .eq("id", employeeId);
 
-  if (error) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
-  }
+  if (error) throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
 
   return getEmployeeById(employeeId);
 }
