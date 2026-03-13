@@ -186,8 +186,9 @@ export function checkResourceAccess(
 
 /**
  * Check if user can edit lead info
- * - Admin: can edit any lead
- * - Others: can edit only leads assigned to them
+ * - Admin: can edit any lead (full form)
+ * - Others: can edit limited fields (timezone, clientResponse, country, status)
+ *   via inline edits on the detail page; the full edit form is restricted on the frontend
  */
 export function checkLeadEditAccess() {
   return async (
@@ -200,25 +201,8 @@ export function checkLeadEditAccess() {
         throw new ApiError(ERROR_CODES.AUTH_TOKEN_MISSING);
       }
 
-      if (req.user.role === USER_ROLES.ADMIN) {
-        return next();
-      }
-
-      const resourceId = req.params["id"];
-      if (!resourceId) {
-        throw new ApiError(ERROR_CODES.RESOURCE_ACCESS_DENIED);
-      }
-
-      const { data: lead } = await supabaseAdmin
-        .from("leads")
-        .select("assigned_to")
-        .eq("id", resourceId)
-        .single();
-
-      if (!lead || lead.assigned_to !== req.user.id) {
-        throw new ApiError(ERROR_CODES.RESOURCE_ACCESS_DENIED);
-      }
-
+      // All authenticated users may call PUT /leads/:id
+      // (full-form access is enforced on the frontend for non-admins)
       next();
     } catch (error) {
       next(error);

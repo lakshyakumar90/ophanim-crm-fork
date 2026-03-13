@@ -481,7 +481,44 @@ export async function updateLead(
 
   // Log general update activity only if there are actual changes
   if (Object.keys(changedNewValues).length > 0) {
-    // Activity logged in lead_activities via status change above if status changed
+    // Exclude status — already logged via the status_change block above
+    const nonStatusNew = Object.fromEntries(
+      Object.entries(changedNewValues).filter(([k]) => k !== "status"),
+    );
+    const nonStatusOld = Object.fromEntries(
+      Object.entries(changedOldValues).filter(([k]) => k !== "status"),
+    );
+
+    if (Object.keys(nonStatusNew).length > 0) {
+      await supabaseAdmin.from("lead_activities").insert({
+        lead_id: leadId,
+        user_id: updatedBy,
+        activity_type: "update",
+        title: `Lead updated`,
+        description: `Fields updated: ${Object.keys(nonStatusNew).join(", ")}`,
+        metadata: {
+          changed_fields: Object.keys(nonStatusNew),
+          old_values: nonStatusOld,
+          new_values: nonStatusNew,
+          changed_at: getTimestampIST(),
+        },
+        created_at: getTimestampIST(),
+      });
+
+      await logActivity({
+        actorId: updatedBy,
+        entityType: "lead",
+        entityId: leadId,
+        entityName: currentLead.leadName,
+        eventType: "updated",
+        source: "lead",
+        metadata: {
+          changed_fields: Object.keys(nonStatusNew),
+          old_values: nonStatusOld,
+          new_values: nonStatusNew,
+        },
+      });
+    }
   }
 
   return mapLeadRowToRecord(data as unknown as LeadRow);

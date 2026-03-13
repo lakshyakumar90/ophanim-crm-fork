@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -148,6 +149,20 @@ export default function LeadDetailPage() {
 
   // Mobile comments panel state
   const [isCommentsPanelOpen, setIsCommentsPanelOpen] = useState(false);
+
+  // Inline field editing state
+  const [editingTimezone, setEditingTimezone] = useState(false);
+  const [timezoneValue, setTimezoneValue] = useState("");
+  const [isSavingTimezone, setIsSavingTimezone] = useState(false);
+  const [editingClientResponse, setEditingClientResponse] = useState(false);
+  const [clientResponseValue, setClientResponseValue] = useState("");
+  const [isSavingClientResponse, setIsSavingClientResponse] = useState(false);
+  const [editingCountry, setEditingCountry] = useState(false);
+  const [countryValue, setCountryValue] = useState("");
+  const [isSavingCountry, setIsSavingCountry] = useState(false);
+  const [editingNalReason, setEditingNalReason] = useState(false);
+  const [nalReasonValue, setNalReasonValue] = useState("");
+  const [isSavingNalReason, setIsSavingNalReason] = useState(false);
 
   const {
     data: leadData,
@@ -312,6 +327,67 @@ export default function LeadDetailPage() {
     setPendingStatus(null);
   };
 
+  // Handle inline field saves
+  const handleSaveTimezone = async () => {
+    if (!id) return;
+    setIsSavingTimezone(true);
+    try {
+      await leadsApi.update(id as string, { timezone: timezoneValue });
+      toast.success("Timezone updated");
+      mutateLead();
+      setEditingTimezone(false);
+    } catch {
+      toast.error("Failed to update timezone");
+    } finally {
+      setIsSavingTimezone(false);
+    }
+  };
+
+  const handleSaveClientResponse = async () => {
+    if (!id) return;
+    setIsSavingClientResponse(true);
+    try {
+      await leadsApi.update(id as string, { clientResponse: clientResponseValue });
+      toast.success("Client response updated");
+      mutateLead();
+      setEditingClientResponse(false);
+    } catch {
+      toast.error("Failed to update client response");
+    } finally {
+      setIsSavingClientResponse(false);
+    }
+  };
+
+  const handleSaveCountry = async () => {
+    if (!id) return;
+    setIsSavingCountry(true);
+    try {
+      await leadsApi.update(id as string, { country: countryValue });
+      toast.success("Country updated");
+      mutateLead();
+      setEditingCountry(false);
+    } catch {
+      toast.error("Failed to update country");
+    } finally {
+      setIsSavingCountry(false);
+    }
+  };
+
+  const handleSaveNalReason = async () => {
+    if (!id) return;
+    setIsSavingNalReason(true);
+    try {
+      await leadsApi.update(id as string, { nalReason: nalReasonValue });
+      toast.success("NAL reason updated");
+      mutateLead();
+      setEditingNalReason(false);
+    } catch {
+      toast.error("Failed to update NAL reason");
+    } finally {
+      setIsSavingNalReason(false);
+    }
+  };
+
   // Handle add comment
   const handleAddComment = async () => {
     if (!newComment.trim() || !id) return;
@@ -386,7 +462,7 @@ export default function LeadDetailPage() {
     );
   }
 
-  const canEditLead = isAdmin || lead.assignedTo === user?.id;
+  const canEditLead = isAdmin;
 
   return (
     <div className="min-h-screen">
@@ -622,16 +698,67 @@ export default function LeadDetailPage() {
                               <span className="text-sm">{lead.address}</span>
                             </div>
                           )}
-                          {(lead.city || lead.state || lead.country || lead.pincode) && (
+                          {(lead.city || lead.state || lead.pincode) && (
                             <div className="flex items-center gap-2">
                               <MapPin className="h-4 w-4 text-slate-300 shrink-0" />
                               <span className="text-sm text-muted-foreground">
-                                {[lead.city, lead.state, lead.pincode, lead.country]
+                                {[lead.city, lead.state, lead.pincode]
                                   .filter(Boolean)
                                   .join(", ")}
                               </span>
                             </div>
                           )}
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-slate-300 shrink-0" />
+                            {editingCountry ? (
+                              <>
+                                <Input
+                                  value={countryValue}
+                                  onChange={(e) => setCountryValue(e.target.value)}
+                                  className="h-7 text-xs w-32"
+                                  placeholder="Country"
+                                />
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={handleSaveCountry}
+                                  disabled={isSavingCountry}
+                                >
+                                  {isSavingCountry ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    "Save"
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() => setEditingCountry(false)}
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-sm text-muted-foreground">
+                                  {lead.country || "No country set"}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs ml-auto"
+                                  onClick={() => {
+                                    setCountryValue(lead.country || "");
+                                    setEditingCountry(true);
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </>
                     )}
@@ -718,24 +845,64 @@ export default function LeadDetailPage() {
                       )}
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-                        <span className="text-sm">
-                          Timezone:{" "}
-                          <span className="font-medium">
-                            {lead.timezone || "Not set"}
-                          </span>
-                        </span>
-                        {canEditLead && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs ml-auto"
-                            onClick={() =>
-                              router.push(`/sales/leads/${id}/edit`)
-                            }
-                          >
-                            <Pencil className="h-3 w-3 mr-1" />
-                            Edit
-                          </Button>
+                        {editingTimezone ? (
+                          <>
+                            <Select
+                              value={timezoneValue}
+                              onValueChange={setTimezoneValue}
+                            >
+                              <SelectTrigger className="h-7 text-xs w-40">
+                                <SelectValue placeholder="Select timezone" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="EST">EST - Eastern</SelectItem>
+                                <SelectItem value="CST">CST - Central</SelectItem>
+                                <SelectItem value="MST">MST - Mountain</SelectItem>
+                                <SelectItem value="PST">PST - Pacific</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={handleSaveTimezone}
+                              disabled={isSavingTimezone}
+                            >
+                              {isSavingTimezone ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                "Save"
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => setEditingTimezone(false)}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-sm">
+                              Timezone:{" "}
+                              <span className="font-medium">
+                                {lead.timezone || "Not set"}
+                              </span>
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs ml-auto"
+                              onClick={() => {
+                                setTimezoneValue(lead.timezone || "");
+                                setEditingTimezone(true);
+                              }}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" />
+                              Edit
+                            </Button>
+                          </>
                         )}
                       </div>
                       {lead.tags && (
@@ -885,29 +1052,136 @@ export default function LeadDetailPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {lead.nalReason && (
-                      <div className="text-sm">
+                    <div className="text-sm">
+                      <div className="flex items-center justify-between">
                         <span className="text-slate-500 font-medium">
                           NAL Reason:
                         </span>
-                        <p className="mt-1 text-slate-700">{lead.nalReason}</p>
+                        {!editingNalReason && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => {
+                              setNalReasonValue(lead.nalReason || "");
+                              setEditingNalReason(true);
+                            }}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        )}
                       </div>
-                    )}
-                    {lead.clientResponse && (
-                      <div className="text-sm">
+                      {editingNalReason ? (
+                        <div className="mt-1 space-y-2">
+                          <Textarea
+                            value={nalReasonValue}
+                            onChange={(e) => setNalReasonValue(e.target.value)}
+                            rows={3}
+                            className="text-sm resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={handleSaveNalReason}
+                              disabled={isSavingNalReason}
+                            >
+                              {isSavingNalReason ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                "Save"
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => setEditingNalReason(false)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-slate-700 whitespace-pre-wrap">
+                          {lead.nalReason ? (
+                            lead.nalReason
+                          ) : (
+                            <span className="text-slate-400 italic">
+                              Not set
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-sm">
+                      <div className="flex items-center justify-between">
                         <span className="text-slate-500 font-medium">
                           Client Response:
                         </span>
-                        <p className="mt-1 text-slate-700 whitespace-pre-wrap">
-                          {lead.clientResponse}
-                        </p>
+                        {!editingClientResponse && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => {
+                              setClientResponseValue(
+                                lead.clientResponse || "",
+                              );
+                              setEditingClientResponse(true);
+                            }}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        )}
                       </div>
-                    )}
-                    {!lead.nalReason && !lead.clientResponse && (
-                      <p className="text-sm text-slate-400 italic">
-                        No additional context available.
-                      </p>
-                    )}
+                      {editingClientResponse ? (
+                        <div className="mt-1 space-y-2">
+                          <Textarea
+                            value={clientResponseValue}
+                            onChange={(e) =>
+                              setClientResponseValue(e.target.value)
+                            }
+                            rows={3}
+                            className="text-sm resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={handleSaveClientResponse}
+                              disabled={isSavingClientResponse}
+                            >
+                              {isSavingClientResponse ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                "Save"
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => setEditingClientResponse(false)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-slate-700 whitespace-pre-wrap">
+                          {lead.clientResponse ? (
+                            lead.clientResponse
+                          ) : (
+                            <span className="text-slate-400 italic">
+                              Not set
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
 

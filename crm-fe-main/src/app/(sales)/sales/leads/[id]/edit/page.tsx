@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { leadsApi } from "@/lib/api";
+import { useIsAdmin } from "@/providers/auth-provider";
 import { LeadForm } from "@/components/leads/lead-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Lead } from "@/types";
@@ -10,6 +12,13 @@ import type { Lead } from "@/types";
 export default function EditLeadPage() {
   const { id } = useParams();
   const router = useRouter();
+  const isAdmin = useIsAdmin();
+
+  useEffect(() => {
+    if (isAdmin === false) {
+      router.replace(`/sales/leads/${id}`);
+    }
+  }, [isAdmin, id, router]);
 
   const {
     data: lead,
@@ -18,6 +27,10 @@ export default function EditLeadPage() {
   } = useSWR(id ? `lead-${id}` : null, () =>
     leadsApi.get(id as string)
   );
+
+  if (!isAdmin) {
+    return null;
+  }
 
   if (isLoading) {
     return (
