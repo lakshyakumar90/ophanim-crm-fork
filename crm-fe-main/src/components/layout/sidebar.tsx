@@ -145,7 +145,7 @@ const getDepartmentNavItems = (slug: string): NavItem[] => {
           title: "Analytics",
           href: `/sales/analytics`,
           icon: PieChart,
-          roles: ["admin"],
+          roles: ["admin", "manager", "employee"],
         },
         {
           title: "Duplicate Leads",

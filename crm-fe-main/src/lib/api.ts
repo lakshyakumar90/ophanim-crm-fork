@@ -471,12 +471,24 @@ export const leadsApi = {
   markReminderDone: (reminderId: string) =>
     api.patch(`/leads/reminders/${reminderId}/done`),
   getStatsByUser: async () => {
+    // Always use backend path: returns role/teamId/teamName/leadCount via supabaseAdmin
+    const res = await api.get("/leads/stats/by-user");
+    return unwrap(res);
+  },
+  getActivityCountsByUser: async (): Promise<Record<string, number>> => {
     try {
-      return await sq.getLeadStatsByUser();
+      return await sq.getLeadActivitiesCountByUser();
     } catch (error) {
-      console.error("Supabase lead stats read failed, falling back to API", error);
-      const res = await api.get("/leads/stats/by-user");
-      return unwrap(res);
+      console.error("Failed to fetch lead activity counts by user", error);
+      return {};
+    }
+  },
+  getLeadsWorkedByUser: async (): Promise<Record<string, number>> => {
+    try {
+      return await sq.getDistinctLeadsWorkedByUser();
+    } catch (error) {
+      console.error("Failed to fetch distinct leads worked by user", error);
+      return {};
     }
   },
 };

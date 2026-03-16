@@ -1,462 +1,675 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import useSWR, { mutate as globalMutate } from "swr";
-import { dashboardApi, leadsApi } from "@/lib/api";
-import { useAuth } from "@/providers/auth-provider";
-import { useDepartment } from "@/providers/department-context";
+import { useState, useEffect, useCallback } from "react";
+import { format, subDays } from "date-fns";
+import { DateRange } from "react-day-picker";
 import {
-  StatsCard,
-  MiniStatsCard,
-  LeadPipelineChart,
-  LeadSourceChart,
-  AttendanceWidget,
-  RecentLeadsList,
-  ActivityFeed,
-} from "@/components/dashboard";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { UserSelector } from "@/components/shared/user-selector";
+import { StatsCard } from "@/components/dashboard";
+import {
+  dashboardApi,
+  leadsApi,
+  activitiesApi,
+  teamsApi,
+  usersApi,
+} from "@/lib/api";
+import { toast } from "sonner";
+import { nowIST } from "@/lib/date-utils";
 import {
   Target,
-  CheckSquare,
-  Users,
   TrendingUp,
-  Clock,
+  Briefcase,
+  CheckSquare,
   AlertTriangle,
-  RefreshCw,
-  Flame,
-  Phone,
-  UserCheck,
+  CircleDollarSign,
+  DollarSign,
   Percent,
-  ListTodo,
-  FileText,
+  Clock,
+  CalendarClock,
+  CheckCircle2,
+  Trophy,
+  RefreshCw,
+  Calendar as CalendarIcon,
+  XCircle,
 } from "lucide-react";
-import { format } from "date-fns";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
-export default function DashboardPage() {
-  const { user } = useAuth();
-  const { currentDepartment } = useDepartment();
+const PIPELINE_STAGES = [
+  "new",
+  "contacted",
+  "qualified",
+  "proposal_sent",
+  "negotiation",
+  "won",
+  "lost",
+];
+
+const PIPELINE_LABELS: Record<string, string> = {
+  new: "New Lead",
+  contacted: "Contacted",
+  qualified: "Qualified",
+  proposal_sent: "Proposal Sent",
+  negotiation: "Negotiation",
+  won: "Won",
+  lost: "Lost",
+  on_hold: "On Hold",
+  unqualified: "Unqualified",
+};
+
+const PIPELINE_COLORS: Record<string, string> = {
+  new: "#3b82f6",
+  contacted: "#06b6d4",
+  qualified: "#10b981",
+  proposal_sent: "#f59e0b",
+  negotiation: "#8b5cf6",
+  won: "#22c55e",
+  lost: "#ef4444",
+  on_hold: "#94a3b8",
+  unqualified: "#6b7280",
+};
+
+const DATE_PRESETS = [
+  { label: "Today", value: "0d", days: 0 },
+  { label: "7 Days", value: "7d", days: 7 },
+  { label: "30 Days", value: "30d", days: 30 },
+  { label: "90 Days", value: "90d", days: 90 },
+];
+
+export default function SalesDashboardPage() {
+  const now = nowIST();
+  const [date, setDate] = useState<DateRange | undefined>({
+    from: subDays(now, 30),
+    to: now,
+  });
+  const [activePreset, setActivePreset] = useState("30d");
+  const [teamId, setTeamId] = useState("all");
+  const [userId, setUserId] = useState("");
+  const [teams, setTeams] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [dashData, setDashData] = useState<any>(null);
+  const [topDeals, setTopDeals] = useState<any[]>([]);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const { data, isLoading, error, mutate } = useSWR(
-    user ? ["dashboard", currentDepartment?.id || "sales"] : null,
-    () => dashboardApi.get(currentDepartment?.id),
+  useEffect(() => {
+    Promise.all([teamsApi.list(), usersApi.list({ limit: 1000 })])
+      .then(([t, u]) => {
+        setTeams(Array.isArray(t) ? t : []);
+        setUsers(u?.data || u || []);
+      })
+      .catch(() => toast.error("Failed to load filter data"));
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [dash, deals, stats, acts] = await Promise.all([
+        dashboardApi.get(),
+        leadsApi.list({ limit: 8, sortBy: "lead_value", sortOrder: "desc" }),
+        leadsApi.getStatsByUser(),
+        activitiesApi.list({ limit: 10, scope: "all-crm" }),
+      ]);
+      setDashData(dash);
+      setTopDeals(deals?.data || []);
+      setLeaderboard((stats?.users || []).slice(0, 8));
+      setActivities(acts?.data || []);
+    } catch {
+      toast.error("Failed to load dashboard data");
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Derived KPIs
+  const pipeline = dashData?.leads?.pipeline || {};
+  const totalLeads = dashData?.leads?.total || 0;
+  const newLeads = dashData?.leads?.newThisMonth || 0;
+  const wonLeads = pipeline.won || 0;
+  const lostLeads = pipeline.lost || 0;
+  const totalRevenue = dashData?.revenue?.total || 0;
+  const activeDeals = ["contacted", "qualified", "proposal_sent", "negotiation"].reduce(
+    (sum, s) => sum + (pipeline[s] || 0),
+    0,
   );
+  const convRate =
+    totalLeads > 0 ? ((wonLeads / totalLeads) * 100).toFixed(1) : "0.0";
+  const avgDeal = wonLeads > 0 ? Math.round(totalRevenue / wonLeads) : 0;
+  const tasks = dashData?.tasks || {};
 
-  const { data: recentLeadsData } = useSWR(user ? "recent-leads" : null, () =>
-    leadsApi
-      .list({ limit: 5, sortBy: "updated_at", sortOrder: "desc" }),
-  );
+  const pipelineChartData = PIPELINE_STAGES.filter(
+    (s) => (pipeline[s] || 0) > 0,
+  ).map((s) => ({
+    name: PIPELINE_LABELS[s] || s,
+    count: pipeline[s] || 0,
+    fill: PIPELINE_COLORS[s] || "#94a3b8",
+  }));
 
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await Promise.all([mutate(), globalMutate("recent-leads")]);
-    setTimeout(() => setIsRefreshing(false), 500);
-  }, [mutate]);
+  if (isLoading) return <PageSkeleton />;
 
-  useHeaderRefresh({
-    onRefresh: handleRefresh,
-    isRefreshing,
-  });
-
-  if (isLoading) {
-    return <DashboardSkeleton />;
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-red-500">Failed to load dashboard data</p>
+  return (
+    <div className="flex flex-col gap-6 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Sales Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Real-time operational overview of your sales pipeline.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setIsRefreshing(true);
+            fetchData();
+          }}
+          disabled={isRefreshing}
+        >
+          <RefreshCw
+            className={cn("w-4 h-4 mr-2", isRefreshing && "animate-spin")}
+          />
+          Refresh
+        </Button>
       </div>
-    );
-  }
 
-  // Common header for all dashboards
-  const DashboardHeader = ({
-    title,
-    badge,
-  }: {
-    title: string;
-    badge?: string;
-  }) => (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-        {badge && (
-          <Badge className="bg-rose-100 text-rose-700 border-0">{badge}</Badge>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 items-center bg-card p-4 rounded-lg border">
+        {/* Preset buttons */}
+        <div className="flex gap-1.5 flex-wrap">
+          {DATE_PRESETS.map((p) => (
+            <Button
+              key={p.value}
+              variant={activePreset === p.value ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setActivePreset(p.value);
+                setDate({ from: subDays(now, p.days), to: now });
+              }}
+            >
+              {p.label}
+            </Button>
+          ))}
+        </div>
+
+        {/* Date range picker */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-[260px] justify-start text-left font-normal",
+                !date && "text-muted-foreground",
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {date?.from
+                ? date.to
+                  ? `${format(date.from, "LLL dd, y")} – ${format(date.to, "LLL dd, y")}`
+                  : format(date.from, "LLL dd, y")
+                : "Pick date range"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={date?.from}
+              selected={date}
+              onSelect={(d) => {
+                setDate(d);
+                setActivePreset("custom");
+              }}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+
+        {/* Team filter */}
+        <Select value={teamId} onValueChange={setTeamId}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="All Teams" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Teams</SelectItem>
+            {teams.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* User filter */}
+        <div className="w-[220px]">
+          <UserSelector
+            users={users.map((u) => ({
+              id: u.id,
+              fullName: u.fullName,
+              email: u.email,
+              role: u.role,
+              isActive: u.isActive,
+            }))}
+            value={userId}
+            onValueChange={setUserId}
+            placeholder="All Users"
+          />
+        </div>
+        {userId && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setUserId("")}
+            className="text-xs text-muted-foreground"
+          >
+            Clear user
+          </Button>
         )}
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleRefresh}
-        className="border-border"
-      >
-        <RefreshCw
-          className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
-        />
-        Refresh
-      </Button>
-    </div>
-  );
 
-  // Render based on user role
-  if (user?.role === "admin") {
-    return (
-      <div className="space-y-6">
-        <DashboardHeader title="Dashboard" badge="Admin View" />
-        <p className="text-muted-foreground -mt-4">
-          Overview of all leads across the organization
-        </p>
-
-        {/* Attendance Widget */}
-        <AttendanceWidget />
-
-        {/* Main Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Section 1: KPI Cards */}
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          Key Metrics
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatsCard
             title="Total Leads"
-            value={data?.leads?.total || 0}
+            value={totalLeads}
             icon={Target}
             accentColor="blue"
           />
           <StatsCard
             title="New Leads"
-            value={data?.leads?.newThisMonth || 0}
+            value={newLeads}
             icon={TrendingUp}
             accentColor="green"
+            description="This month"
           />
           <StatsCard
-            title="Follow Up"
-            value={data?.leads?.pipeline?.follow_up || 0}
-            icon={Flame}
-            accentColor="orange"
+            title="Active Deals"
+            value={activeDeals}
+            icon={Briefcase}
+            accentColor="cyan"
           />
           <StatsCard
-            title="Customers"
-            value={data?.leads?.pipeline?.won || 0}
-            icon={UserCheck}
-            accentColor="purple"
-          />
-        </div>
-
-        {/* Mini Stats Row */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {/* Project Stats - Dynamic mapping */}
-          {data?.projects?.slice(0, 3).map((project: any, index: number) => {
-            const colors: any[] = [
-              "green",
-              "purple",
-              "slate",
-              "blue",
-              "orange",
-              "rose",
-            ];
-            return (
-              <MiniStatsCard
-                key={project.name}
-                label={project.name}
-                value={project.value}
-                color={colors[index % colors.length]}
-              />
-            );
-          })}
-
-          {/* Fallback if no projects, or fill remaining slots */}
-          {(!data?.projects || data.projects.length === 0) && (
-            <>
-              <MiniStatsCard label="Active Projects" value={0} color="green" />
-              <MiniStatsCard label="Completed" value={0} color="purple" />
-              <MiniStatsCard label="On Hold" value={0} color="slate" />
-            </>
-          )}
-
-          <MiniStatsCard
-            label="Conversion Rate"
-            value={`${calculateConversionRate(data)}%`}
-            color="blue"
-          />
-          <MiniStatsCard
-            label="Open Tasks"
-            value={data?.tasks?.pending || 0}
-            color="orange"
-          />
-          <MiniStatsCard
-            label="Overdue Tasks"
-            value={data?.tasks?.overdue || 0}
-            color="rose"
-          />
-        </div>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <LeadPipelineChart data={data?.leads?.pipeline || {}} />
-          <LeadSourceChart data={data?.leads?.sources || {}} />
-        </div>
-
-        {/* Activity Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RecentLeadsList leads={recentLeadsData?.data || []} />
-          <ActivityFeed activities={data?.recentActivity || []} />
-        </div>
-
-        {/* Performance Summary */}
-        <div className="bg-card rounded-xl border border-border p-5">
-          <div className="mb-4">
-            <h3 className="font-semibold text-foreground">
-              Performance Summary
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              Key metrics for the selected period
-            </p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-emerald-50 dark:bg-emerald-950 rounded-xl p-4 text-center">
-              <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                {calculateConversionRate(data)}%
-              </p>
-              <p className="text-sm text-muted-foreground">Conversion Rate</p>
-            </div>
-            <div className="bg-blue-50 dark:bg-blue-950 rounded-xl p-4 text-center">
-              <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {data?.leads?.pipeline?.customer || 0}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                New Customers
-                <span className="block text-xs text-muted-foreground">
-                  From {data?.leads?.total || 0} leads
-                </span>
-              </p>
-            </div>
-            <div className="bg-orange-50 dark:bg-orange-950 rounded-xl p-4 text-center">
-              <Flame className="h-5 w-5 text-orange-600 dark:text-orange-400 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                {data?.leads?.pipeline?.follow_up || 0}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Follow Up
-                <span className="block text-xs text-muted-foreground">
-                  Needs attention
-                </span>
-              </p>
-            </div>
-            <div className="bg-rose-50 dark:bg-rose-950 rounded-xl p-4 text-center">
-              <AlertTriangle className="h-5 w-5 text-rose-600 dark:text-rose-400 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
-                {data?.tasks?.overdue || 0}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Overdue Tasks
-                <span className="block text-xs text-muted-foreground">
-                  Need attention
-                </span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Determine department type
-  const isFinance = currentDepartment?.slug === "finance";
-
-  // Manager Dashboard
-  if (user?.role === "manager") {
-    return (
-      <div className="space-y-6">
-        <DashboardHeader
-          title={`${currentDepartment?.name || "Team"} Dashboard`}
-          badge="Manager"
-        />
-        <p className="text-muted-foreground -mt-4">
-          Overview of your team's performance
-        </p>
-
-        {/* Attendance Widget */}
-        <AttendanceWidget />
-
-        {/* Finance Manager View */}
-        {isFinance ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatsCard
-                title="Total Revenue"
-                value={`$${(data?.revenue?.total || 0).toLocaleString()}`}
-                icon={TrendingUp}
-                accentColor="green"
-              />
-              <StatsCard
-                title="Pending Expenses"
-                value={data?.expenses?.pendingCount || 0}
-                icon={AlertTriangle}
-                accentColor="orange"
-              />
-              <StatsCard
-                title="Overdue Invoices"
-                value={data?.invoices?.overdueCount || 0}
-                icon={Clock}
-                accentColor="rose"
-              />
-              <StatsCard
-                title="Team Members"
-                value={data?.team?.memberCount || 0}
-                icon={Users}
-                accentColor="blue"
-              />
-            </div>
-            {/* Add Finance specific charts/lists here if available */}
-          </>
-        ) : (
-          /* Sales Manager View */
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatsCard
-                title="Team Members"
-                value={data?.team?.memberCount || 0}
-                icon={Users}
-                accentColor="blue"
-              />
-              <StatsCard
-                title="Team Leads"
-                value={data?.leads?.total || 0}
-                icon={Target}
-                accentColor="green"
-              />
-              <StatsCard
-                title="Pending Tasks"
-                value={data?.tasks?.pending || 0}
-                icon={CheckSquare}
-                accentColor="orange"
-              />
-              <StatsCard
-                title="Overdue Tasks"
-                value={data?.tasks?.overdue || 0}
-                icon={AlertTriangle}
-                accentColor="rose"
-              />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <LeadPipelineChart data={data?.leads?.pipeline || {}} />
-              <RecentLeadsList leads={recentLeadsData?.data || []} />
-            </div>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  // Employee Dashboard
-  return (
-    <div className="space-y-6">
-      <DashboardHeader title="My Dashboard" />
-      <p className="text-muted-foreground -mt-4">
-        Your personal performance overview
-      </p>
-
-      {/* Attendance Widget */}
-      <AttendanceWidget />
-
-      {/* Finance Employee View */}
-      {isFinance ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard
-            title="My Expenses"
-            value={`$${(data?.summary?.this_month_expenses || 0).toLocaleString()}`}
-            icon={TrendingUp}
-            accentColor="blue"
-          />
-          <StatsCard
-            title="Pending Approval"
-            value={data?.summary?.pending_approvals || 0} // For employees, this logic might need check in backend if it returns 'my pending'
-            icon={Clock}
-            accentColor="orange"
-          />
-          <StatsCard
-            title="Assigned Tasks"
-            value={data?.tasks?.pending || 0} // Tasks endpoint is separate, assuming it's merged or fetched
+            title="Deals Won"
+            value={wonLeads}
             icon={CheckSquare}
+            accentColor="emerald"
+          />
+          <StatsCard
+            title="Deals Lost"
+            value={lostLeads}
+            icon={XCircle}
+            accentColor="rose"
+          />
+          <StatsCard
+            title="Total Revenue"
+            value={`₹${Number(totalRevenue).toLocaleString("en-IN")}`}
+            icon={CircleDollarSign}
             accentColor="purple"
           />
           <StatsCard
-            title="My Requests"
-            value={data?.summary?.total_requests || 0} // Optional placeholder if backend adds it
-            icon={FileText}
-            accentColor="green"
-            description="Total requests this month"
+            title="Conversion Rate"
+            value={`${convRate}%`}
+            icon={Percent}
+            accentColor="amber"
+          />
+          <StatsCard
+            title="Avg Deal Value"
+            value={`₹${avgDeal.toLocaleString("en-IN")}`}
+            icon={DollarSign}
+            accentColor="orange"
           />
         </div>
-      ) : (
-        /* Sales Employee View */
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatsCard
-              title="My Leads"
-              value={data?.leads?.total || 0}
-              icon={Target}
-              accentColor="blue"
-            />
-            <StatsCard
-              title="Pending Tasks"
-              value={data?.tasks?.pending || 0}
-              icon={CheckSquare}
-              accentColor="orange"
-            />
-            <StatsCard
-              title="Due Today"
-              value={data?.tasks?.dueToday || 0}
-              icon={Clock}
-              accentColor="purple"
-            />
-            <StatsCard
-              title="Overdue"
-              value={data?.tasks?.overdue || 0}
-              icon={AlertTriangle}
-              accentColor="rose"
-            />
+      </div>
+
+      {/* Section 2 + 3: Pipeline Overview + Tasks */}
+      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+        <Card className="lg:col-span-4">
+          <CardHeader>
+            <CardTitle>Sales Pipeline</CardTitle>
+            <CardDescription>
+              Deal distribution across pipeline stages
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pipelineChartData.length > 0 ? (
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={pipelineChartData}
+                    layout="vertical"
+                    margin={{ left: 8, right: 24 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={110}
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{ borderRadius: "8px" }}
+                      formatter={(v) => [v, "Deals"]}
+                    />
+                    <Bar dataKey="count" name="Deals" radius={[0, 4, 4, 0]}>
+                      {pipelineChartData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[260px] text-muted-foreground text-sm">
+                No pipeline data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Tasks &amp; Follow-ups</CardTitle>
+            <CardDescription>Current task status at a glance</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[
+              {
+                label: "Overdue Tasks",
+                value: tasks.overdue || 0,
+                icon: AlertTriangle,
+                bg: "bg-rose-50 dark:bg-rose-950",
+                border: "border-rose-200 dark:border-rose-800",
+                iconColor: "text-rose-600",
+                badgeCls: "bg-rose-100 text-rose-700 border-0",
+              },
+              {
+                label: "Due Today",
+                value: tasks.dueToday || 0,
+                icon: Clock,
+                bg: "bg-orange-50 dark:bg-orange-950",
+                border: "border-orange-200 dark:border-orange-800",
+                iconColor: "text-orange-600",
+                badgeCls: "bg-orange-100 text-orange-700 border-0",
+              },
+              {
+                label: "Pending Tasks",
+                value: tasks.pending || 0,
+                icon: CalendarClock,
+                bg: "bg-blue-50 dark:bg-blue-950",
+                border: "border-blue-200 dark:border-blue-800",
+                iconColor: "text-blue-600",
+                badgeCls: "bg-blue-100 text-blue-700 border-0",
+              },
+              {
+                label: "Total Tasks",
+                value: tasks.total || 0,
+                icon: CheckCircle2,
+                bg: "bg-emerald-50 dark:bg-emerald-950",
+                border: "border-emerald-200 dark:border-emerald-800",
+                iconColor: "text-emerald-600",
+                badgeCls: "bg-emerald-100 text-emerald-700 border-0",
+              },
+            ].map(({ label, value, icon: Icon, bg, border, iconColor, badgeCls }) => (
+              <div
+                key={label}
+                className={cn(
+                  "flex items-center justify-between p-3 rounded-lg border",
+                  bg,
+                  border,
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon className={cn("w-5 h-5", iconColor)} />
+                  <span className="font-medium text-sm">{label}</span>
+                </div>
+                <Badge className={badgeCls}>{value}</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Section 4 + 6: Recent Activity + Leaderboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+        <Card className="lg:col-span-4">
+          <CardHeader>
+            <CardTitle>Recent Sales Activity</CardTitle>
+            <CardDescription>
+              Latest actions across the sales team
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {activities.length > 0 ? (
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                {activities.map((act: any, i) => (
+                  <div key={i} className="flex gap-3 items-start text-sm">
+                    <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">
+                        {act.userName ||
+                          act.user?.fullName ||
+                          "Someone"}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          {(act.action || "").replace(/_/g, " ")}
+                        </span>
+                        {act.resourceType && (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            · {act.resourceType}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                      {act.createdAt
+                        ? format(new Date(act.createdAt), "MMM d, HH:mm")
+                        : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                No recent activity
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-yellow-500" />
+              Sales Leaderboard
+            </CardTitle>
+            <CardDescription>Top performers by total leads</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {leaderboard.length > 0 ? (
+              <div className="space-y-3">
+                {leaderboard.map((rep: any, i) => (
+                  <div key={rep.id || i} className="flex items-center gap-3 py-1">
+                    <span
+                      className={cn(
+                        "w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold flex-shrink-0",
+                        i === 0
+                          ? "bg-yellow-100 text-yellow-700"
+                          : i === 1
+                            ? "bg-gray-100 text-gray-600"
+                            : i === 2
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {rep.fullName || "Unknown"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {rep.teamName || rep.role || ""}
+                      </p>
+                    </div>
+                    <div className="text-right text-xs">
+                      <p className="font-semibold text-primary">
+                        {rep.leadCount || 0}
+                      </p>
+                      <p className="text-muted-foreground">leads</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                No data available
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Section 5: Top Deals */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Top Deals / Opportunities</CardTitle>
+          <CardDescription>
+            Highest-value deals currently in the pipeline
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-muted-foreground text-left">
+                  <th className="py-3 px-3 font-medium">Deal Name</th>
+                  <th className="py-3 px-3 font-medium">Company</th>
+                  <th className="py-3 px-3 font-medium">Stage</th>
+                  <th className="py-3 px-3 font-medium text-right">Value</th>
+                  <th className="py-3 px-3 font-medium">Owner</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topDeals.length > 0 ? (
+                  topDeals.map((deal: any, i) => (
+                    <tr
+                      key={deal.id || i}
+                      className="border-b last:border-0 hover:bg-muted/40 transition-colors"
+                    >
+                      <td className="py-3 px-3 font-medium">
+                        {deal.leadName || deal.lead_name || "—"}
+                      </td>
+                      <td className="py-3 px-3 text-muted-foreground">
+                        {deal.companyName || deal.company_name || "—"}
+                      </td>
+                      <td className="py-3 px-3">
+                        <Badge variant="secondary" className="capitalize">
+                          {(deal.status || "").replace(/_/g, " ")}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-3 text-right font-semibold text-emerald-600">
+                        {deal.leadValue || deal.lead_value
+                          ? `₹${Number(deal.leadValue || deal.lead_value).toLocaleString("en-IN")}`
+                          : "—"}
+                      </td>
+                      <td className="py-3 px-3 text-muted-foreground">
+                        {deal.assignedUser?.fullName ||
+                          deal.assigned_user?.full_name ||
+                          "Unassigned"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      No deals found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <LeadPipelineChart data={data?.leads?.pipeline || {}} />
-            <RecentLeadsList leads={recentLeadsData?.data || []} />
-          </div>
-        </>
-      )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function calculateConversionRate(data: any): string {
-  if (!data?.leads?.total || data.leads.total === 0) return "0.0";
-  const customers = data.leads.pipeline?.customer || 0;
-  return ((customers / data.leads.total) * 100).toFixed(1);
-}
-
-function DashboardSkeleton() {
+function PageSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
-        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-14 w-72" />
         <Skeleton className="h-9 w-24" />
       </div>
-      <Skeleton className="h-20 w-full" />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
-          <Skeleton key={i} className="h-32" />
+      <Skeleton className="h-16 w-full" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[...Array(8)].map((_, i) => (
+          <Skeleton key={i} className="h-28" />
         ))}
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {[...Array(6)].map((_, i) => (
-          <Skeleton key={i} className="h-24" />
-        ))}
+      <div className="grid lg:grid-cols-7 gap-6">
+        <Skeleton className="lg:col-span-4 h-72" />
+        <Skeleton className="lg:col-span-3 h-72" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Skeleton className="h-80 lg:col-span-2" />
-        <Skeleton className="h-80" />
+      <div className="grid lg:grid-cols-7 gap-6">
+        <Skeleton className="lg:col-span-4 h-64" />
+        <Skeleton className="lg:col-span-3 h-64" />
       </div>
+      <Skeleton className="h-56 w-full" />
     </div>
   );
 }

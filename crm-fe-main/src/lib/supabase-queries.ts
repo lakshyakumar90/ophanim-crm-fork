@@ -1546,3 +1546,62 @@ export async function getLeaveBalances(userId?: string, year?: number) {
 
   return mapToCamelCase(data || []);
 }
+
+// ===================
+// LEAD ACTIVITY COUNTS BY USER
+// ===================
+
+/**
+ * Count lead_activities per user_id.
+ * Returns a map of userId → activity count.
+ */
+export async function getLeadActivitiesCountByUser(): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from("lead_activities")
+    .select("user_id");
+
+  if (error) {
+    console.error("Error fetching lead activities count by user:", error);
+    throw error;
+  }
+
+  const counts: Record<string, number> = {};
+  for (const row of data || []) {
+    const uid = (row as any).user_id;
+    if (uid) counts[uid] = (counts[uid] || 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Count distinct leads worked on per user_id (from lead_activities).
+ * Returns a map of userId → unique lead count.
+ */
+export async function getDistinctLeadsWorkedByUser(): Promise<
+  Record<string, number>
+> {
+  const { data, error } = await supabase
+    .from("lead_activities")
+    .select("user_id, lead_id");
+
+  if (error) {
+    console.error("Error fetching distinct leads worked by user:", error);
+    throw error;
+  }
+
+  const leadSets: Record<string, Set<string>> = {};
+  for (const row of data || []) {
+    const uid = (row as any).user_id;
+    const lid = (row as any).lead_id;
+    if (uid && lid) {
+      if (!leadSets[uid]) leadSets[uid] = new Set();
+      leadSets[uid].add(lid);
+    }
+  }
+
+  const result: Record<string, number> = {};
+  for (const [uid, ledSet] of Object.entries(leadSets)) {
+    result[uid] = ledSet.size;
+  }
+  return result;
+}
