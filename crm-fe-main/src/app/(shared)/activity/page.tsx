@@ -667,19 +667,59 @@ export default function ActivityPage() {
   const { user } = useAuth();
   const { departments } = useDepartment();
 
-  const [scope, setScope] = useState<ActivityScope>("self");
+  const [scope, setScope] = useState<ActivityScope>(() => {
+    if (typeof window === "undefined") return "self";
+    return (new URLSearchParams(window.location.search).get("scope") as ActivityScope) || "self";
+  });
   const [activityType, setActivityType] = useState("all");
-  const [resourceType, setResourceType] = useState("all");
-  const [timePreset, setTimePreset] = useState<TimePreset>("today");
-  const [customStartDate, setCustomStartDate] = useState("");
-  const [customEndDate, setCustomEndDate] = useState("");
+  const [resourceType, setResourceType] = useState(() => {
+    if (typeof window === "undefined") return "all";
+    return new URLSearchParams(window.location.search).get("rtype") || "all";
+  });
+  const [timePreset, setTimePreset] = useState<TimePreset>(() => {
+    if (typeof window === "undefined") return "today";
+    return (new URLSearchParams(window.location.search).get("preset") as TimePreset) || "today";
+  });
+  const [customStartDate, setCustomStartDate] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("from") || "";
+  });
+  const [customEndDate, setCustomEndDate] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("to") || "";
+  });
   const [showSystemEvents, setShowSystemEvents] = useState(false);
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => {
+    if (typeof window === "undefined") return "all";
+    return (new URLSearchParams(window.location.search).get("quick") as QuickFilter) || "all";
+  });
 
   const [filterDeptId, setFilterDeptId] = useState("");
   const [filterDesignation, setFilterDesignation] = useState("all");
-  const [filterTeamId, setFilterTeamId] = useState("");
-  const [filterUserId, setFilterUserId] = useState("");
+  const [filterTeamId, setFilterTeamId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("teamId") || "";
+  });
+  const [filterUserId, setFilterUserId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("userId") || "";
+  });
+
+  // ── Sync filter state to URL (without triggering re-render)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams();
+    if (scope !== "self") params.set("scope", scope);
+    if (timePreset !== "today") params.set("preset", timePreset);
+    if (timePreset === "custom" && customStartDate) params.set("from", customStartDate);
+    if (timePreset === "custom" && customEndDate) params.set("to", customEndDate);
+    if (quickFilter !== "all") params.set("quick", quickFilter);
+    if (filterTeamId) params.set("teamId", filterTeamId);
+    if (filterUserId) params.set("userId", filterUserId);
+    if (resourceType !== "all") params.set("rtype", resourceType);
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [scope, timePreset, customStartDate, customEndDate, quickFilter, filterTeamId, filterUserId, resourceType]);
 
   const [extraActivities, setExtraActivities] = useState<ActivityLog[]>([]);
   const [loadMorePage, setLoadMorePage] = useState(1);

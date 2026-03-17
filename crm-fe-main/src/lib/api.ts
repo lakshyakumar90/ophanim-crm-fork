@@ -186,7 +186,7 @@ export const departmentsApi = {
     try {
       return await sq.getDepartments();
     } catch (error) {
-      console.error("Supabase departments read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase departments read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/departments");
       return unwrap(res) || [];
     }
@@ -203,7 +203,7 @@ export const usersApi = {
     try {
       return await sq.getUsers(params as any);
     } catch (error) {
-      console.error("Supabase users read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase users read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/users", { params });
       return unwrap(res);
     }
@@ -212,7 +212,7 @@ export const usersApi = {
     try {
       return await sq.getUserById(id);
     } catch (error) {
-      console.error("Supabase user read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase user read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/users/${id}`);
       return unwrap(res);
     }
@@ -238,7 +238,7 @@ export const usersApi = {
     try {
       return await sq.getProjectManagers();
     } catch (error) {
-      console.error("Supabase project managers read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase project managers read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/users/project-managers");
       return unwrap(res);
     }
@@ -247,7 +247,7 @@ export const usersApi = {
     try {
       return await sq.getUsersByJobTitle(titles);
     } catch (error) {
-      console.error("Supabase job title read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase job title read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/users/by-job-title", {
         params: { titles: titles.join(",") },
       });
@@ -258,7 +258,7 @@ export const usersApi = {
     try {
       return await sq.getJobTitles(roleType);
     } catch (error) {
-      console.error("Supabase job titles read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase job titles read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/users/job-titles", { params: { roleType } });
       return unwrap(res);
     }
@@ -274,7 +274,7 @@ export const teamsApi = {
     try {
       return await sq.getTeams();
     } catch (error) {
-      console.error("Supabase teams read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase teams read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/teams");
       return unwrap(res) || [];
     }
@@ -311,7 +311,7 @@ export const teamNotesApi = {
     try {
       return await sq.getTeamNotes(teamId);
     } catch (error) {
-      console.error("Supabase team notes read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase team notes read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/teams/${teamId}/notes`);
       return unwrap(res) || [];
     }
@@ -332,7 +332,7 @@ export const leadsApi = {
     try {
       return await sq.getLeads(params as any);
     } catch (error) {
-      console.error("Supabase leads read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase leads read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/leads", { params });
       return unwrap(res);
     }
@@ -341,7 +341,7 @@ export const leadsApi = {
     try {
       return await sq.getLeadById(id);
     } catch (error) {
-      console.error("Supabase lead read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase lead read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/leads/${id}`);
       return unwrap(res);
     }
@@ -356,7 +356,7 @@ export const leadsApi = {
     try {
       return await sq.getLeadPipeline();
     } catch (error) {
-      console.error("Supabase pipeline read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase pipeline read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/leads/pipeline");
       return unwrap(res);
     }
@@ -365,7 +365,7 @@ export const leadsApi = {
     try {
       return await sq.getWonLeads();
     } catch (error) {
-      console.error("Supabase won leads read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase won leads read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/leads/won");
       return unwrap(res);
     }
@@ -380,7 +380,7 @@ export const leadsApi = {
     try {
       return await sq.getLeadActivities(id);
     } catch (error) {
-      console.error("Supabase lead activities read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase lead activities read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/leads/${id}/activities`);
       return unwrap(res);
     }
@@ -393,7 +393,7 @@ export const leadsApi = {
     try {
       return await sq.getLeadComments(id);
     } catch (error) {
-      console.error("Supabase lead comments read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase lead comments read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/leads/${id}/comments`);
       return unwrap(res);
     }
@@ -502,7 +502,7 @@ export const tasksApi = {
     try {
       return await sq.getTasks(params as any);
     } catch (error) {
-      console.error("Supabase tasks read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase tasks read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/tasks", { params });
       return unwrap(res);
     }
@@ -511,7 +511,7 @@ export const tasksApi = {
     try {
       return await sq.getTaskById(id);
     } catch (error) {
-      console.error("Supabase task read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase task read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/tasks/${id}`);
       return unwrap(res);
     }
@@ -526,7 +526,7 @@ export const tasksApi = {
     try {
       return await sq.getTaskSummary();
     } catch (error) {
-      console.error("Supabase task summary read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase task summary read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/tasks/summary");
       return unwrap(res);
     }
@@ -535,7 +535,7 @@ export const tasksApi = {
     try {
       return await sq.getTaskComments(id);
     } catch (error) {
-      console.error("Supabase task comments read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase task comments read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/tasks/${id}/comments`);
       return unwrap(res);
     }
@@ -553,7 +553,7 @@ export const projectsApi = {
     try {
       return await sq.getProjects();
     } catch (error) {
-      console.error("Supabase projects read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase projects read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/projects");
       return unwrap(res);
     }
@@ -562,7 +562,7 @@ export const projectsApi = {
     try {
       return await sq.getProjectById(id);
     } catch (error) {
-      console.error("Supabase project read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase project read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/projects/${id}`);
       return unwrap(res);
     }
@@ -650,7 +650,7 @@ export const attendanceApi = {
     try {
       return await sq.getAttendanceList(params as any);
     } catch (error) {
-      console.error("Supabase attendance list read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase attendance list read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/attendance", { params });
       return unwrap(res);
     }
@@ -659,7 +659,7 @@ export const attendanceApi = {
     try {
       return await sq.getAttendanceRules(shiftType);
     } catch (error) {
-      console.error("Supabase rules read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase rules read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/attendance/rules");
       return unwrap(res);
     }
@@ -668,7 +668,7 @@ export const attendanceApi = {
     try {
       return await sq.getHolidays(year);
     } catch (error) {
-      console.error("Supabase holidays read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase holidays read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/attendance/holidays", {
         params: { year },
       });
@@ -691,7 +691,7 @@ export const attendanceApi = {
     try {
       return await sq.getUserAttendanceHistory(userId, startDate, endDate);
     } catch (error) {
-      console.error("Supabase user history read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase user history read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get(`/attendance/user/${userId}/history`, {
         params: { startDate, endDate },
       });
@@ -721,7 +721,7 @@ export const notificationsApi = {
         unreadOnly: params?.unreadOnly === "true",
       });
     } catch (error) {
-      console.error("Supabase notifications read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase notifications read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/notifications", { params });
       return unwrap(res);
     }
@@ -730,7 +730,7 @@ export const notificationsApi = {
     try {
       return await sq.getUnreadNotificationCount();
     } catch (error) {
-      console.error("Supabase unread count read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase unread count read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/notifications/unread-count");
       return unwrap(res);
     }
@@ -841,7 +841,7 @@ export const activitiesApi = {
     try {
       return await sq.getLeadActivitiesLog(params);
     } catch (error) {
-      console.error("Supabase lead activities read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase lead activities read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/activities/leads", { params });
       return unwrap(res);
     }
@@ -930,7 +930,7 @@ export const emailApi = {
     try {
       return await sq.getEmailSettings();
     } catch (error) {
-      console.error("Supabase email settings read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase email settings read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/email/settings");
       return unwrap(res);
     }
@@ -939,7 +939,7 @@ export const emailApi = {
     try {
       return await sq.getEmailHistory(params);
     } catch (error) {
-      console.error("Supabase email history read failed, falling back to API", error);
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase email history read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
       const res = await api.get("/email/history", { params });
       return unwrap(res);
     }

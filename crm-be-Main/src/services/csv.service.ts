@@ -333,7 +333,7 @@ export async function checkDuplicates(
  */
 export async function getDuplicateLeads(
   authUser: AuthUser,
-): Promise<{ groups: { email: string | null; phone: string | null; leads: { id: string; leadName: string; email: string | null; phone: string | null; status: string; createdAt: string }[] }[] }> {
+): Promise<{ groups: { email: string | null; phone: string | null; leads: { id: string; leadName: string; email: string | null; phone: string | null; status: string; createdAt: string; assignedTo: string | null }[] }[] }> {
   // Find leads where email or phone occurs more than once
   const { data: emailDupes } = await supabaseAdmin
     .from("leads")
@@ -376,7 +376,7 @@ export async function getDuplicateLeads(
   for (const email of duplicateEmails) {
     const { data } = await supabaseAdmin
       .from("leads")
-      .select("id, lead_name, email, phone, status, created_at")
+      .select("id, lead_name, email, phone, status, created_at, assigned_to")
       .eq("is_deleted", false)
       .eq("email", email)
       .order("created_at", { ascending: true });
@@ -389,6 +389,7 @@ export async function getDuplicateLeads(
         phone: l.phone,
         status: l.status,
         createdAt: l.created_at,
+        assignedTo: l.assigned_to ?? null,
       }));
       leads.forEach((l) => seenLeadIds.add(l.id));
       groups.push({ email, phone: null, leads });
@@ -398,7 +399,7 @@ export async function getDuplicateLeads(
   for (const phone of duplicatePhones) {
     const { data } = await supabaseAdmin
       .from("leads")
-      .select("id, lead_name, email, phone, status, created_at")
+      .select("id, lead_name, email, phone, status, created_at, assigned_to")
       .eq("is_deleted", false)
       .eq("phone", phone)
       .order("created_at", { ascending: true });
@@ -413,6 +414,7 @@ export async function getDuplicateLeads(
           phone: l.phone,
           status: l.status,
           createdAt: l.created_at,
+          assignedTo: l.assigned_to ?? null,
         }));
       if (leads.length > 1) {
         leads.forEach((l) => seenLeadIds.add(l.id));

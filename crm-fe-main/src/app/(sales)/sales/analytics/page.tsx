@@ -253,6 +253,30 @@ function DonutWithLegend({ data, height = 240, emptyMessage }: DonutProps) {
   );
 }
 
+// ─── URL filter helpers ───────────────────────────────────────────────────────
+
+function readUrlParam(key: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  return new URLSearchParams(window.location.search).get(key) || fallback;
+}
+
+function buildPresetDate(preset: string): DateRange {
+  const n = nowIST();
+  if (preset === "0d") return { from: n, to: n };
+  if (preset === "7d") return { from: subDays(n, 7), to: n };
+  if (preset === "mtd") return { from: startOfMonth(n), to: n };
+  return { from: subDays(n, 30), to: n };
+}
+
+function initDateFromUrl(): DateRange {
+  if (typeof window === "undefined") return buildPresetDate("30d");
+  const p = new URLSearchParams(window.location.search);
+  const from = p.get("from");
+  const to = p.get("to");
+  if (from) return { from: new Date(from), to: to ? new Date(to) : new Date(from) };
+  return buildPresetDate(p.get("preset") || "30d");
+}
+
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export default function SalesAnalyticsPage() {
@@ -261,19 +285,19 @@ export default function SalesAnalyticsPage() {
   const isManagerOrAbove = user?.role === "admin" || user?.role === "manager";
   const isEmployee = user?.role === "employee";
 
-  const now = nowIST();
-  const [date, setDate] = useState<DateRange | undefined>({
-    from: subDays(now, 30),
-    to: now,
-  });
-  const [activePreset, setActivePreset] = useState("30d");
-  const [interval, setInterval] = useState<"daily" | "weekly" | "monthly">(
-    "daily",
+  const [date, setDate] = useState<DateRange | undefined>(() => initDateFromUrl());
+  const [activePreset, setActivePreset] = useState<string>(() =>
+    readUrlParam("preset", "30d"),
   );
-  const [teamId, setTeamId] = useState("all");
+  const [interval, setInterval] = useState<"daily" | "weekly" | "monthly">(
+    () => readUrlParam("interval", "daily") as "daily" | "weekly" | "monthly",
+  );
+  const [teamId, setTeamId] = useState<string>(() => readUrlParam("teamId", "all"));
   // userId: empty = all (for manager/admin), locked to self for employee
-  const [userId, setUserId] = useState<string>("");
-  const [tableTab, setTableTab] = useState<"reps" | "teams">("reps");
+  const [userId, setUserId] = useState<string>(() => readUrlParam("userId", ""));
+  const [tableTab, setTableTab] = useState<"reps" | "teams">(
+    () => readUrlParam("tab", "reps") as "reps" | "teams",
+  );
 
   const [teams, setTeams] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -291,6 +315,25 @@ export default function SalesAnalyticsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // ── Sync filter state to URL (without triggering re-render)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams();
+    if (activePreset) params.set("preset", activePreset);
+    if (date?.from) params.set("from", format(date.from, "yyyy-MM-dd"));
+    if (date?.to) params.set("to", format(date.to, "yyyy-MM-dd"));
+    if (interval !== "daily") params.set("interval", interval);
+    if (teamId !== "all") params.set("teamId", teamId);
+    if (userId && !isEmployee) params.set("userId", userId);
+    if (tableTab !== "reps") params.set("tab", tableTab);
+    const qs = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      qs ? `?${qs}` : window.location.pathname,
+    );
+  }, [activePreset, date, interval, teamId, userId, tableTab, isEmployee]);
 
   // ── Lock employee to their own ID
   useEffect(() => {

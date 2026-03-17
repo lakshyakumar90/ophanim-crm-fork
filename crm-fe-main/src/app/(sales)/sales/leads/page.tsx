@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { leadsApi, usersApi, teamsApi } from "@/lib/api";
+import { leadsApi, usersApi, teamsApi, csvApi } from "@/lib/api";
+import { projectsApi } from "@/lib/projects-api";
 import { UserSelector } from "@/components/shared/user-selector";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -53,6 +54,8 @@ import {
   User,
   Users,
   Bell,
+  FolderKanban,
+  Copy,
 } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/leads/import-leads-dialog";
 import { ExportLeadsDialog } from "@/components/leads/export-leads-dialog";
@@ -326,8 +329,41 @@ export default function LeadsPage() {
     }),
   );
 
-  const pendingReminders = useMemo(() => {
-    if (Array.isArray(remindersData)) return remindersData;
+  // Fetch projects to map to won leads (manager+ only)
+  const { data: projectsForLeads } = useSWR(
+    (isAdmin || isManager) ? "all-projects-for-leads" : null,
+    () => projectsApi.list(),
+  );
+
+  const leadProjectMap = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    const projectList = Array.isArray(projectsForLeads) ? projectsForLeads : [];
+    projectList.forEach((p: any) => {
+      if (p.leadId) map.set(p.leadId, { id: p.id, name: p.name });
+    });
+    return map;
+  }, [projectsForLeads]);
+
+  // Fetch duplicate lead groups (all roles — employees see badge on their leads too)
+  const { data: duplicatesData } = useSWR(
+    user ? "duplicate-leads" : null,
+    async () => {
+      const res = await csvApi.getDuplicateLeads();
+      return (res.data?.data ?? res.data) as {
+        groups: { leads: { id: string }[] }[];
+      };
+    },
+    { revalidateOnFocus: false },
+  );
+
+  const duplicateLeadIds = useMemo(() => {
+    const groups = duplicatesData?.groups ?? [];
+    const ids = new Set<string>();
+    groups.forEach((g) => g.leads.forEach((l) => ids.add(l.id)));
+    return ids;
+  }, [duplicatesData]);
+
+  const pendingReminders = useMemo(() => {    if (Array.isArray(remindersData)) return remindersData;
     return remindersData?.data || [];
   }, [remindersData]);
 
@@ -573,8 +609,38 @@ export default function LeadsPage() {
 
   const renderCell = (lead: Lead, key: string) => {
     switch (key) {
-      case "leadName":
-        return <span className="font-medium">{lead.leadName}</span>;
+      case "leadName": {
+        const linkedProject =
+          lead.status === "won" && (isAdmin || isManager)
+            ? leadProjectMap.get(lead.id)
+            : null;
+        const isDuplicate = duplicateLeadIds.has(lead.id);
+        return (
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">{lead.leadName}</span>
+            {linkedProject && (
+              <Link
+                href={`/projects/${linkedProject.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 hover:bg-blue-100 transition-colors w-fit"
+              >
+                <FolderKanban className="h-3 w-3" />
+                {linkedProject.name}
+              </Link>
+            )}
+            {isDuplicate && (
+              <Link
+                href="/sales/duplicate-leads"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100 transition-colors w-fit"
+              >
+                <Copy className="h-3 w-3" />
+                Duplicate
+              </Link>
+            )}
+          </div>
+        );
+      }
       case "assignedTo":
         return (
           <div className="flex items-center gap-2">
@@ -1211,6 +1277,12 @@ export default function LeadsPage() {
                                                 )}
                                               </div>
                                             </Link>
+                                            {duplicateLeadIds.has(lead.id) && (
+                                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5 font-medium w-fit">
+                                                <Copy className="h-2.5 w-2.5" />
+                                                Duplicate
+                                              </span>
+                                            )}
                                             {lead.businessName && (
                                               <div className="text-xs text-muted-foreground truncate">
                                                 🏢 {lead.businessName}

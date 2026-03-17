@@ -5,9 +5,6 @@ import { useAuth } from "@/providers/auth-provider";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,6 +18,12 @@ import {
   Edit2,
   Send,
   MessageSquare,
+  Paperclip,
+  Download,
+  File,
+  FileText,
+  FileImage,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -28,6 +31,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +45,7 @@ interface Note {
   content: string;
   isPinned: boolean;
   user: {
-    id: string; // Add user id to check ownership
+    id: string;
     fullName: string;
     avatarUrl: string | null;
   };
@@ -44,8 +53,105 @@ interface Note {
   updatedAt: string;
 }
 
+interface ProjectFile {
+  id: string;
+  name: string;
+  fileType: string | null;
+  fileSize: number | null;
+}
+
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
+
+// Regex: 📎 [filename](file:fileId)
+const FILE_REF_REGEX = /📎 \[([^\]]+)\]\(file:([^)]+)\)/g;
+
+function getFileIcon(fileType: string | null) {
+  if (!fileType) return <File className="h-4 w-4" />;
+  if (fileType.startsWith("image/")) return <FileImage className="h-4 w-4 text-blue-500" />;
+  if (fileType.includes("pdf")) return <FileText className="h-4 w-4 text-red-500" />;
+  return <File className="h-4 w-4 text-slate-500" />;
+}
+
+function formatFileSize(bytes: number | null) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface FileChipProps {
+  name: string;
+  fileId: string;
+  projectId: string;
+}
+
+function FileChip({ name, fileId, projectId }: FileChipProps) {
+  const handleDownload = async () => {
+    try {
+      const token = localStorage.getItem("crm_access_token");
+      const res = await fetch(`${API_URL}/projects/${projectId}/files/${fileId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        window.open(data.data.downloadUrl, "_blank");
+      } else {
+        toast.error("Failed to get download URL");
+      }
+    } catch {
+      toast.error("Download failed");
+    }
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      className="inline-flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-1 hover:bg-blue-100 transition-colors cursor-pointer"
+    >
+      <Paperclip className="h-3 w-3" />
+      {name}
+      <Download className="h-3 w-3 opacity-60" />
+    </button>
+  );
+}
+
+function renderNoteContent(content: string, projectId: string) {
+  // Split by file references and render them as chips
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(FILE_REF_REGEX.source, "g");
+
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(
+        <span key={`text-${lastIndex}`} className="whitespace-pre-wrap">
+          {content.slice(lastIndex, match.index)}
+        </span>,
+      );
+    }
+    parts.push(
+      <FileChip
+        key={`file-${match[2]}-${match.index}`}
+        name={match[1]}
+        fileId={match[2]}
+        projectId={projectId}
+      />,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < content.length) {
+    parts.push(
+      <span key={`text-end`} className="whitespace-pre-wrap">
+        {content.slice(lastIndex)}
+      </span>,
+    );
+  }
+
+  return parts.length > 0 ? parts : <span className="whitespace-pre-wrap">{content}</span>;
+}
 
 export function ProjectNotes({ projectId }: { projectId: string }) {
   const { user } = useAuth();
@@ -55,6 +161,13 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+
+  // File picker state
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  // Track which textarea is active for file insertion: "new" | noteId
+  const [filePickerTarget, setFilePickerTarget] = useState<"new" | string>("new");
 
   const fetchNotes = async () => {
     try {
@@ -76,6 +189,42 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
   useEffect(() => {
     fetchNotes();
   }, [projectId]);
+
+  const loadProjectFiles = async () => {
+    if (projectFiles.length > 0) return; // already loaded
+    setLoadingFiles(true);
+    try {
+      const token = localStorage.getItem("crm_access_token");
+      const res = await fetch(`${API_URL}/projects/${projectId}/files`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProjectFiles(data.data || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch project files:", error);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
+  const openFilePicker = async (target: "new" | string) => {
+    setFilePickerTarget(target);
+    setShowFilePicker(true);
+    await loadProjectFiles();
+  };
+
+  const insertFileRef = (file: ProjectFile) => {
+    const ref = `\n📎 [${file.name}](file:${file.id})`;
+    if (filePickerTarget === "new") {
+      setNewNote((prev) => prev + ref);
+    } else {
+      // editing mode
+      setEditContent((prev) => prev + ref);
+    }
+    setShowFilePicker(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +249,7 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
       } else {
         toast.error("Failed to add note");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to add note");
     } finally {
       setSubmitting(false);
@@ -132,7 +281,7 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
       } else {
         toast.error("Failed to update note");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to update note");
     }
   };
@@ -156,7 +305,7 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
       } else {
         toast.error("Failed to delete note");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete note");
     }
   };
@@ -179,19 +328,13 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
       } else {
         toast.error("Failed to update note status");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to update note status");
     }
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  const getInitials = (name: string) =>
+    name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   return (
     <div className="space-y-6">
@@ -217,7 +360,17 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
               onChange={(e) => setNewNote(e.target.value)}
               className="resize-none min-h-[100px]"
             />
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground"
+                onClick={() => openFilePicker("new")}
+              >
+                <Paperclip className="h-4 w-4" />
+                Attach file
+              </Button>
               <Button type="submit" disabled={submitting || !newNote.trim()}>
                 <Send className="h-4 w-4 mr-2" />
                 Post Note
@@ -254,9 +407,7 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
                   <Avatar>
                     <AvatarImage src={note.user?.avatarUrl || undefined} />
                     <AvatarFallback>
-                      {note.user?.fullName
-                        ? getInitials(note.user.fullName)
-                        : "U"}
+                      {note.user?.fullName ? getInitials(note.user.fullName) : "U"}
                     </AvatarFallback>
                   </Avatar>
 
@@ -267,10 +418,7 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
                           {note.user?.fullName}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {format(
-                            new Date(note.createdAt),
-                            "MMM d, yyyy h:mm a",
-                          )}
+                          {format(new Date(note.createdAt), "MMM d, yyyy h:mm a")}
                         </span>
                         {note.isPinned && (
                           <div className="flex items-center gap-1 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
@@ -279,7 +427,6 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
                         )}
                       </div>
 
-                      {/* Actions Menu */}
                       {(user?.role === "admin" ||
                         user?.role === "manager" ||
                         user?.id === note.user?.id) && (
@@ -294,21 +441,14 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {(user?.role === "admin" ||
-                              user?.role === "manager") && (
+                            {(user?.role === "admin" || user?.role === "manager") && (
                               <DropdownMenuItem
-                                onClick={() =>
-                                  togglePin(note.id, note.isPinned)
-                                }
+                                onClick={() => togglePin(note.id, note.isPinned)}
                               >
                                 {note.isPinned ? (
-                                  <>
-                                    <PinOff className="h-4 w-4 mr-2" /> Unpin
-                                  </>
+                                  <><PinOff className="h-4 w-4 mr-2" /> Unpin</>
                                 ) : (
-                                  <>
-                                    <Pin className="h-4 w-4 mr-2" /> Pin Note
-                                  </>
+                                  <><Pin className="h-4 w-4 mr-2" /> Pin Note</>
                                 )}
                               </DropdownMenuItem>
                             )}
@@ -340,25 +480,34 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
                           onChange={(e) => setEditContent(e.target.value)}
                           className="min-h-[100px]"
                         />
-                        <div className="flex items-center gap-2 justify-end">
+                        <div className="flex items-center justify-between">
                           <Button
-                            size="sm"
+                            type="button"
                             variant="ghost"
-                            onClick={() => setEditingNoteId(null)}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
                             size="sm"
-                            onClick={() => handleUpdate(note.id)}
+                            className="gap-1.5 text-muted-foreground"
+                            onClick={() => openFilePicker(note.id)}
                           >
-                            Save Changes
+                            <Paperclip className="h-4 w-4" />
+                            Attach file
                           </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingNoteId(null)}
+                            >
+                              Cancel
+                            </Button>
+                            <Button size="sm" onClick={() => handleUpdate(note.id)}>
+                              Save Changes
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-sm mt-1 whitespace-pre-wrap leading-relaxed">
-                        {note.content}
+                      <div className="text-sm mt-1 leading-relaxed flex flex-wrap gap-1 items-center">
+                        {renderNoteContent(note.content, projectId)}
                       </div>
                     )}
                   </div>
@@ -368,6 +517,50 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
           ))
         )}
       </div>
+
+      {/* File Picker Dialog */}
+      <Dialog open={showFilePicker} onOpenChange={setShowFilePicker}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Attach a Project File
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[320px] overflow-y-auto">
+            {loadingFiles ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : projectFiles.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <File className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">No files uploaded to this project yet.</p>
+              </div>
+            ) : (
+              projectFiles.map((file) => (
+                <button
+                  key={file.id}
+                  onClick={() => insertFileRef(file)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/60 transition-colors text-left"
+                >
+                  <div className="p-1.5 bg-slate-100 rounded shrink-0">
+                    {getFileIcon(file.fileType)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{file.name}</p>
+                    {file.fileSize && (
+                      <p className="text-xs text-muted-foreground">
+                        {formatFileSize(file.fileSize)}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import useSWR from "swr";
-import { tasksApi } from "@/lib/api";
+import Link from "next/link";
+import { tasksApi, projectsApi } from "@/lib/api";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import {
   Card,
@@ -33,12 +33,13 @@ import {
   ArrowRightCircle,
   ArrowDownCircle,
   Loader2,
-  Plus,
+  ArrowRight,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
 import type { Task } from "@/types";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { CreateTaskDialog } from "@/components/projects/create-task-dialog";
 
 const priorityConfig = {
   high: {
@@ -71,16 +72,36 @@ export default function ProjectTasksPage() {
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
 
+  // Read projectId from URL for context-bar filtering
+  const [projectId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("projectId") || "";
+  });
+  const [contextProject, setContextProject] = useState<{ id: string; name: string } | null>(null);
+
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
 
+  // Fetch project name for context bar
+  useEffect(() => {
+    if (!projectId) return;
+    projectsApi
+      .get(projectId)
+      .then((p) => {
+        if (p) setContextProject({ id: p.id, name: p.name });
+      })
+      .catch(() => {});
+  }, [projectId]);
+
   const fetchTasks = useCallback(async () => {
     setIsLoading(true);
     try {
-      const tasksResult = await tasksApi.list({ limit: 200 });
+      const params: Record<string, unknown> = { limit: 500 };
+      if (projectId) params.projectId = projectId;
+      const tasksResult = await tasksApi.list(params);
       const tasksList = tasksResult?.data || tasksResult || [];
       setTasks(Array.isArray(tasksList) ? tasksList : []);
     } catch (error) {
@@ -88,7 +109,7 @@ export default function ProjectTasksPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     void fetchTasks();
@@ -100,10 +121,12 @@ export default function ProjectTasksPage() {
     isRefreshing: isLoading,
   });
 
-  // Filter tasks that are project-related (have a projectId)
-  const projectTasks = tasks.filter(
-    (t) => t.projectId !== null && t.projectId !== undefined,
-  );
+  // Filter tasks that are project-related (have a projectId) — only when not already filtered
+  const projectTasks = projectId
+    ? tasks
+    : tasks.filter(
+        (t) => t.projectId !== null && t.projectId !== undefined,
+      );
 
   // Apply filters
   const filteredTasks = projectTasks.filter((task) => {
@@ -170,24 +193,52 @@ export default function ProjectTasksPage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
+      {/* Project Context Bar */}
+      {projectId && contextProject && (
+        <div className="flex items-center gap-3 px-6 py-2.5 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-900 text-sm">
+          <FolderKanban className="h-4 w-4 text-blue-600 shrink-0" />
+          <span className="font-medium text-blue-800 dark:text-blue-300">
+            {contextProject.name}
+          </span>
+          <span className="text-blue-600/70 dark:text-blue-400/70">
+            · Viewing tasks for this project
+          </span>
+          <Link
+            href={`/projects/${contextProject.id}/overview`}
+            className="ml-auto flex items-center gap-1 text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-200 font-medium transition-colors"
+          >
+            Open Project <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="flex flex-col gap-4 p-6 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
+      <div className="flex flex-col gap-4 p-4 lg:p-6 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Project Tasks</h1>
             <p className="text-muted-foreground">
-              {isAdmin
-                ? "All project tasks across the organization"
-                : isManager
-                  ? "Tasks for your projects"
-                  : "Your assigned project tasks (sorted by priority)"}
+              {projectId && contextProject
+                ? `Filtered to: ${contextProject.name}`
+                : isAdmin
+                  ? "All project tasks across the organization"
+                  : isManager
+                    ? "Tasks for your projects"
+                    : "Your assigned project tasks (sorted by priority)"}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={() => router.push("/projects/tasks/new")}>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Task
-            </Button>
+            {projectId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/projects/tasks")}
+                className="text-xs"
+              >
+                Clear Filter
+              </Button>
+            )}
+            <CreateTaskDialog onSuccess={fetchTasks} />
             <Button
               variant="outline"
               size="icon"
@@ -238,7 +289,7 @@ export default function ProjectTasksPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-6 overflow-y-auto space-y-6">
+      <div className="flex-1 p-4 lg:p-6 overflow-y-auto space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>

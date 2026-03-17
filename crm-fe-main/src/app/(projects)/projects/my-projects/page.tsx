@@ -124,7 +124,7 @@ export default function MyProjectsPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-6 p-4 lg:p-6">
         <div>
           <Skeleton className="h-8 w-48 mb-2" />
           <Skeleton className="h-4 w-64" />
@@ -139,7 +139,7 @@ export default function MyProjectsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8 p-6">
+    <div className="flex flex-col gap-8 p-4 lg:p-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">My Projects</h1>

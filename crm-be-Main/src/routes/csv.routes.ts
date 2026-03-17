@@ -1,6 +1,6 @@
 import { Router, type Router as RouterType } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
-import { requireAdmin, requireManager } from "../middleware/authorization.middleware.js";
+import { requireManager } from "../middleware/authorization.middleware.js";
 import {
   exportRateLimiter,
   bulkOperationRateLimiter,
@@ -92,11 +92,10 @@ router.post(
 
 /**
  * GET /csv/leads/duplicates
- * Admin-only: get all leads that share email or phone with another lead
+ * All authenticated users: admins/managers see all, employees see their assigned duplicates
  */
 router.get(
   "/leads/duplicates",
-  requireAdmin as any,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
     const result = await csvService.getDuplicateLeads(authReq.user);

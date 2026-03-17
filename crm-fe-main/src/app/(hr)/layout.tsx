@@ -33,5 +33,9 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AppShell>
+      <div className="p-4 lg:p-6 h-full">{children}</div>
+    </AppShell>
+  );
 }

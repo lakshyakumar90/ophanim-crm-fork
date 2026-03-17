@@ -47,7 +47,7 @@ export async function getDepartments() {
     .order("name");
 
   if (error) {
-    console.error("Error fetching departments:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching departments:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -65,7 +65,7 @@ export async function getTeams() {
     .order("name");
 
   if (error) {
-    console.error("Error fetching teams:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching teams:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -86,7 +86,7 @@ export async function getHolidays(year?: number) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching holidays:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching holidays:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -109,7 +109,7 @@ export async function getAttendanceRules(shiftType?: string) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching attendance rules:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching attendance rules:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -181,7 +181,7 @@ export async function getUsers(params?: {
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("Error fetching users:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching users:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -208,7 +208,7 @@ export async function getUserById(id: string) {
     .single();
 
   if (error) {
-    console.error("Error fetching user:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching user:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -224,7 +224,7 @@ export async function getProjectManagers() {
     .order("full_name");
 
   if (error) {
-    console.error("Error fetching project managers:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching project managers:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -240,7 +240,7 @@ export async function getUsersByJobTitle(titles: string[]) {
     .order("full_name");
 
   if (error) {
-    console.error("Error fetching users by job title:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching users by job title:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -261,7 +261,7 @@ export async function getJobTitles(roleType?: "employee" | "manager") {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching job titles:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching job titles:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -365,7 +365,7 @@ export async function getLeads(params?: {
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("Error fetching leads:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching leads:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -396,7 +396,7 @@ export async function getLeadById(id: string) {
     .single();
 
   if (error) {
-    console.error("Error fetching lead:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -417,7 +417,7 @@ export async function getLeadPipeline() {
     .eq("is_deleted", false);
 
   if (error) {
-    console.error("Error fetching lead pipeline:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead pipeline:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -442,7 +442,7 @@ export async function getWonLeads() {
     .order("converted_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching won leads:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching won leads:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -464,7 +464,7 @@ export async function getLeadActivities(leadId: string) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching lead activities:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead activities:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -481,7 +481,7 @@ export async function getLeadComments(leadId: string) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching lead comments:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead comments:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -498,7 +498,7 @@ export async function getLeadReminders(leadId: string) {
     .order("reminder_at", { ascending: true });
 
   if (error) {
-    console.error("Error fetching lead reminders:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead reminders:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -548,7 +548,7 @@ export async function getAllReminders(params?: {
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("Error fetching all reminders:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching all reminders:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -591,7 +591,7 @@ export async function getRemindersCount(params?: {
   const { count, error } = await query;
 
   if (error) {
-    console.error("Error fetching reminders count:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching reminders count:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -605,7 +605,7 @@ export async function getLeadStatsByUser() {
     .eq("is_deleted", false);
 
   if (error) {
-    console.error("Error fetching lead stats:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead stats:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -734,7 +734,7 @@ export async function getTasks(params?: {
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("Error fetching tasks:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching tasks:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -757,7 +757,7 @@ export async function getTaskById(id: string) {
     .single();
 
   if (error) {
-    console.error("Error fetching task:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching task:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -771,7 +771,7 @@ export async function getTaskSummary() {
     .eq("is_deleted", false);
 
   if (error) {
-    console.error("Error fetching task summary:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching task summary:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -813,7 +813,7 @@ export async function getTaskComments(taskId: string) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching task comments:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching task comments:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -834,7 +834,7 @@ export async function getTodayAttendance(userId: string) {
     .maybeSingle();
 
   if (error) {
-    console.error("Error fetching today attendance:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching today attendance:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -861,7 +861,7 @@ export async function getAttendanceSummary(
     .order("date", { ascending: true });
 
   if (error) {
-    console.error("Error fetching attendance summary:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching attendance summary:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -914,7 +914,7 @@ export async function getAttendanceList(params?: {
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("Error fetching attendance list:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching attendance list:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1066,7 +1066,7 @@ export async function getUserAttendanceHistory(
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching user attendance history:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching user attendance history:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1131,7 +1131,7 @@ export async function getWeeklyHours(userId?: string, weekStart?: string) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching weekly hours:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching weekly hours:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1169,7 +1169,7 @@ export async function getNotifications(params?: {
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("Error fetching notifications:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching notifications:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1192,7 +1192,7 @@ export async function getUnreadNotificationCount() {
     .eq("is_read", false);
 
   if (error) {
-    console.error("Error fetching unread count:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching unread count:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1214,7 +1214,7 @@ export async function getProjects() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching projects:", error);
+    if (process.env.NODE_ENV === "development") console.warn("[supabase] getProjects:", (error as any)?.message || (error as any)?.code || error);
     throw error;
   }
 
@@ -1233,7 +1233,7 @@ export async function getProjectById(id: string) {
     .single();
 
   if (error) {
-    console.error("Error fetching project:", error);
+    if (process.env.NODE_ENV === "development") console.warn("[supabase] getProjectById:", (error as any)?.message || (error as any)?.code || error);
     throw error;
   }
 
@@ -1289,7 +1289,7 @@ export async function getActivityLogs(params?: {
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("Error fetching activity logs:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching activity logs:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1364,7 +1364,7 @@ export async function getLeadActivitiesLog(params?: {
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("Error fetching lead activities log:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead activities log:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1391,7 +1391,7 @@ export async function getTeamNotes(teamId: string) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching team notes:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching team notes:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1410,7 +1410,7 @@ export async function getEmailSettings() {
     .maybeSingle();
 
   if (error) {
-    console.error("Error fetching email settings:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching email settings:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1438,7 +1438,7 @@ export async function getEmailHistory(params?: {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching email history:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching email history:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1462,7 +1462,7 @@ export async function getSavedFilters(filterType?: string) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching saved filters:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching saved filters:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1481,7 +1481,7 @@ export async function getLeaveTypes() {
     .order("name");
 
   if (error) {
-    console.error("Error fetching leave types:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching leave types:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1518,7 +1518,7 @@ export async function getLeaveRequests(params?: {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching leave requests:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching leave requests:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1540,7 +1540,7 @@ export async function getLeaveBalances(userId?: string, year?: number) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching leave balances:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching leave balances:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1561,7 +1561,7 @@ export async function getLeadActivitiesCountByUser(): Promise<Record<string, num
     .select("user_id");
 
   if (error) {
-    console.error("Error fetching lead activities count by user:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead activities count by user:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 
@@ -1585,7 +1585,7 @@ export async function getDistinctLeadsWorkedByUser(): Promise<
     .select("user_id, lead_id");
 
   if (error) {
-    console.error("Error fetching distinct leads worked by user:", error);
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching distinct leads worked by user:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
   }
 

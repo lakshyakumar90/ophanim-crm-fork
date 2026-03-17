@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
-import { leadsApi, usersApi } from "@/lib/api";
+import { leadsApi, usersApi, csvApi } from "@/lib/api";
 import { useAuth, useIsAdmin } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { UserSelector } from "@/components/shared/user-selector";
@@ -58,6 +59,8 @@ import {
   ChevronUp,
   Bell,
   Tag,
+  Copy,
+  AlertTriangle,
 } from "lucide-react";
 import type { Lead, LeadActivity, LeadStatus } from "@/types";
 import {
@@ -191,6 +194,22 @@ export default function LeadDetailPage() {
     id ? `lead-reminders-${id}` : null,
     () => leadsApi.getReminders(id as string),
   );
+
+  // Check if this lead is a duplicate (shared SWR cache with leads list)
+  const { data: duplicatesData } = useSWR(
+    user ? "duplicate-leads" : null,
+    async () => {
+      const res = await csvApi.getDuplicateLeads();
+      return (res.data?.data ?? res.data) as {
+        groups: { leads: { id: string }[] }[];
+      };
+    },
+    { revalidateOnFocus: false },
+  );
+  const isDuplicateLead = useMemo(() => {
+    const groups = duplicatesData?.groups ?? [];
+    return groups.some((g) => g.leads.some((l) => l.id === id));
+  }, [duplicatesData, id]);
 
   // Fetch users list for admin assignment - filter to sales department only
   const { data: usersData, isLoading: loadingUsers } = useSWR(
@@ -490,6 +509,17 @@ export default function LeadDetailPage() {
                 >
                   {getStatusLabel(lead.status)}
                 </Badge>
+                {isDuplicateLead && (
+                  <Link href="/sales/duplicate-leads">
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 cursor-pointer transition-colors"
+                    >
+                      <AlertTriangle className="h-3 w-3" />
+                      Duplicate Lead
+                    </Badge>
+                  </Link>
+                )}
               </div>
               {lead.businessName && (
                 <p className="text-slate-600 flex items-center gap-1 mt-1 text-sm">

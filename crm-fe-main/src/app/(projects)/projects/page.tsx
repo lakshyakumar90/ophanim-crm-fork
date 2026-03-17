@@ -242,7 +242,7 @@ export default function ProjectsPage() {
   return (
     <div className="flex flex-col h-full bg-background overflow-y-auto">
       {/* Header */}
-      <div className="flex flex-col gap-4 p-6">
+      <div className="flex flex-col gap-4 p-4 lg:p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
@@ -420,7 +420,7 @@ export default function ProjectsPage() {
       </div>
 
       {/* Content */}
-      <div className="px-6 pb-6 space-y-6">
+      <div className="px-4 lg:px-6 pb-4 lg:pb-6 space-y-6">
         {isLoading ? (
           <div className="flex items-center justify-center h-40">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -510,7 +510,11 @@ export default function ProjectsPage() {
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {idleProjects.slice(0, 6).map((project) => (
-                      <ProjectCard key={project.id} project={project} />
+                      <ProjectCard
+                        key={project.id}
+                        project={project}
+                        showLeadLink={isAdmin || isManager}
+                      />
                     ))}
                   </div>
                   {idleProjects.length > 6 && (
@@ -576,7 +580,11 @@ export default function ProjectsPage() {
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-4">
                         {filterByStatus(status).map((project) => (
-                          <ProjectCard key={project.id} project={project} />
+                          <ProjectCard
+                            key={project.id}
+                            project={project}
+                            showLeadLink={isAdmin || isManager}
+                          />
                         ))}
                       </div>
                     )}

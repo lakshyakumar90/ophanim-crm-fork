@@ -10,7 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Calendar, User, ArrowRight, Users2 } from "lucide-react";
+import { Calendar, User, ArrowRight, Users2, Link2 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import type { Project } from "@/types";
@@ -18,9 +18,10 @@ import { cn } from "@/lib/utils";
 
 interface ProjectCardProps {
   project: Project;
+  showLeadLink?: boolean;
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
+export function ProjectCard({ project, showLeadLink = false }: ProjectCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "planned":
@@ -122,11 +123,22 @@ export function ProjectCard({ project }: ProjectCardProps) {
       </CardContent>
 
       <CardFooter className="pt-3 border-t bg-muted/20 flex justify-between items-center">
-        <div className="flex items-center gap-1.5">
-          <Users2 className="w-4 h-4 text-muted-foreground/70" />
-          <span className="text-sm text-muted-foreground font-medium">
-            {project.members?.length || 1} team
-          </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <Users2 className="w-4 h-4 text-muted-foreground/70" />
+            <span className="text-sm text-muted-foreground font-medium">
+              {project.members?.length || 1} team
+            </span>
+          </div>
+          {showLeadLink && project.leadId && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-[10px] text-green-700 border-green-200 bg-green-50"
+            >
+              <Link2 className="h-3 w-3" />
+              Won Lead
+            </Badge>
+          )}
         </div>
 
         <Button

@@ -46,6 +46,7 @@ import {
   teamsApi,
   usersApi,
 } from "@/lib/api";
+import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { nowIST } from "@/lib/date-utils";
 import {
@@ -109,6 +110,8 @@ const DATE_PRESETS = [
 
 export default function SalesDashboardPage() {
   const now = nowIST();
+  const { user } = useAuth();
+
   const [date, setDate] = useState<DateRange | undefined>({
     from: subDays(now, 30),
     to: now,
@@ -125,35 +128,69 @@ export default function SalesDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Pick activity scope based on role — avoids 403 for managers/employees
+  const activityScope =
+    user?.role === "admin"
+      ? "all-crm"
+      : user?.role === "manager"
+        ? "team"
+        : "self";
+
   useEffect(() => {
-    Promise.all([teamsApi.list(), usersApi.list({ limit: 1000 })])
-      .then(([t, u]) => {
-        setTeams(Array.isArray(t) ? t : []);
-        setUsers(u?.data || u || []);
-      })
-      .catch(() => toast.error("Failed to load filter data"));
+    Promise.allSettled([
+      teamsApi.list(),
+      usersApi.list({ limit: 1000 }),
+    ]).then(([t, u]) => {
+      setTeams(t.status === "fulfilled" && Array.isArray(t.value) ? t.value : []);
+      setUsers(
+        u.status === "fulfilled"
+          ? u.value?.data || u.value || []
+          : [],
+      );
+    });
   }, []);
 
   const fetchData = useCallback(async () => {
+    if (!user) return;
     setIsLoading(true);
     try {
-      const [dash, deals, stats, acts] = await Promise.all([
-        dashboardApi.get(),
-        leadsApi.list({ limit: 8, sortBy: "lead_value", sortOrder: "desc" }),
-        leadsApi.getStatsByUser(),
-        activitiesApi.list({ limit: 10, scope: "all-crm" }),
-      ]);
-      setDashData(dash);
-      setTopDeals(deals?.data || []);
-      setLeaderboard((stats?.users || []).slice(0, 8));
-      setActivities(acts?.data || []);
+      const [dashResult, dealsResult, statsResult, actsResult] =
+        await Promise.allSettled([
+          dashboardApi.get(),
+          leadsApi.list({ limit: 8, sortBy: "lead_value", sortOrder: "desc" }),
+          leadsApi.getStatsByUser(),
+          activitiesApi.list({ limit: 10, scope: activityScope }),
+        ]);
+
+      setDashData(
+        dashResult.status === "fulfilled" ? dashResult.value : null,
+      );
+      setTopDeals(
+        dealsResult.status === "fulfilled"
+          ? dealsResult.value?.data || []
+          : [],
+      );
+      setLeaderboard(
+        statsResult.status === "fulfilled"
+          ? (statsResult.value?.users || []).slice(0, 8)
+          : [],
+      );
+      setActivities(
+        actsResult.status === "fulfilled"
+          ? actsResult.value?.data || []
+          : [],
+      );
+
+      if (dashResult.status === "rejected") {
+        toast.error("Failed to load dashboard data");
+      }
     } catch {
       toast.error("Failed to load dashboard data");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [user, activityScope]);
 
   useEffect(() => {
     fetchData();

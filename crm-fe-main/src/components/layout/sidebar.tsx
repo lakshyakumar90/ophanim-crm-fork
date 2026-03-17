@@ -79,6 +79,7 @@ function NavLink({
   return (
     <Link
       href={item.href}
+      title={collapsed ? item.title : undefined}
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 group",
         isActive
@@ -149,9 +150,9 @@ const getDepartmentNavItems = (slug: string): NavItem[] => {
         },
         {
           title: "Duplicate Leads",
-          href: "/global/duplicate-leads",
+          href: "/sales/duplicate-leads",
           icon: Copy,
-          roles: ["admin"],
+          roles: ["admin", "manager", "employee"],
         },
       ];
   }
@@ -160,7 +161,7 @@ const getDepartmentNavItems = (slug: string): NavItem[] => {
 // Define these item arrays outside the component so they can be used by the helper function
 const deliveryItems: NavItem[] = [
   {
-    title: "Overview",
+    title: "All Projects",
     href: "/projects",
     icon: FolderKanban,
     roles: ["admin", "manager"],
@@ -184,8 +185,8 @@ const deliveryItems: NavItem[] = [
     roles: ["admin", "manager"],
   },
   {
-    title: "Resources",
-    href: "/projects/team",
+    title: "Members",
+    href: "/projects/members",
     icon: Users2,
     roles: ["admin", "manager", "employee"],
   },
@@ -193,6 +194,18 @@ const deliveryItems: NavItem[] = [
     title: "Analytics",
     href: "/projects/analytics",
     icon: PieChart,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "Notes",
+    href: "/projects/notes",
+    icon: FileText,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    title: "Calendar",
+    href: "/projects/calendar",
+    icon: CalendarClock,
     roles: ["admin", "manager"],
   },
   {
@@ -584,7 +597,7 @@ function GlobalSidebar({
   return (
     <div
       className={cn(
-        "flex flex-col h-full bg-background border-r border-border transition-all duration-300",
+        "relative flex flex-col h-full bg-background border-r border-border transition-all duration-300",
         collapsed ? "w-20" : "w-52",
       )}
     >
@@ -608,29 +621,26 @@ function GlobalSidebar({
             CRM
           </span>
         </Link>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "h-6 w-6 shrink-0 transition-all duration-300",
-            collapsed ? "hidden" : "",
-          )}
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
       </div>
 
-      {collapsed && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 mx-auto mt-2"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      )}
+      {/* Chevron Toggle — centered on the right border */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className={cn(
+          "absolute top-1/2 -translate-y-1/2 -right-3 z-10",
+          "w-6 h-6 rounded-full border border-border bg-background shadow-sm",
+          "flex items-center justify-center",
+          "text-muted-foreground hover:text-foreground hover:border-primary hover:shadow-md",
+          "transition-all duration-200",
+        )}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {collapsed ? (
+          <ChevronRight className="h-3 w-3" />
+        ) : (
+          <ChevronLeft className="h-3 w-3" />
+        )}
+      </button>
 
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1 overflow-x-hidden">
         {filteredGlobal.map((item) => (
@@ -689,7 +699,7 @@ function GlobalSidebar({
             </Button>
           </>
         ) : (
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-2" title={user?.fullName || "User"}>
             <Avatar className="w-8 h-8">
               <AvatarImage src={user?.avatarUrl || undefined} />
               <AvatarFallback className="text-xs">
@@ -716,7 +726,7 @@ export function Sidebar() {
   const [globalCollapsed, setGlobalCollapsed] = useState(false);
 
   return (
-    <aside className="flex h-screen shadow-sm transition-all duration-300 overflow-hidden">
+    <aside className="relative flex h-screen shadow-sm transition-all duration-300">
       <GlobalSidebar
         collapsed={globalCollapsed}
         setCollapsed={setGlobalCollapsed}
