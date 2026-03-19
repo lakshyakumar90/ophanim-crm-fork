@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { usersApi, teamsApi, emailApi } from "@/lib/api";
+import { usersApi, teamsApi, emailApi, rolesApi } from "@/lib/api";
 import { useIsAdmin } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,9 @@ import {
   CheckCircle,
   Send,
   Trash2,
+  Shield,
+  X,
+  Plus,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import React, { useMemo } from "react";
@@ -92,8 +95,13 @@ export default function EditUserPage() {
   const router = useRouter();
   const isAdmin = useIsAdmin();
   const { departments } = useDepartment();
-  const userId = params.id as string;
+  const userId = params?.id as string;
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Roles management state
+  const [selectedRoleId, setSelectedRoleId] = useState<string>("");
+  const [isAssigningRole, setIsAssigningRole] = useState(false);
+  const [removingRoleId, setRemovingRoleId] = useState<string | null>(null);
 
   // Email settings state
   const [emailType, setEmailType] = useState<"smtp" | "gmail">("gmail");
@@ -129,6 +137,15 @@ export default function EditUserPage() {
     userId ? ["user-email-settings", userId] : null,
     () => emailApi.getUserSettings(userId),
   );
+
+  // Fetch user's current role assignments
+  const { data: userRoles = [], mutate: mutateUserRoles } = useSWR(
+    userId ? ["user-roles", userId] : null,
+    () => rolesApi.getUserRoles(userId),
+  );
+
+  // Fetch all available roles for the dropdown
+  const { data: allRoles = [] } = useSWR("all-roles", () => rolesApi.list());
 
   const teams = Array.isArray(teamsData) ? teamsData : [];
   const emailSettings = emailSettingsData;
@@ -342,6 +359,34 @@ export default function EditUserPage() {
       toast.error("Failed to remove email settings");
     } finally {
       setIsDeletingEmail(false);
+    }
+  };
+
+  const handleAssignRole = async () => {
+    if (!selectedRoleId) return;
+    setIsAssigningRole(true);
+    try {
+      await rolesApi.assignRole(userId, selectedRoleId);
+      toast.success("Role assigned");
+      setSelectedRoleId("");
+      mutateUserRoles();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error?.message ?? "Failed to assign role");
+    } finally {
+      setIsAssigningRole(false);
+    }
+  };
+
+  const handleRemoveRole = async (roleId: string) => {
+    setRemovingRoleId(roleId);
+    try {
+      await rolesApi.removeRole(userId, roleId);
+      toast.success("Role removed");
+      mutateUserRoles();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error?.message ?? "Failed to remove role");
+    } finally {
+      setRemovingRoleId(null);
     }
   };
 
@@ -613,6 +658,136 @@ export default function EditUserPage() {
               "Reset Password"
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Roles Management Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            <CardTitle>Role Assignments</CardTitle>
+          </div>
+          <CardDescription>
+            Dynamic roles determine what this user can see and do. Permissions
+            are the union of all assigned roles.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Current roles — chips */}
+          <div>
+            <p className="text-sm font-medium mb-2">Current Roles</p>
+            {userRoles.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No roles assigned yet.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {userRoles.map((ur) => (
+                  <span
+                    key={ur.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-sm"
+                  >
+                    <span>{ur.roleName}</span>
+                    <span className="text-[10px] text-muted-foreground capitalize">
+                      ({ur.roleScope})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRole(ur.roleId)}
+                      disabled={removingRoleId === ur.roleId}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      {removingRoleId === ur.roleId ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <X className="h-3 w-3" />
+                      )}
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Assign role */}
+          <div>
+            <p className="text-sm font-medium mb-2">Add Role</p>
+            <div className="flex gap-2">
+              <Select
+                value={selectedRoleId}
+                onValueChange={setSelectedRoleId}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Search and select a role..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {allRoles
+                    .filter(
+                      (r) => !userRoles.some((ur) => ur.roleId === r.id),
+                    )
+                    .map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
+                        {r.departmentName && (
+                          <span className="text-muted-foreground ml-1 text-xs">
+                            ({r.departmentName})
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                onClick={handleAssignRole}
+                disabled={!selectedRoleId || isAssigningRole}
+              >
+                {isAssigningRole ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                <span className="ml-1">Assign</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Permission summary */}
+          {userRoles.length > 0 && (
+            <div>
+              <p className="text-sm font-medium mb-1">Effective Permissions</p>
+              <p className="text-xs text-muted-foreground mb-2">
+                Union of all assigned roles — {" "}
+                {Array.from(
+                  new Set(
+                    allRoles
+                      .filter((r) => userRoles.some((ur) => ur.roleId === r.id))
+                      .flatMap((r) => r.permissions),
+                  ),
+                ).length}{" "}
+                total permissions granted.
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {Array.from(
+                  new Set(
+                    allRoles
+                      .filter((r) => userRoles.some((ur) => ur.roleId === r.id))
+                      .flatMap((r) => r.permissions),
+                  ),
+                )
+                  .sort()
+                  .map((perm) => (
+                    <span
+                      key={perm}
+                      className="inline-block rounded bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground"
+                    >
+                      {perm}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

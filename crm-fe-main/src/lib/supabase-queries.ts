@@ -128,6 +128,7 @@ export async function getUsers(params?: {
   teamId?: string;
   isActive?: boolean;
   search?: string;
+  jobTitle?: string;
   shiftType?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
@@ -166,6 +167,15 @@ export async function getUsers(params?: {
 
   if (params?.shiftType) {
     query = query.eq("shift_type", params.shiftType);
+  }
+
+  if (params?.jobTitle) {
+    const jobTitles = params.jobTitle.split(",").map((title) => title.trim());
+    if (jobTitles.length === 1) {
+      query = query.eq("job_title", jobTitles[0]);
+    } else {
+      query = query.in("job_title", jobTitles);
+    }
   }
 
   if (params?.search) {

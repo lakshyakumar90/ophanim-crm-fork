@@ -6,7 +6,8 @@ import type { AuthenticatedRequest } from "../types/api.types.js";
 import { supabaseAdmin } from "../config/supabase.js";
 
 /**
- * Check if user has one of the required roles
+ * Check if user has one of the required legacy roles.
+ * Use requirePermission() for new feature guards instead.
  */
 export function requireRole(...allowedRoles: UserRole[]) {
   return (
@@ -30,12 +31,12 @@ export function requireRole(...allowedRoles: UserRole[]) {
 }
 
 /**
- * Require admin role
+ * Require admin role (legacy — prefer requirePermission('crm:admin'))
  */
 export const requireAdmin = requireRole(USER_ROLES.ADMIN);
 
 /**
- * Require manager or admin role
+ * Require manager or admin role (legacy — prefer requirePermission)
  */
 export const requireManager = requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER);
 
@@ -47,6 +48,109 @@ export const requireAuth = requireRole(
   USER_ROLES.MANAGER,
   USER_ROLES.EMPLOYEE,
 );
+
+/**
+ * Permission-based guard (new RBAC system).
+ *
+ * Checks the user's resolved permissions from the RBAC system.
+ * Users with `crm:admin` always pass regardless of what perm is checked.
+ *
+ * Usage:
+ *   router.post('/leads', requirePermission('leads:create'), handler)
+ *   router.delete('/leads/:id', requirePermission('leads:delete'), handler)
+ */
+export function requirePermission(perm: string) {
+  return (
+    req: AuthenticatedRequest,
+    _res: Response,
+    next: NextFunction,
+  ): void => {
+    if (!req.user) {
+      throw new ApiError(ERROR_CODES.AUTH_TOKEN_MISSING);
+    }
+
+    const { permissions } = req.user;
+
+    // crm:admin is a global superuser — always passes
+    if (permissions.includes("crm:admin")) {
+      return next();
+    }
+
+    if (!permissions.includes(perm)) {
+      console.warn(
+        `[RBAC] Permission denied — user ${req.user.id} is missing '${perm}'`,
+      );
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        `Missing permission: ${perm}`,
+      );
+    }
+
+    next();
+  };
+}
+
+/**
+ * Require ALL of the listed permissions (AND gate).
+ */
+export function requirePermissions(perms: string[]) {
+  return (
+    req: AuthenticatedRequest,
+    _res: Response,
+    next: NextFunction,
+  ): void => {
+    if (!req.user) {
+      throw new ApiError(ERROR_CODES.AUTH_TOKEN_MISSING);
+    }
+
+    const { permissions } = req.user;
+
+    if (permissions.includes("crm:admin")) {
+      return next();
+    }
+
+    const missing = perms.filter((p) => !permissions.includes(p));
+    if (missing.length > 0) {
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        `Missing permissions: ${missing.join(", ")}`,
+      );
+    }
+
+    next();
+  };
+}
+
+/**
+ * Require ANY of the listed permissions (OR gate).
+ */
+export function requireAnyPermission(perms: string[]) {
+  return (
+    req: AuthenticatedRequest,
+    _res: Response,
+    next: NextFunction,
+  ): void => {
+    if (!req.user) {
+      throw new ApiError(ERROR_CODES.AUTH_TOKEN_MISSING);
+    }
+
+    const { permissions } = req.user;
+
+    if (permissions.includes("crm:admin")) {
+      return next();
+    }
+
+    const hasAny = perms.some((p) => permissions.includes(p));
+    if (!hasAny) {
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        `Requires at least one of: ${perms.join(", ")}`,
+      );
+    }
+
+    next();
+  };
+}
 
 /**
  * Check if user can access a specific resource
@@ -186,9 +290,6 @@ export function checkResourceAccess(
 
 /**
  * Check if user can edit lead info
- * - Admin: can edit any lead (full form)
- * - Others: can edit limited fields (timezone, clientResponse, country, status)
- *   via inline edits on the detail page; the full edit form is restricted on the frontend
  */
 export function checkLeadEditAccess() {
   return async (
@@ -246,7 +347,6 @@ export async function getTeamMemberIds(
 
 /**
  * Exclude users from specific departments from accessing a route
- * Used to block Sales department users from accessing Projects routes
  */
 export function excludeDepartment(...departmentSlugs: string[]) {
   return async (
@@ -303,7 +403,6 @@ export function excludeDepartment(...departmentSlugs: string[]) {
 
 /**
  * Require HR department access
- * Allows Admin users and users from the HR department only
  */
 export function requireHRAccess() {
   return async (
@@ -321,7 +420,12 @@ export function requireHRAccess() {
         return next();
       }
 
-      // Check if user belongs to HR department
+      // Check via RBAC permission
+      if (req.user.permissions.includes("hr:manage") || req.user.permissions.includes("hr:view")) {
+        return next();
+      }
+
+      // Check if user belongs to HR department (legacy fallback)
       const { data: userData } = await supabaseAdmin
         .from("users")
         .select("team_id")
@@ -348,7 +452,6 @@ export function requireHRAccess() {
         }
       }
 
-      // User is not Admin and not from HR department
       throw new ApiError(
         ERROR_CODES.FORBIDDEN,
         "Access restricted to HR department and administrators only",

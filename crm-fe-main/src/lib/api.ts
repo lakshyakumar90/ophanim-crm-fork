@@ -1003,4 +1003,82 @@ export const emailApi = {
   ) => api.post("/email/send-bulk", { emails }),
 };
 
+// =====================================================
+// ROLES API (RBAC dynamic role management)
+// =====================================================
+
+export const rolesApi = {
+  // List all roles (with department populated)
+  list: async () => {
+    const res = await api.get("/roles");
+    return unwrap(res) as Array<{
+      id: string;
+      name: string;
+      slug: string;
+      scope: "global" | "department";
+      departmentId: string | null;
+      departmentName: string | null;
+      departmentSlug: string | null;
+      permissions: string[];
+      isSystem: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  },
+
+  // Get a single role
+  get: async (id: string) => {
+    const res = await api.get(`/roles/${id}`);
+    return unwrap(res);
+  },
+
+  // Create a new role (requires roles:manage)
+  create: (data: {
+    name: string;
+    scope: "global" | "department";
+    department_id?: string | null;
+    permissions: string[];
+  }) => api.post("/roles", data),
+
+  // Update a role (requires roles:manage)
+  update: (
+    id: string,
+    data: {
+      name?: string;
+      scope?: "global" | "department";
+      department_id?: string | null;
+      permissions?: string[];
+    },
+  ) => api.put(`/roles/${id}`, data),
+
+  // Delete a role (requires roles:manage; system roles blocked)
+  // Delete a role (requires roles:manage; system roles blocked)
+  // Pass force=true to delete even when users are assigned (removes all assignments)
+  delete: (id: string, force?: boolean) =>
+    api.delete(`/roles/${id}`, { params: force ? { force: "true" } : undefined }),
+
+  // Get all roles assigned to a user
+  getUserRoles: async (userId: string) => {
+    const res = await api.get(`/roles/users/${userId}/roles`);
+    return unwrap(res) as Array<{
+      id: string;
+      userId: string;
+      roleId: string;
+      roleName: string;
+      roleSlug: string;
+      roleScope: "global" | "department";
+      departmentName: string | null;
+      assignedAt: string;
+    }>;
+  },
+
+  // Assign a role to a user (requires crm:admin)
+  assignRole: (userId: string, roleId: string) =>
+    api.post(`/roles/users/${userId}/roles`, { role_id: roleId }),
+
+  // Remove a role from a user (requires crm:admin)
+  removeRole: (userId: string, roleId: string) =>
+    api.delete(`/roles/users/${userId}/roles/${roleId}`),
+};
+
 export default api;

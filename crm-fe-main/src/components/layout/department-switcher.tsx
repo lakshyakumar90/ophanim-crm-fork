@@ -30,6 +30,13 @@ export function DepartmentSwitcher() {
   const pathname = usePathname();
   const isFinance = pathname.startsWith("/finance");
   const isProjects = pathname.startsWith("/projects");
+  const accessibleDepartments = departments.filter((dept) => {
+    if (isAdmin) return true;
+    if (user?.departmentSlug === dept.slug) return true;
+    if (user?.departmentIds?.includes(dept.id)) return true;
+    if (!user?.departmentSlug && dept.slug === "project-management") return true;
+    return false;
+  });
 
   // For non-admin project-only users (PM/employees without department)
   const isProjectOnlyUser =
@@ -37,12 +44,65 @@ export function DepartmentSwitcher() {
     (user?.role === "manager" || user?.role === "employee");
 
   // Project-only users only see Projects in the switcher
-  if (isProjectOnlyUser) {
+  if (isProjectOnlyUser && accessibleDepartments.length <= 1) {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50 text-sm font-medium">
         <FolderKanban className="w-4 h-4" />
         Projects
       </div>
+    );
+  }
+
+  if (!isAdmin && accessibleDepartments.length > 1) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 ml-2 min-w-[140px] justify-between"
+          >
+            <div className="flex items-center gap-2">
+              {isProjects ? (
+                <FolderKanban className="w-4 h-4" />
+              ) : (
+                <Building2 className="w-4 h-4" />
+              )}
+              <span>
+                {isProjects
+                  ? "Project Management"
+                  : currentDepartment?.name || user?.departmentName || "Department"}
+              </span>
+            </div>
+            <ChevronDown className="w-3 h-3 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[220px]">
+          {accessibleDepartments.map((dept) => (
+            <DropdownMenuItem
+              key={dept.id}
+              onClick={() => {
+                if (dept.slug === "finance") {
+                  router.push("/finance");
+                } else if (dept.slug === "project-management") {
+                  router.push("/projects");
+                } else {
+                  switchDepartment(dept.slug);
+                }
+              }}
+            >
+              {dept.slug === "finance" ? (
+                <Wallet className="w-4 h-4 mr-2" />
+              ) : dept.slug === "project-management" ? (
+                <FolderKanban className="w-4 h-4 mr-2" />
+              ) : (
+                <Building2 className="w-4 h-4 mr-2" />
+              )}
+              {dept.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   }
 

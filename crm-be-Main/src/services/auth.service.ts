@@ -768,6 +768,26 @@ export async function getCurrentUser(userId: string) {
     userData = fallbackUser;
   }
 
+  // Fetch RBAC permissions (graceful: empty if migration not run yet)
+  let permissionsData: {
+    permissions: string[] | null;
+    role_ids: string[] | null;
+    role_names: string[] | null;
+    is_global: boolean | null;
+    department_ids: string[] | null;
+  } | null = null;
+
+  try {
+    const { data: resolved } = await supabaseAdmin
+      .from("user_resolved_permissions" as any)
+      .select("permissions, role_ids, role_names, is_global, department_ids")
+      .eq("user_id", userData.id)
+      .maybeSingle();
+    permissionsData = resolved as any;
+  } catch {
+    // RBAC view may not exist yet — silently degrade
+  }
+
   return {
     id: userData.id,
     email: userData.email,
@@ -783,6 +803,7 @@ export async function getCurrentUser(userId: string) {
     primaryColor: userData.primary_color,
     is2faEnabled: userData.is_2fa_enabled || false,
     departmentId: userData.department_id,
+    jobTitle: userData.job_title || null,
     departmentSlug: Array.isArray(userData.departments)
       ? userData.departments[0]?.slug
       : (userData.departments as any)?.slug,
@@ -790,6 +811,12 @@ export async function getCurrentUser(userId: string) {
       ? userData.departments[0]?.name
       : (userData.departments as any)?.name,
     shiftType: userData.shift_type || null,
+    // RBAC
+    permissions: permissionsData?.permissions ?? [],
+    roleIds: permissionsData?.role_ids ?? [],
+    roleNames: permissionsData?.role_names ?? [],
+    isGlobal: permissionsData?.is_global ?? false,
+    departmentIds: permissionsData?.department_ids ?? [],
   };
 }
 

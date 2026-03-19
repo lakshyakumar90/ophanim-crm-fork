@@ -74,7 +74,7 @@ export default function UsersPage() {
   const { currentDepartment } = useDepartment();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [jobTitleFilter, setJobTitleFilter] = useState<string>("");
+  const [jobTitleFilter, setJobTitleFilter] = useState<string>("all");
 
   const { data, isLoading, mutate } = useSWR(
     isAdmin
@@ -104,7 +104,7 @@ export default function UsersPage() {
   });
 
   const users = data?.data || [];
-  const meta = data?.meta || { total: 0, pages: 1 };
+  const meta = data?.meta || { total: 0, page: 1, totalPages: 1 };
 
   if (!isAdmin) {
     return (

@@ -33,6 +33,17 @@ interface AuthContextType {
   register: (data: any) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /**
+   * Check if the current user has a specific permission.
+   * Users with `crm:admin` permission always return true.
+   * Falls back to legacy role check if no permissions loaded yet.
+   */
+  can: (perm: string) => boolean;
+  /**
+   * Check if the current user is in a specific department (by ID).
+   * Global-scoped users always return true.
+   */
+  inDepartment: (deptId: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -55,7 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return response.data.data;
     } catch (error: any) {
       setUser(null);
-      // Clear tokens on any auth error
       tokens.clear();
       return null;
     }
@@ -66,16 +76,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await authApi.login(email, password);
       const result = response.data.data;
 
-      // If 2FA is required, return early — caller must handle 2FA flow
       if (result.requires2FA) {
         return { requires2FA: true, userId: result.userId };
       }
 
-      // Normal login — save tokens and sync Supabase session
       tokens.set(result.tokens.accessToken, result.tokens.refreshToken);
       setUser(result.user);
 
-      // Sync Supabase auth session for RLS
       try {
         await syncSupabaseSession(email, password);
       } catch (err) {
@@ -87,7 +94,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // After 2FA verification, call this to sync the Supabase session
   const completeTwoFactorLogin = useCallback(
     async (email: string, password: string) => {
       try {
@@ -106,7 +112,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokens.set(tokenData.accessToken, tokenData.refreshToken);
     setUser(userData);
 
-    // Sync Supabase auth session for RLS
     if (data.email && data.password) {
       try {
         await syncSupabaseSession(data.email, data.password);
@@ -124,40 +129,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       tokens.clear();
       setUser(null);
-      // Clear Supabase session
       await clearSupabaseSession();
       router.push("/login");
     }
   }, [router]);
 
-  // Simple auth check on every mount/refresh
   useEffect(() => {
     async function checkAuth() {
       const accessToken = tokens.accessToken;
 
-      // No token - user is not logged in
       if (!accessToken) {
         setIsLoading(false);
         setUser(null);
-        // Redirect to login if trying to access protected path
         if (!isPublicPath) {
           router.replace("/login");
         }
         return;
       }
 
-      // Has token - verify with /me API call
       try {
         const response = await authApi.me();
         const userData = response.data.data;
         setUser(userData);
 
-        // If on public path (login/register), redirect to dashboard
         if (isPublicPath) {
           router.replace("/");
         }
       } catch (error) {
-        // Token invalid or user not found - clear and redirect
         tokens.clear();
         setUser(null);
         if (!isPublicPath) {
@@ -171,6 +169,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, [isPublicPath, router]);
 
+  /**
+   * Permission check — heart of the RBAC system.
+   * `crm:admin` is a superuser permission that passes all checks.
+   * Falls back to legacy role-based check for backward compatibility
+   * during the transition period before roles are fully seeded.
+   */
+  const can = useCallback(
+    (perm: string): boolean => {
+      if (!user) return false;
+
+      const permissions = user.permissions ?? [];
+
+      // crm:admin is a global superuser
+      if (permissions.includes("crm:admin")) return true;
+
+      // Check explicit permission
+      if (permissions.includes(perm)) return true;
+
+      // Legacy fallback: map old role enum to permission semantics
+      // This keeps existing UI working before all roles are seeded
+      if (permissions.length === 0) {
+        const role = user.role;
+        if (role === "admin") return true; // admin has all permissions
+        if (
+          role === "manager" &&
+          (perm.startsWith("analytics:view") ||
+            perm === "leads:view" ||
+            perm === "leads:create" ||
+            perm === "leads:import" ||
+            perm === "leads:export" ||
+            perm === "leads:edit" ||
+            perm === "leads:assign" ||
+            perm === "projects:view" ||
+            perm === "projects:create" ||
+            perm === "projects:edit" ||
+            perm === "projects:assign_member" ||
+            perm === "employees:view" ||
+            perm === "finance:view" ||
+            perm === "hr:view")
+        ) {
+          return true;
+        }
+        if (
+          role === "employee" &&
+          (perm === "analytics:view_own" ||
+            perm === "leads:view" ||
+            perm === "leads:create" ||
+            perm === "leads:import" ||
+            perm === "leads:export" ||
+            perm === "projects:view" ||
+            perm === "finance:view" ||
+            perm === "hr:view")
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    },
+    [user],
+  );
+
+  /**
+   * Check if user can see a specific department.
+   * Global role holders see all departments.
+   */
+  const inDepartment = useCallback(
+    (deptId: string): boolean => {
+      if (!user) return false;
+      if (user.role === "admin") return true;
+      if (user.isGlobal) return true;
+      const deptIds = user.departmentIds ?? [];
+      return deptIds.includes(deptId) || user.departmentId === deptId;
+    },
+    [user],
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -182,6 +257,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         refreshUser,
+        can,
+        inDepartment,
       }}
     >
       {isLoading && !isPublicPath ? (
@@ -203,13 +280,18 @@ export function useAuth() {
   return context;
 }
 
-// Role check helpers
+// Legacy role check helpers (kept for backward compatibility)
 export function useIsAdmin() {
-  const { user } = useAuth();
-  return user?.role === "admin";
+  const { user, can } = useAuth();
+  return user?.role === "admin" || can("crm:admin");
 }
 
 export function useIsManager() {
-  const { user } = useAuth();
-  return user?.role === "admin" || user?.role === "manager";
+  const { user, can } = useAuth();
+  return (
+    user?.role === "admin" ||
+    user?.role === "manager" ||
+    can("crm:admin") ||
+    can("analytics:view_team")
+  );
 }

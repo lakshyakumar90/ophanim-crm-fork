@@ -1,6 +1,6 @@
 import { Router, type Router as RouterType } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
-import { requireManager } from "../middleware/authorization.middleware.js";
+import { requirePermission } from "../middleware/authorization.middleware.js";
 import {
   exportRateLimiter,
   bulkOperationRateLimiter,
@@ -42,7 +42,7 @@ router.get(
  */
 router.post(
   "/leads/import",
-  requireManager as any,
+  requirePermission("leads:import") as any,
   bulkOperationRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
@@ -71,7 +71,7 @@ router.post(
  */
 router.post(
   "/leads/preview-check",
-  requireManager as any,
+  requirePermission("leads:import") as any,
   bulkOperationRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
@@ -109,9 +109,22 @@ router.get(
  */
 router.get(
   "/leads/export",
+  requirePermission("leads:export") as any,
   exportRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
+    const wantsRemoval = req.query["removeAfterExport"] === "true";
+
+    if (
+      wantsRemoval &&
+      !authReq.user.permissions.includes("crm:admin") &&
+      !authReq.user.permissions.includes("leads:delete")
+    ) {
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "Missing permission: leads:delete",
+      );
+    }
 
     const filters = {
       status: req.query["status"]

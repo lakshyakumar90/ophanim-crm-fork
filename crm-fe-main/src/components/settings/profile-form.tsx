@@ -220,6 +220,28 @@ export function ProfileForm() {
               />
             </div>
             <div className="space-y-2">
+              <Label>Department</Label>
+              <Input
+                value={user?.departmentName || "Not assigned"}
+                disabled
+                className="bg-slate-50"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Job Title</Label>
+              <Input
+                value={
+                  user?.jobTitle
+                    ? user.jobTitle
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase())
+                    : "Not assigned"
+                }
+                disabled
+                className="bg-slate-50"
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Shift</Label>
               <Input
                 value={
@@ -235,6 +257,30 @@ export function ProfileForm() {
               <p className="text-xs text-slate-500">
                 Contact admin to change your shift
               </p>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Assigned Roles</Label>
+              <Input
+                value={
+                  user?.roleNames?.length
+                    ? user.roleNames.join(", ")
+                    : "No dynamic roles assigned"
+                }
+                disabled
+                className="bg-slate-50"
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Effective Permissions</Label>
+              <Input
+                value={
+                  user?.permissions?.length
+                    ? `${user.permissions.length} permissions granted`
+                    : "No permissions loaded"
+                }
+                disabled
+                className="bg-slate-50"
+              />
             </div>
           </div>
 

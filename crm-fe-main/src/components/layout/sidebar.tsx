@@ -39,6 +39,7 @@ import {
   UserCircle,
   ClipboardList,
   Copy,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -453,6 +454,12 @@ function GlobalSidebar({
       roles: ["admin"],
     },
     {
+      title: "Roles",
+      href: "/global/roles",
+      icon: Shield,
+      roles: ["admin"],
+    },
+    {
       title: "Activity",
       href: "/activity",
       icon: Activity,
@@ -530,7 +537,11 @@ function GlobalSidebar({
 
   const showDepartmentsSection =
     !collapsed &&
-    (isAdmin || isManager || user?.departmentSlug || isProjectOnlyUser);
+    (isAdmin ||
+      isManager ||
+      user?.departmentSlug ||
+      isProjectOnlyUser ||
+      (user?.departmentIds?.length ?? 0) > 0);
 
   const departmentsSection = showDepartmentsSection ? (
     <Collapsible
@@ -563,7 +574,10 @@ function GlobalSidebar({
             if (isProjectOnlyUser && dept.slug === "project-management") {
               return true;
             }
-            return dept.slug === user?.departmentSlug;
+            return (
+              dept.slug === user?.departmentSlug ||
+              user?.departmentIds?.includes(dept.id)
+            );
           })
           .sort((a, b) => {
             if (!isAdmin && a.slug === user?.departmentSlug) return -1;

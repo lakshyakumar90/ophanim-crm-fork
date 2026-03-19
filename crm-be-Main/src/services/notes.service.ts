@@ -3,6 +3,7 @@ import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
 import { USER_ROLES } from "../config/constants.js";
 import type { AuthUser } from "../types/api.types.js";
+import { createNotification } from "./notifications.service.js";
 
 // ====================
 // TYPES
@@ -18,6 +19,50 @@ export interface ProjectNote {
   isPinned: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+const USER_MENTION_REGEX = /@\[(.+?)\]\(user:([0-9a-fA-F-]{36})\)/g;
+
+function extractMentionedUserIds(content: string): string[] {
+  const ids = new Set<string>();
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(USER_MENTION_REGEX.source, "g");
+
+  while ((match = regex.exec(content)) !== null) {
+    if (match[2]) {
+      ids.add(match[2]);
+    }
+  }
+
+  return Array.from(ids);
+}
+
+async function notifyMentionedUsers(params: {
+  projectId: string;
+  projectName: string;
+  authorId: string;
+  authorName: string;
+  noteId: string;
+  mentionedUserIds: string[];
+}) {
+  const recipients = params.mentionedUserIds.filter(
+    (userId) => userId && userId !== params.authorId,
+  );
+
+  await Promise.all(
+    recipients.map((userId) =>
+      createNotification({
+        userId,
+        title: "You were mentioned",
+        message: `${params.authorName} mentioned you in ${params.projectName}`,
+        type: "mention",
+        relatedEntityType: "project_note",
+        relatedEntityId: params.noteId,
+        actionUrl: `/projects/${params.projectId}/discussion`,
+        priority: "medium",
+      }).catch(() => null),
+    ),
+  );
 }
 
 // ====================
@@ -102,7 +147,7 @@ export async function createNote(
   // Verify project exists
   const { data: project, error: projError } = await supabaseAdmin
     .from("projects")
-    .select("id")
+    .select("id, name")
     .eq("id", projectId)
     .single();
 
@@ -125,7 +170,24 @@ export async function createNote(
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  return getNoteById(data.id);
+  const note = await getNoteById(data.id);
+
+  const { data: author } = await supabaseAdmin
+    .from("users")
+    .select("full_name")
+    .eq("id", userId)
+    .maybeSingle();
+
+  await notifyMentionedUsers({
+    projectId,
+    projectName: (project as any).name || "a project",
+    authorId: userId,
+    authorName: author?.full_name || "Someone",
+    noteId: note.id,
+    mentionedUserIds: extractMentionedUserIds(content),
+  });
+
+  return note;
 }
 
 /**
@@ -139,6 +201,7 @@ export async function updateNote(
 ): Promise<ProjectNote> {
   // Get existing note
   const existing = await getNoteById(noteId);
+  const existingMentionedUserIds = new Set(extractMentionedUserIds(existing.content));
 
   // Only author or admin/manager can edit
   if (
@@ -161,7 +224,35 @@ export async function updateNote(
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  return getNoteById(noteId);
+  const updatedNote = await getNoteById(noteId);
+  const nextMentionedUserIds = extractMentionedUserIds(content).filter(
+    (mentionedUserId) => !existingMentionedUserIds.has(mentionedUserId),
+  );
+
+  if (nextMentionedUserIds.length > 0) {
+    const { data: project } = await supabaseAdmin
+      .from("projects")
+      .select("id, name")
+      .eq("id", updatedNote.projectId)
+      .maybeSingle();
+
+    const { data: author } = await supabaseAdmin
+      .from("users")
+      .select("full_name")
+      .eq("id", userId)
+      .maybeSingle();
+
+    await notifyMentionedUsers({
+      projectId: updatedNote.projectId,
+      projectName: project?.name || "a project",
+      authorId: userId,
+      authorName: author?.full_name || "Someone",
+      noteId: updatedNote.id,
+      mentionedUserIds: nextMentionedUserIds,
+    });
+  }
+
+  return updatedNote;
 }
 
 /**

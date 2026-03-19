@@ -38,20 +38,64 @@ function shouldBypassAuthCache(req: AuthenticatedRequest): boolean {
   return req.originalUrl.startsWith(adminUsersPath);
 }
 
-function mapDbUserToAuthUser(user: {
-  id: string;
-  email: string;
-  role: string;
-  team_id: string | null;
-  department_id: string | null;
-}): AuthUser {
+function mapDbUserToAuthUser(
+  user: {
+    id: string;
+    email: string;
+    role: string;
+    team_id: string | null;
+    department_id: string | null;
+  },
+  resolved?: {
+    permissions: string[] | null;
+    role_ids: string[] | null;
+    role_names: string[] | null;
+    is_global: boolean | null;
+    department_ids: string[] | null;
+  } | null,
+): AuthUser {
   return {
     id: user.id,
     email: user.email,
     role: user.role as UserRole,
     teamId: user.team_id,
     departmentId: user.department_id,
+    permissions: resolved?.permissions ?? [],
+    roleIds: resolved?.role_ids ?? [],
+    roleNames: resolved?.role_names ?? [],
+    isGlobal: resolved?.is_global ?? false,
+    departmentIds: resolved?.department_ids ?? [],
   };
+}
+
+/**
+ * Fetch resolved permissions for a user from the RBAC view.
+ * Returns null gracefully if the view does not exist yet (migration pending).
+ */
+async function fetchUserPermissions(userId: string): Promise<{
+  permissions: string[] | null;
+  role_ids: string[] | null;
+  role_names: string[] | null;
+  is_global: boolean | null;
+  department_ids: string[] | null;
+} | null> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("user_resolved_permissions" as any)
+      .select("permissions, role_ids, role_names, is_global, department_ids")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      // View may not exist yet — silently degrade to empty permissions
+      logger.warn({ userId, error: error.message }, "RBAC: Could not fetch permissions (view may not exist yet)");
+      return null;
+    }
+    return data as any;
+  } catch (err) {
+    logger.warn({ userId, err }, "RBAC: Exception fetching permissions");
+    return null;
+  }
 }
 
 /**
@@ -98,6 +142,7 @@ function verifyToken(token: string): AccessTokenPayload {
 
 /**
  * Authentication middleware - validates JWT and attaches user to request
+ * Also loads resolved RBAC permissions from user_resolved_permissions view.
  */
 export async function authenticate(
   req: AuthenticatedRequest,
@@ -114,18 +159,24 @@ export async function authenticate(
     let cached = useCache ? cache.get(payload.userId) : undefined;
 
     if (!cached || cached.expiresAt <= now) {
-      const { data: dbUser, error } = await supabaseAdmin
-        .from("users")
-        .select("id, email, role, team_id, department_id, is_active")
-        .eq("id", payload.userId)
-        .single();
+      // Fetch user row and permissions in parallel
+      const [userResult, resolved] = await Promise.all([
+        supabaseAdmin
+          .from("users")
+          .select("id, email, role, team_id, department_id, is_active")
+          .eq("id", payload.userId)
+          .single(),
+        fetchUserPermissions(payload.userId),
+      ]);
+
+      const { data: dbUser, error } = userResult;
 
       if (error || !dbUser) {
         throw new ApiError(ERROR_CODES.AUTH_TOKEN_INVALID, "User not found");
       }
 
       cached = {
-        user: mapDbUserToAuthUser(dbUser),
+        user: mapDbUserToAuthUser(dbUser, resolved),
         isActive: dbUser.is_active,
         expiresAt: now + config.auth.userCacheTtlMs,
       };

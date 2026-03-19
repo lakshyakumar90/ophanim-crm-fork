@@ -129,9 +129,18 @@ export default function LeadsPage() {
   const router = useRouter();
   
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const isManager = useIsManager();
   const isAdmin = useIsAdmin();
+  const canCreateLeads = Boolean(
+    user && (isAdmin || can("leads:create")),
+  );
+  const canImportLeads = Boolean(
+    user && (isAdmin || can("leads:import")),
+  );
+  const canExportLeads = Boolean(
+    user && (isAdmin || can("leads:export")),
+  );
 
   const [status, setStatus] = useState<string>(
     searchParams.get("status") || "all",
@@ -970,23 +979,29 @@ export default function LeadsPage() {
             </DropdownMenu>
           )}
 
-          {isManager && (
+          {(canImportLeads || canExportLeads || canCreateLeads) && (
             <>
-              <Button variant="outline" onClick={() => setIsImportOpen(true)}>
-                <Upload className="w-4 h-4 mr-2" />
-                Import
-              </Button>
-              <Button variant="outline" onClick={() => setIsExportOpen(true)}>
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-              <Button
-                onClick={() => router.push(`/sales/leads/new`)}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Lead
-              </Button>
+              {canImportLeads && (
+                <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import
+                </Button>
+              )}
+              {canExportLeads && (
+                <Button variant="outline" onClick={() => setIsExportOpen(true)}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+              )}
+              {canCreateLeads && (
+                <Button
+                  onClick={() => router.push(`/sales/leads/new`)}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Lead
+                </Button>
+              )}
             </>
           )}
         </div>

@@ -3,6 +3,7 @@ import { authenticate } from "../middleware/auth.middleware.js";
 import {
   requireAdmin,
   requireManager,
+  requirePermission,
   checkResourceAccess,
   checkLeadEditAccess,
 } from "../middleware/authorization.middleware.js";
@@ -103,7 +104,7 @@ router.get(
  */
 router.post(
   "/",
-  requireManager as any,
+  requirePermission("leads:create") as any,
   validateBody(createLeadSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
@@ -122,7 +123,7 @@ router.post(
  */
 router.post(
   "/bulk-assign",
-  requireAdmin as any,
+  requirePermission("leads:assign") as any,
   bulkOperationRateLimiter,
   validateBody(bulkAssignSchema),
   asyncHandler(async (req: Request, res: Response) => {
@@ -141,7 +142,7 @@ router.post(
  */
 router.post(
   "/bulk-update",
-  requireAdmin as any,
+  requirePermission("leads:edit") as any,
   bulkOperationRateLimiter,
   validateBody(bulkUpdateLeadsSchema),
   asyncHandler(async (req: Request, res: Response) => {
@@ -160,7 +161,7 @@ router.post(
  */
 router.post(
   "/bulk-delete",
-  requireManager as any,
+  requirePermission("leads:delete") as any,
   bulkOperationRateLimiter,
   validateBody(bulkDeleteSchema),
   asyncHandler(async (req: Request, res: Response) => {
@@ -269,7 +270,7 @@ router.delete(
  */
 router.post(
   "/:id/assign",
-  requireAdmin as any,
+  requirePermission("leads:assign") as any,
   validateParams(uuidParamSchema),
   validateBody(assignLeadSchema),
   asyncHandler(async (req: Request, res: Response) => {

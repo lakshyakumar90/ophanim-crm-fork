@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import useSWR from "swr";
 import { useAuth } from "@/providers/auth-provider";
+import { usersApi } from "@/lib/api";
+import { UserSelector } from "@/components/shared/user-selector";
 import {
   Card,
   CardContent,
@@ -24,6 +27,7 @@ import {
   FileText,
   FileImage,
   Loader2,
+  AtSign,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -65,6 +69,8 @@ const API_URL =
 
 // Regex: 📎 [filename](file:fileId)
 const FILE_REF_REGEX = /📎 \[([^\]]+)\]\(file:([^)]+)\)/g;
+
+const USER_MENTION_REGEX = /@\[(.+?)\]\(user:([0-9a-fA-F-]{36})\)/g;
 
 function getFileIcon(fileType: string | null) {
   if (!fileType) return <File className="h-4 w-4" />;
@@ -117,11 +123,14 @@ function FileChip({ name, fileId, projectId }: FileChipProps) {
 }
 
 function renderNoteContent(content: string, projectId: string) {
-  // Split by file references and render them as chips
+  // Split note content into plain text, file chips, and mention chips.
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  const regex = new RegExp(FILE_REF_REGEX.source, "g");
+  const regex = new RegExp(
+    `${FILE_REF_REGEX.source}|${USER_MENTION_REGEX.source}`,
+    "g",
+  );
 
   while ((match = regex.exec(content)) !== null) {
     if (match.index > lastIndex) {
@@ -131,14 +140,25 @@ function renderNoteContent(content: string, projectId: string) {
         </span>,
       );
     }
-    parts.push(
-      <FileChip
-        key={`file-${match[2]}-${match.index}`}
-        name={match[1]}
-        fileId={match[2]}
-        projectId={projectId}
-      />,
-    );
+    if (match[2]) {
+      parts.push(
+        <FileChip
+          key={`file-${match[2]}-${match.index}`}
+          name={match[1]}
+          fileId={match[2]}
+          projectId={projectId}
+        />,
+      );
+    } else if (match[4]) {
+      parts.push(
+        <span
+          key={`mention-${match[4]}-${match.index}`}
+          className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+        >
+          @{match[3]}
+        </span>,
+      );
+    }
     lastIndex = match.index + match[0].length;
   }
 
@@ -168,6 +188,15 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
   const [loadingFiles, setLoadingFiles] = useState(false);
   // Track which textarea is active for file insertion: "new" | noteId
   const [filePickerTarget, setFilePickerTarget] = useState<"new" | string>("new");
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const [mentionPickerTarget, setMentionPickerTarget] = useState<"new" | string>("new");
+  const [selectedMentionUserId, setSelectedMentionUserId] = useState("");
+
+  const { data: usersData } = useSWR(
+    showMentionPicker ? "project-note-users" : null,
+    () => usersApi.list({ limit: 500 }),
+  );
+  const mentionableUsers = usersData?.data || [];
 
   const fetchNotes = async () => {
     try {
@@ -224,6 +253,28 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
       setEditContent((prev) => prev + ref);
     }
     setShowFilePicker(false);
+  };
+
+  const openMentionPicker = (target: "new" | string) => {
+    setMentionPickerTarget(target);
+    setSelectedMentionUserId("");
+    setShowMentionPicker(true);
+  };
+
+  const insertMentionRef = () => {
+    const selectedUser = mentionableUsers.find(
+      (candidate: any) => candidate.id === selectedMentionUserId,
+    );
+    if (!selectedUser) return;
+
+    const mention = ` @[${selectedUser.fullName || selectedUser.full_name}](user:${selectedUser.id})`;
+    if (mentionPickerTarget === "new") {
+      setNewNote((prev) => prev + mention);
+    } else {
+      setEditContent((prev) => prev + mention);
+    }
+    setShowMentionPicker(false);
+    setSelectedMentionUserId("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -361,16 +412,28 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
               className="resize-none min-h-[100px]"
             />
             <div className="flex items-center justify-between">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-muted-foreground"
-                onClick={() => openFilePicker("new")}
-              >
-                <Paperclip className="h-4 w-4" />
-                Attach file
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground"
+                  onClick={() => openMentionPicker("new")}
+                >
+                  <AtSign className="h-4 w-4" />
+                  Mention user
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground"
+                  onClick={() => openFilePicker("new")}
+                >
+                  <Paperclip className="h-4 w-4" />
+                  Attach file
+                </Button>
+              </div>
               <Button type="submit" disabled={submitting || !newNote.trim()}>
                 <Send className="h-4 w-4 mr-2" />
                 Post Note
@@ -481,16 +544,28 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
                           className="min-h-[100px]"
                         />
                         <div className="flex items-center justify-between">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="gap-1.5 text-muted-foreground"
-                            onClick={() => openFilePicker(note.id)}
-                          >
-                            <Paperclip className="h-4 w-4" />
-                            Attach file
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1.5 text-muted-foreground"
+                              onClick={() => openMentionPicker(note.id)}
+                            >
+                              <AtSign className="h-4 w-4" />
+                              Mention user
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1.5 text-muted-foreground"
+                              onClick={() => openFilePicker(note.id)}
+                            >
+                              <Paperclip className="h-4 w-4" />
+                              Attach file
+                            </Button>
+                          </div>
                           <div className="flex items-center gap-2">
                             <Button
                               size="sm"
@@ -558,6 +633,37 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
                 </button>
               ))
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showMentionPicker} onOpenChange={setShowMentionPicker}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AtSign className="h-4 w-4" />
+              Mention a User
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <UserSelector
+              users={mentionableUsers}
+              value={selectedMentionUserId}
+              onValueChange={setSelectedMentionUserId}
+              placeholder="Select a user to mention..."
+              excludeUserId={user?.id}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowMentionPicker(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={insertMentionRef} disabled={!selectedMentionUserId}>
+                Insert Mention
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

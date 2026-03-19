@@ -22,8 +22,15 @@ export interface User {
   departmentId?: string | null;
   departmentName?: string | null;
   departmentSlug?: string | null;
+  jobTitle?: string | null;
   is2faEnabled?: boolean;
   shiftType?: "day_shift" | "night_shift" | null;
+  // RBAC permission system
+  permissions?: string[];      // e.g. ["leads:view", "crm:admin"]
+  roleIds?: string[];           // UUIDs of assigned dynamic roles
+  roleNames?: string[];         // Display names of assigned roles
+  isGlobal?: boolean;           // true if any assigned role has global scope
+  departmentIds?: string[];     // department UUIDs from assigned roles
 }
 
 export interface AuthTokens {

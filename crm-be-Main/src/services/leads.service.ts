@@ -1438,6 +1438,47 @@ function mapReminderRowToRecord(data: ReminderRow): LeadReminder {
   };
 }
 
+async function enrichReminders<
+  T extends ReminderRow,
+>(rows: T[]): Promise<Array<LeadReminder & { user?: { fullName: string; avatarUrl: string | null } }>> {
+  if (rows.length === 0) return [];
+
+  const leadIds = Array.from(new Set(rows.map((row) => row.lead_id).filter(Boolean)));
+  const userIds = Array.from(new Set(rows.map((row) => row.user_id).filter(Boolean)));
+
+  const [{ data: leadsData }, { data: usersData }] = await Promise.all([
+    leadIds.length > 0
+      ? supabaseAdmin.from("leads").select("id, lead_name").in("id", leadIds)
+      : Promise.resolve({ data: [] as any[] }),
+    userIds.length > 0
+      ? supabaseAdmin
+          .from("users")
+          .select("id, full_name, avatar_url")
+          .in("id", userIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  const leadNameById = new Map(
+    (leadsData || []).map((lead: any) => [lead.id, lead.lead_name]),
+  );
+  const userById = new Map(
+    (usersData || []).map((user: any) => [
+      user.id,
+      { fullName: user.full_name, avatarUrl: user.avatar_url },
+    ]),
+  );
+
+  return rows.map((row) => ({
+    ...mapReminderRowToRecord({
+      ...row,
+      leads: leadNameById.get(row.lead_id)
+        ? { lead_name: leadNameById.get(row.lead_id) as string }
+        : undefined,
+    }),
+    user: userById.get(row.user_id),
+  }));
+}
+
 /**
  * Get reminders for a lead
  */
@@ -1447,7 +1488,7 @@ export async function getLeadReminders(
 ): Promise<LeadReminder[]> {
   let baseQuery = supabaseAdmin
     .from("lead_reminders")
-    .select("*, leads:lead_id (lead_name)")
+    .select("*")
     .eq("lead_id", leadId)
     .order("reminder_at", { ascending: true });
 
@@ -1462,7 +1503,8 @@ export async function getLeadReminders(
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  return (data || []).map((r: any) => mapReminderRowToRecord(r as ReminderRow));
+  const reminders = await enrichReminders((data || []) as ReminderRow[]);
+  return reminders.map(({ user, ...reminder }) => reminder);
 }
 
 /**
@@ -1486,14 +1528,19 @@ export async function createLeadReminder(
       note: note || null,
       is_sent: false,
     })
-    .select("*, leads:lead_id (lead_name)")
+    .select("*")
     .single();
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  return mapReminderRowToRecord(data as ReminderRow);
+  const [reminder] = await enrichReminders([data as ReminderRow]);
+  if (!reminder) {
+    throw ApiError.notFound("Reminder");
+  }
+  const { user, ...record } = reminder;
+  return record;
 }
 
 /**
@@ -1529,7 +1576,7 @@ export async function getUserPendingReminders(
 ): Promise<LeadReminder[]> {
   const { data, error } = await supabaseAdmin
     .from("lead_reminders")
-    .select("*, leads:lead_id (lead_name)")
+    .select("*")
     .eq("user_id", userId)
     .eq("is_sent", false)
     .gte("reminder_at", getTimestampIST())
@@ -1539,7 +1586,8 @@ export async function getUserPendingReminders(
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  return (data || []).map((r: any) => mapReminderRowToRecord(r as ReminderRow));
+  const reminders = await enrichReminders((data || []) as ReminderRow[]);
+  return reminders.map(({ user, ...reminder }) => reminder);
 }
 
 /**
@@ -1563,10 +1611,7 @@ export async function getAllReminders(
 
   let baseQuery = supabaseAdmin
     .from("lead_reminders")
-    .select(
-      "*, leads:lead_id (lead_name), user:users!user_id (full_name, avatar_url)",
-      { count: "exact" },
-    );
+    .select("*", { count: "exact" });
 
   // Access Control:
   // - Admin: all reminders (or filter by userId param)
@@ -1629,15 +1674,7 @@ export async function getAllReminders(
 
   if (error) throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
 
-  const reminders = (data || []).map((r: any) => {
-    const record = mapReminderRowToRecord(r as ReminderRow);
-    return {
-      ...record,
-      user: r.user
-        ? { fullName: r.user.full_name, avatarUrl: r.user.avatar_url }
-        : undefined,
-    };
-  });
+  const reminders = await enrichReminders((data || []) as ReminderRow[]);
 
   return {
     data: reminders,
@@ -1727,7 +1764,7 @@ export async function markReminderDone(
   }
 
   const { data, error } = await query
-    .select("*, leads:lead_id (lead_name)")
+    .select("*")
     .maybeSingle();
 
   if (error) {
@@ -1738,5 +1775,10 @@ export async function markReminderDone(
     throw ApiError.notFound("Reminder");
   }
 
-  return mapReminderRowToRecord(data as ReminderRow);
+  const [reminder] = await enrichReminders([data as ReminderRow]);
+  if (!reminder) {
+    throw ApiError.notFound("Reminder");
+  }
+  const { user, ...record } = reminder;
+  return record;
 }

@@ -22,6 +22,7 @@ interface Notification {
   createdAt: string;
   relatedEntityType?: string;
   relatedEntityId?: string;
+  actionUrl?: string | null;
 }
 
 export default function NotificationsPage() {
@@ -85,6 +86,14 @@ export default function NotificationsPage() {
 
   // Navigate to related entity (lead, task, etc.)
   const handleNavigateToEntity = (notification: Notification) => {
+    if (notification.actionUrl) {
+      router.push(notification.actionUrl);
+      if (!notification.isRead) {
+        handleMarkAsRead(notification.id);
+      }
+      return;
+    }
+
     if (
       notification.relatedEntityType === "lead" &&
       notification.relatedEntityId
@@ -115,6 +124,9 @@ export default function NotificationsPage() {
       ["lead", "task"].includes(notification.relatedEntityType)
     );
   };
+
+  const isLinkedNotification = (notification: Notification) =>
+    Boolean(notification.actionUrl) || hasLink(notification);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -160,9 +172,9 @@ export default function NotificationsPage() {
                     !notification.isRead
                       ? "bg-blue-50/50 dark:bg-blue-950/20"
                       : ""
-                  } ${hasLink(notification) ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}`}
+                  } ${isLinkedNotification(notification) ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}`}
                   onClick={() =>
-                    hasLink(notification) &&
+                    isLinkedNotification(notification) &&
                     handleNavigateToEntity(notification)
                   }
                 >
@@ -178,7 +190,7 @@ export default function NotificationsPage() {
                           <h4 className="font-semibold text-foreground">
                             {notification.title}
                           </h4>
-                          {hasLink(notification) && (
+                          {isLinkedNotification(notification) && (
                             <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
                           )}
                         </div>

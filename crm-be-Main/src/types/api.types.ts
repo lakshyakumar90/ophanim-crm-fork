@@ -1,13 +1,19 @@
 import type { Request } from "express";
 import type { UserRole } from "../config/constants.js";
 
-// Authenticated user from JWT
+// Authenticated user from JWT — extended with resolved RBAC permissions
 export interface AuthUser {
   id: string;
   email: string;
   role: UserRole;
   teamId: string | null;
   departmentId: string | null;
+  // RBAC permission system (additive union of all assigned roles)
+  permissions: string[];     // e.g. ["leads:view", "leads:create", "crm:admin"]
+  roleIds: string[];          // UUIDs of assigned roles
+  roleNames: string[];        // Display names of assigned roles
+  isGlobal: boolean;          // true if any assigned role has scope = 'global'
+  departmentIds: string[];    // UUIDs of departments covered by assigned roles
 }
 
 // Extended Request with auth user and request ID
@@ -169,6 +175,12 @@ export interface LoginResponse {
     departmentSlug?: string;
     departmentName?: string;
     shiftType?: string | null;
+    // RBAC fields
+    permissions?: string[];
+    roleIds?: string[];
+    roleNames?: string[];
+    isGlobal?: boolean;
+    departmentIds?: string[];
   } | null;
   tokens: {
     accessToken: string;
