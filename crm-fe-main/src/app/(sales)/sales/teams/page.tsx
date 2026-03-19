@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { useRouter, useParams } from "next/navigation";
 import { teamsApi } from "@/lib/api";
-import { useIsAdmin, useIsManager } from "@/providers/auth-provider";
+import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,6 +13,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
@@ -39,6 +40,12 @@ import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 export default function TeamsPage() {
   const router = useRouter();
   
+  const getInitials = (name: string) => {
+    if (!name) return "?";
+    return name.split(" ").map((n) => n[0]).join("").toUpperCase().substring(0, 2);
+  };
+
+  const { user } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
   const { currentDepartment, isLoading: isDeptLoading } = useDepartment();
@@ -63,9 +70,14 @@ export default function TeamsPage() {
   const allTeams: Team[] = (data || []) as Team[];
 
   // Filter teams by current department
-  const teams = currentDepartment
+  let teams = currentDepartment
     ? allTeams.filter((team) => team.departmentId === currentDepartment.id)
     : [];
+
+  // If standard employee, strictly bind view to their own team.
+  if (!isAdmin && !isManager && user?.teamId) {
+    teams = teams.filter((team) => team.id === user.teamId);
+  }
 
   const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null);
 
@@ -175,15 +187,29 @@ export default function TeamsPage() {
                 )}
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground text-sm line-clamp-2 mb-4 h-10">
-                  {team.description || "No description provided"}
-                </p>
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <UserCircle className="w-4 h-4" />
-                    <span>Manager assigned</span>
+                <div className="flex flex-col gap-2">
+                  <p className="text-muted-foreground text-sm line-clamp-2 h-10">
+                    {team.description || "No description provided"}
+                  </p>
+                  <div className="flex items-center justify-between text-sm mt-3 pt-3 border-t border-muted/50">
+                    {team.manager ? (
+                      <div className="flex items-center gap-2">
+                        <Avatar className="w-6 h-6">
+                          <AvatarImage src={team.manager.avatarUrl || undefined} />
+                          <AvatarFallback className="text-[10px]">{getInitials(team.manager.fullName)}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-muted-foreground font-medium text-xs truncate max-w-[120px]">
+                          {team.manager.fullName}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <UserCircle className="w-4 h-4" />
+                        <span className="text-xs w-full">No manager</span>
+                      </div>
+                    )}
+                    <ChevronRight className="w-4 h-4 inline-flex float-right self-end text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
               </CardContent>
             </Card>

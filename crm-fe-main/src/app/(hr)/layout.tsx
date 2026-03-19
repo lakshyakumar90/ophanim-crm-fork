@@ -2,6 +2,7 @@
 
 import { useAuth, useIsAdmin } from "@/providers/auth-provider";
 import { AppShell } from "@/components/layout/app-shell";
+import { StartupAlertsDialog } from "@/components/notifications/startup-alerts-dialog";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -35,6 +36,7 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AppShell>
+      <StartupAlertsDialog />
       <div className="p-4 lg:p-6 h-full">{children}</div>
     </AppShell>
   );

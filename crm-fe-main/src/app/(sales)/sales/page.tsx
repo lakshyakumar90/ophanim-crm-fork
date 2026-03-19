@@ -137,16 +137,33 @@ export default function SalesDashboardPage() {
         : "self";
 
   useEffect(() => {
+    // Determine the right query params for users based on role
+    const isManager = user?.role === "manager";
+    const userParams: any = { limit: 1000 };
+    
+    // Scoping for manager
+    if (isManager) {
+      if (user?.teamId) {
+        userParams.teamId = user.teamId;
+      } else if (user?.departmentIds && user.departmentIds.length > 0) {
+        userParams.departmentId = user.departmentIds[0];
+      }
+    }
+
     Promise.allSettled([
       teamsApi.list(),
-      usersApi.list({ limit: 1000 }),
+      usersApi.list(userParams),
     ]).then(([t, u]) => {
-      setTeams(t.status === "fulfilled" && Array.isArray(t.value) ? t.value : []);
-      setUsers(
-        u.status === "fulfilled"
-          ? u.value?.data || u.value || []
-          : [],
-      );
+      let fetchedTeams = t.status === "fulfilled" && Array.isArray(t.value) ? t.value : [];
+      let fetchedUsers = u.status === "fulfilled" ? u.value?.data || (Array.isArray(u.value) ? u.value : []) : [];
+
+      // Filter teams for managers
+      if (isManager && user?.teamId) {
+        fetchedTeams = fetchedTeams.filter((team: any) => team.id === user.teamId);
+      }
+
+      setTeams(fetchedTeams);
+      setUsers(fetchedUsers);
     });
   }, []);
 
@@ -535,6 +552,7 @@ export default function SalesDashboardPage() {
                       <p className="font-medium truncate">
                         {act.userName ||
                           act.user?.fullName ||
+                          act.user?.full_name ||
                           "Someone"}{" "}
                         <span className="font-normal text-muted-foreground">
                           {(act.action || "").replace(/_/g, " ")}

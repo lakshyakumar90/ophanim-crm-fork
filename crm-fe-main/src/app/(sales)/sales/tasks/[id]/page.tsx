@@ -283,21 +283,33 @@ export default function TaskDetailPage() {
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-slate-600">Assigned To</span>
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback className="text-xs">A</AvatarFallback>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={task.assignedUser?.avatarUrl || undefined} />
+                    <AvatarFallback className="text-xs">
+                      {task.assignedUser?.fullName?.[0] || "A"}
+                    </AvatarFallback>
                   </Avatar>
-                  <span className="font-medium text-sm">
-                    {/* In a real app we'd fetch assignee details. For now we just show ID or placeholder */}
-                    User {task.assignedTo.slice(0, 4)}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="font-medium text-sm">
+                      {task.assignedUser?.fullName || "Unknown User"}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {task.assignedUser?.email || "No email"}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-600">Created By</span>
-                <span className="text-sm">
-                  User {task.assignedBy.slice(0, 4)}
-                </span>
+                <div className="flex flex-col text-right">
+                  <span className="text-sm font-medium">
+                    {task.createdByUser?.fullName || "Unknown User"}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {task.createdByUser?.email || "No email"}
+                  </span>
+                </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-600">Created On</span>

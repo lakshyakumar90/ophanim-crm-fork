@@ -153,3 +153,63 @@ export async function deleteTeamNote(noteId: string): Promise<void> {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 }
+
+export async function pinTeamNote(noteId: string): Promise<TeamNote> {
+  const { data, error } = await supabaseAdmin
+    .from("team_notes")
+    .update({ is_pinned: true })
+    .eq("id", noteId)
+    .select(`
+      *,
+      user:user_id (
+        id,
+        full_name,
+        avatar_url
+      )
+    `)
+    .single();
+
+  if (error) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+
+  return {
+    id: data.id,
+    content: data.content,
+    teamId: data.team_id,
+    userId: data.user_id,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    user: data.user ? { id: data.user.id, fullName: data.user.full_name, avatarUrl: data.user.avatar_url } : undefined,
+  };
+}
+
+export async function unpinTeamNote(noteId: string): Promise<TeamNote> {
+  const { data, error } = await supabaseAdmin
+    .from("team_notes")
+    .update({ is_pinned: false })
+    .eq("id", noteId)
+    .select(`
+      *,
+      user:user_id (
+        id,
+        full_name,
+        avatar_url
+      )
+    `)
+    .single();
+
+  if (error) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+
+  return {
+    id: data.id,
+    content: data.content,
+    teamId: data.team_id,
+    userId: data.user_id,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    user: data.user ? { id: data.user.id, fullName: data.user.full_name, avatarUrl: data.user.avatar_url } : undefined,
+  };
+}

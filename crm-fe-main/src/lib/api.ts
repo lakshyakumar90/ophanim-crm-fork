@@ -280,8 +280,13 @@ export const teamsApi = {
     }
   },
   get: async (id: string) => {
-    const res = await api.get(`/teams/${id}`);
-    return unwrap(res);
+    try {
+      return await sq.getTeamById(id);
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase team read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
+      const res = await api.get(`/teams/${id}`);
+      return unwrap(res);
+    }
   },
   create: (data: {
     name: string;
@@ -293,8 +298,13 @@ export const teamsApi = {
     api.put(`/teams/${id}`, data),
   delete: (id: string) => api.delete(`/teams/${id}`),
   getMembers: async (id: string) => {
-    const res = await api.get(`/teams/${id}/members`);
-    return unwrap(res);
+    try {
+      return await sq.getTeamMembers(id);
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase team members read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
+      const res = await api.get(`/teams/${id}/members`);
+      return unwrap(res);
+    }
   },
   addMember: (teamId: string, userId: string) =>
     api.post(`/teams/${teamId}/members`, { userId }),
@@ -308,19 +318,23 @@ export const teamsApi = {
 
 export const teamNotesApi = {
   list: async (teamId: string) => {
-    try {
-      return await sq.getTeamNotes(teamId);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase team notes read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get(`/teams/${teamId}/notes`);
-      return unwrap(res) || [];
-    }
+    return unwrap(await api.get(`/teams/${teamId}/notes`));
   },
-  create: (teamId: string, content: string) =>
-    api.post(`/teams/${teamId}/notes`, { content }),
-  update: (noteId: string, content: string) =>
-    api.put(`/teams/notes/${noteId}`, { content }),
-  delete: (noteId: string) => api.delete(`/teams/notes/${noteId}`),
+  create: async (teamId: string, content: string) => {
+    return unwrap(await api.post(`/teams/${teamId}/notes`, { content }));
+  },
+  update: async (noteId: string, content: string) => {
+    return unwrap(await api.put(`/teams/notes/${noteId}`, { content }));
+  },
+  delete: async (noteId: string) => {
+    return unwrap(await api.delete(`/teams/notes/${noteId}`));
+  },
+  pin: async (noteId: string) => {
+    return unwrap(await api.post(`/teams/notes/${noteId}/pin`));
+  },
+  unpin: async (noteId: string) => {
+    return unwrap(await api.post(`/teams/notes/${noteId}/unpin`));
+  },
 };
 
 // =====================================================
@@ -413,33 +427,36 @@ export const leadsApi = {
     status?: "pending" | "sent" | "all";
     date?: string;
   }) => {
-    // Always use the backend API first — it enforces role-based access control.
-    // The Supabase client query has no user filter and would expose all users' reminders.
     try {
-      const res = await api.get("/leads/reminders/all", { params });
-      const payload = unwrap(res);
-      if (Array.isArray(payload)) {
-        const page = params?.page || 1;
-        const limit = params?.limit || payload.length || 1;
-        return {
-          data: payload,
-          meta: {
-            total: payload.length,
-            page,
-            limit,
-            totalPages: Math.max(1, Math.ceil(payload.length / limit)),
-            hasPrevPage: page > 1,
-            hasNextPage: page * limit < payload.length,
-          },
-        };
-      }
-      if (payload && Array.isArray(payload.data)) {
-        return payload;
-      }
-      return { data: [], meta: { total: 0, page: params?.page || 1, limit: params?.limit || 20, totalPages: 0 } };
+      return await sq.getAllReminders(params);
     } catch (error) {
-      console.error("Backend reminders fetch failed", error);
-      return { data: [], meta: { total: 0, page: params?.page || 1, limit: params?.limit || 20, totalPages: 0 } };
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase all reminders read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
+      try {
+        const res = await api.get("/leads/reminders/all", { params });
+        const payload = unwrap(res);
+        if (Array.isArray(payload)) {
+          const page = params?.page || 1;
+          const limit = params?.limit || payload.length || 1;
+          return {
+            data: payload,
+            meta: {
+              total: payload.length,
+              page,
+              limit,
+              totalPages: Math.max(1, Math.ceil(payload.length / limit)),
+              hasPrevPage: page > 1,
+              hasNextPage: page * limit < payload.length,
+            },
+          };
+        }
+        if (payload && Array.isArray(payload.data)) {
+          return payload;
+        }
+        return { data: [], meta: { total: 0, page: params?.page || 1, limit: params?.limit || 20, totalPages: 0 } };
+      } catch (backendError) {
+        console.error("Backend reminders fetch failed", backendError);
+        return { data: [], meta: { total: 0, page: params?.page || 1, limit: params?.limit || 20, totalPages: 0 } };
+      }
     }
   },
   getRemindersCount: async (params?: {
@@ -448,11 +465,16 @@ export const leadsApi = {
     date?: string;
   }) => {
     try {
-      const res = await api.get("/leads/reminders/count", { params });
-      return unwrap(res);
+      return await sq.getRemindersCount(params);
     } catch (error) {
-      console.error("Backend reminders count failed", error);
-      return { count: 0 };
+      if (process.env.NODE_ENV !== "production") console.warn("Supabase reminders count read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
+      try {
+        const res = await api.get("/leads/reminders/count", { params });
+        return unwrap(res);
+      } catch (backendError) {
+        console.error("Backend reminders count failed", backendError);
+        return { count: 0 };
+      }
     }
   },
   getReminders: async (id: string) => {

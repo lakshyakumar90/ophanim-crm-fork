@@ -475,49 +475,6 @@ export async function logout(
   userId: string,
   refreshToken?: string,
 ): Promise<void> {
-  // If user has an open attendance entry, close it at logout time.
-  // This keeps attendance tracking accurate when users end session without manual clock-out.
-  const nowISO = getTimestampIST();
-  const { data: openAttendance } = await supabaseAdmin
-    .from("attendance")
-    .select("id, clock_in_time, break_duration, status, notes")
-    .eq("user_id", userId)
-    .is("clock_out_time", null)
-    .order("clock_in_time", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (openAttendance) {
-    const clockIn = new Date(openAttendance.clock_in_time);
-    const clockOut = new Date(nowISO);
-    const breakDuration = openAttendance.break_duration || 0;
-    const totalMinutes =
-      (clockOut.getTime() - clockIn.getTime()) / 60000 - breakDuration;
-    const totalHours = Math.max(0, Math.round((totalMinutes / 60) * 100) / 100);
-    const status =
-      totalHours < 4
-        ? "half_day"
-        : openAttendance.status === "late"
-          ? "late"
-          : "present";
-    const logoutNote = "[Auto] Clocked out at app logout";
-    const notes = openAttendance.notes
-      ? `${openAttendance.notes}\n${logoutNote}`
-      : logoutNote;
-
-    await supabaseAdmin
-      .from("attendance")
-      .update({
-        clock_out_time: nowISO,
-        total_hours: totalHours,
-        break_duration: breakDuration,
-        status,
-        notes,
-        updated_at: nowISO,
-      })
-      .eq("id", openAttendance.id);
-  }
-
   if (refreshToken) {
     // Revoke specific token
     try {

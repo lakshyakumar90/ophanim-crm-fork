@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { teamsApi } from "@/lib/api";
-import { useIsAdmin } from "@/providers/auth-provider";
+import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +46,9 @@ import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 export default function GlobalTeamsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const isAdmin = useIsAdmin();
+  const isManager = useIsManager();
   const { departments } = useDepartment();
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
 
@@ -65,12 +67,17 @@ export default function GlobalTeamsPage() {
   const allTeams = (data || []) as Team[];
 
   // Filter teams by department if selected
-  const teams =
+  let teams =
     selectedDepartment === "all"
       ? allTeams
       : allTeams.filter(
           (team: Team) => team.departmentId === selectedDepartment,
         );
+
+  // If standard employee, strictly bind view to their own team.
+  if (!isAdmin && !isManager && user?.teamId) {
+    teams = teams.filter((team) => team.id === user.teamId);
+  }
 
   const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null);
 
@@ -94,10 +101,10 @@ export default function GlobalTeamsPage() {
     return dept?.name || "Unknown";
   };
 
-  if (!isAdmin) {
+  if (!user) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
-        <p className="text-muted-foreground">Admin access required</p>
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }

@@ -3,8 +3,8 @@
 import { useState, useCallback } from "react";
 import useSWR, { mutate } from "swr";
 import { useRouter } from "next/navigation";
-import { tasksApi } from "@/lib/api";
-import { useIsManager } from "@/providers/auth-provider";
+import { tasksApi, usersApi } from "@/lib/api";
+import { useAuth, useIsManager } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Plus,
   ChevronLeft,
@@ -44,22 +45,35 @@ const priorityColors = {
 export default function TasksPage() {
   const router = useRouter();
   const isManager = useIsManager();
+  const { user } = useAuth();
 
   const [status, setStatus] = useState<string>("all");
+  const [priority, setPriority] = useState<string>("all");
+  const [assigneeId, setAssigneeId] = useState<string>("all");
   const [page, setPage] = useState(1);
 
-  const { data, isLoading, error } = useSWR(["tasks", page, status], () =>
+  // Fetch users for assignee filter
+  const { data: usersData } = useSWR(["users", user?.teamId], () =>
+    usersApi.list(
+      isManager && user?.teamId ? { teamId: user.teamId, limit: 100 } : { limit: 100 }
+    )
+  );
+  const users = usersData?.data || [];
+
+  const { data, isLoading, error } = useSWR(["tasks", page, status, priority, assigneeId], () =>
     tasksApi
       .list({
         page,
         limit: 10,
         status: status !== "all" ? status : undefined,
+        priority: priority !== "all" ? (priority as any) : undefined,
+        assignedTo: assigneeId !== "all" ? assigneeId : undefined,
       })
   );
 
   const refreshTasksData = useCallback(async () => {
-    await mutate(["tasks", page, status]);
-  }, [page, status]);
+    await mutate(["tasks", page, status, priority, assigneeId]);
+  }, [page, status, priority, assigneeId]);
 
   useHeaderRefresh({
     onRefresh: refreshTasksData,
@@ -94,7 +108,7 @@ export default function TasksPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-4">
         <Select
           value={status}
           onValueChange={(v) => {
@@ -106,12 +120,58 @@ export default function TasksPage() {
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="todo">To Do</SelectItem>
             <SelectItem value="in_progress">In Progress</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select
+          value={priority}
+          onValueChange={(v) => {
+            setPriority(v);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Priority" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Priorities</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={assigneeId}
+          onValueChange={(v) => {
+            setAssigneeId(v);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Assignee" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Assignees</SelectItem>
+            {users.map((u: any) => (
+              <SelectItem key={u.id} value={u.id}>
+                {u.fullName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+{(status !== "all" || priority !== "all" || assigneeId !== "all") && (
+  <Button variant="ghost" size="sm" onClick={() => {
+    setStatus("all");
+    setPriority("all");
+    setAssigneeId("all");
+    setPage(1);
+  }}>Clear Filters</Button>
+)}
       </div>
 
       {/* Tasks List */}
@@ -183,6 +243,16 @@ export default function TasksPage() {
                       )}
                     </div>
                   </div>
+                  {/* Assignee Information */}
+                  {task.assignedUser && (
+                    <div className="flex flex-col items-center gap-1 min-w-[60px]">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={task.assignedUser.avatarUrl || undefined} />
+                        <AvatarFallback className="text-xs">{task.assignedUser.fullName?.[0] || "A"}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-[10px] text-muted-foreground text-center line-clamp-1">{task.assignedUser.fullName.split(" ")[0]}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

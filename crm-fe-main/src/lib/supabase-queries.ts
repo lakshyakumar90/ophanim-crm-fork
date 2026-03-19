@@ -61,7 +61,7 @@ export async function getDepartments() {
 export async function getTeams() {
   const { data, error } = await supabase
     .from("teams")
-    .select("*")
+    .select("*, manager:users!manager_id(id, full_name, avatar_url), department:departments(name)")
     .order("name");
 
   if (error) {
@@ -69,7 +69,28 @@ export async function getTeams() {
     throw error;
   }
 
-  return mapToCamelCase(data || []);
+  // Fetch member counts efficiently
+  const { data: usersData, error: usersError } = await supabase
+    .from("users")
+    .select("team_id")
+    .eq("is_active", true)
+    .not("team_id", "is", null);
+
+  const memberCounts: Record<string, number> = {};
+  if (usersData && !usersError) {
+    usersData.forEach((u: any) => {
+      if (u.team_id) {
+        memberCounts[u.team_id] = (memberCounts[u.team_id] || 0) + 1;
+      }
+    });
+  }
+
+  const teamsWithCounts = (data || []).map((t: any) => ({
+    ...t,
+    member_count: memberCounts[t.id] || 0,
+  }));
+
+  return mapToCamelCase(teamsWithCounts);
 }
 
 // ===================
@@ -1296,6 +1317,37 @@ export async function getProjectById(id: string) {
 // ===================
 // ACTIVITIES / ACTIVITY LOGS
 // ===================
+
+export async function getTeamById(id: string) {
+  const { data, error } = await supabase
+    .from("teams")
+    .select(`*, manager:users!manager_id(id, full_name, avatar_url), department:departments(id, name)`)
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching team by id:", (error as any)?.message || (error as any)?.code || String(error));
+    throw error;
+  }
+
+  return mapToCamelCase(data);
+}
+
+export async function getTeamMembers(teamId: string) {
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, full_name, email, role, avatar_url, job_title")
+    .eq("team_id", teamId)
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching team members:", (error as any)?.message || (error as any)?.code || String(error));
+    throw error;
+  }
+
+  return mapToCamelCase(data || []);
+}
 
 export async function getActivityLogs(params?: {
   page?: number;

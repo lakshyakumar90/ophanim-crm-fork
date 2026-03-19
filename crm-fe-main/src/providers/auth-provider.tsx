@@ -4,13 +4,12 @@ import {
   createContext,
   useContext,
   useEffect,
-  useRef,
   useState,
   useCallback,
   ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { authApi, tokens, tasksApi } from "@/lib/api";
+import { authApi, tokens } from "@/lib/api";
 import {
   syncSupabaseSession,
   clearSupabaseSession,
@@ -18,7 +17,6 @@ import {
 import type { User } from "@/types";
 import { LoginNoticeDialog } from "@/components/auth/login-notice-dialog";
 
-const REMINDER_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 interface LoginResult {
   requires2FA: boolean;
@@ -60,16 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
-  const reminderIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isPublicPath = publicPaths.some((path) => pathname?.startsWith(path));
-
-  // Fire-and-forget reminder check — safe to call multiple times (idempotent)
-  const triggerReminderCheck = useCallback(() => {
-    tasksApi.checkReminders().catch(() => {
-      // Silently ignore — non-critical background check
-    });
-  }, []);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -100,9 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.warn("Supabase session sync failed (app will use backend fallback):", err);
       }
-
-      // Check due reminders immediately after login
-      triggerReminderCheck();
 
       return { requires2FA: false };
     },
@@ -170,9 +157,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isPublicPath) {
           router.replace("/");
         }
-
-        // Trigger reminder check on app init (session restore)
-        triggerReminderCheck();
       } catch (error) {
         tokens.clear();
         setUser(null);
@@ -185,25 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     checkAuth();
-  }, [isPublicPath, router, triggerReminderCheck]);
-
-  // Periodic reminder check every 5 minutes while authenticated
-  useEffect(() => {
-    if (!user) {
-      if (reminderIntervalRef.current) {
-        clearInterval(reminderIntervalRef.current);
-        reminderIntervalRef.current = null;
-      }
-      return;
-    }
-    reminderIntervalRef.current = setInterval(triggerReminderCheck, REMINDER_CHECK_INTERVAL_MS);
-    return () => {
-      if (reminderIntervalRef.current) {
-        clearInterval(reminderIntervalRef.current);
-        reminderIntervalRef.current = null;
-      }
-    };
-  }, [user, triggerReminderCheck]);
+  }, [isPublicPath, router]);
 
   /**
    * Permission check — heart of the RBAC system.

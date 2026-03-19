@@ -105,6 +105,18 @@ export interface Task {
     fullName: string;
     avatarUrl: string | null;
   };
+  assignedUser?: {
+    id: string;
+    fullName: string;
+    avatarUrl: string | null;
+    email: string;
+  };
+  createdByUser?: {
+    id: string;
+    fullName: string;
+    avatarUrl: string | null;
+    email: string;
+  };
 }
 
 export interface Attendance {
@@ -128,9 +140,14 @@ export interface Team {
   managerId: string | null;
   description: string | null;
   departmentId?: string;
-  memberCount?: number;
   createdAt: string;
   updatedAt: string;
+  memberCount?: number;
+  manager?: {
+    id: string;
+    fullName: string;
+    avatarUrl: string | null;
+  } | null;
 }
 
 export interface Notification {

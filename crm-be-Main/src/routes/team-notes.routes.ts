@@ -108,4 +108,30 @@ router.delete(
   }),
 );
 
+/**
+ * POST /notes/:noteId/pin
+ * Pin a team note
+ */
+router.post(
+  "/notes/:noteId/pin",
+  asyncHandler(async (req: Request, res: Response) => {
+    const noteId = req.params["noteId"] as string;
+    const note = await teamNotesService.pinTeamNote(noteId);
+    sendSuccess(res, note);
+  })
+);
+
+/**
+ * POST /notes/:noteId/unpin
+ * Unpin a team note
+ */
+router.post(
+  "/notes/:noteId/unpin",
+  asyncHandler(async (req: Request, res: Response) => {
+    const noteId = req.params["noteId"] as string;
+    const note = await teamNotesService.unpinTeamNote(noteId);
+    sendSuccess(res, note);
+  })
+);
+
 export default router;

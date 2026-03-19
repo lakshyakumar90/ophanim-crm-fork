@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useIsAdmin, useAuth } from "@/providers/auth-provider";
 import { AppShell } from "@/components/layout/app-shell";
+import { StartupAlertsDialog } from "@/components/notifications/startup-alerts-dialog";
 
 export default function GlobalLayout({
   children,
@@ -36,6 +37,7 @@ export default function GlobalLayout({
 
   return (
     <AppShell>
+      <StartupAlertsDialog />
       <div className="p-4 lg:p-6 h-full">{children}</div>
     </AppShell>
   );
