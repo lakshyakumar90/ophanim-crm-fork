@@ -465,6 +465,11 @@ function GlobalSidebar({
       icon: Activity,
     },
     {
+      title: "Tasks",
+      href: "/tasks",
+      icon: CheckSquare,
+    },
+    {
       title: "Notifications",
       href: "/notifications",
       icon: Bell,

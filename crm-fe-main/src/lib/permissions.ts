@@ -93,7 +93,9 @@ export interface Role {
   slug: string;
   scope: "global" | "department";
   departmentId: string | null;
+  departmentIds: string[];
   departmentName?: string | null;
+  departmentSlug?: string | null;
   permissions: string[];
   isSystem: boolean;
   createdAt: string;

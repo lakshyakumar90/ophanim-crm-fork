@@ -3,14 +3,15 @@
 import { useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
-import { usersApi, activitiesApi } from "@/lib/api";
-import { useIsAdmin } from "@/providers/auth-provider";
+import { usersApi, activitiesApi, projectsApi, rolesApi } from "@/lib/api";
+import { useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Link from "next/link";
 import {
   ArrowLeft,
   Mail,
@@ -22,6 +23,10 @@ import {
   Clock,
   Edit,
   Activity,
+  FolderKanban,
+  Briefcase,
+  Users,
+  Tag,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
@@ -30,6 +35,7 @@ export default function UserDetailPage() {
   const params = useParams();
   const router = useRouter();
   const isAdmin = useIsAdmin();
+  const isCurrentUserManager = useIsManager();
   const userId = params.id as string;
 
   const { data, isLoading, error } = useSWR(
@@ -44,10 +50,24 @@ export default function UserDetailPage() {
       activitiesApi.list({ userId, limit: 50 }).then((res) => res?.data || []),
   );
 
+  // Fetch projects managed by this user — available to admins and managers
+  const { data: managedProjectsData, isLoading: projectsLoading } = useSWR(
+    userId && (isAdmin || isCurrentUserManager) ? ["user-managed-projects", userId] : null,
+    () => projectsApi.getByManager(userId),
+  );
+
+  // Fetch RBAC roles for this user
+  const { data: userRolesData, isLoading: rolesLoading } = useSWR(
+    userId && isAdmin ? ["user-rbac-roles", userId] : null,
+    () => rolesApi.getUserRoles(userId),
+  );
+
   const refreshUserData = useCallback(async () => {
     await Promise.all([
       mutate(["user", userId]),
       mutate(["user-activities", userId]),
+      mutate(["user-managed-projects", userId]),
+      mutate(["user-rbac-roles", userId]),
     ]);
   }, [userId]);
 
@@ -56,7 +76,8 @@ export default function UserDetailPage() {
     enabled: isAdmin,
   });
 
-  if (!isAdmin) {
+  // Non-admins who aren't managers have no business on a user detail page
+  if (!isAdmin && !isCurrentUserManager) {
     router.push("/");
     return null;
   }
@@ -95,6 +116,14 @@ export default function UserDetailPage() {
 
   const user = data;
   const activities = activitiesData || [];
+  const managedProjects = Array.isArray(managedProjectsData) ? managedProjectsData : [];
+  const userRbacRoles = Array.isArray(userRolesData) ? userRolesData : [];
+  const isManager = user?.role === "manager" || user?.role === "admin";
+
+  const formatJobTitle = (jt: string | null | undefined) => {
+    if (!jt) return "—";
+    return jt.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  };
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -186,6 +215,12 @@ export default function UserDetailPage() {
       <Tabs defaultValue="info" className="space-y-4">
         <TabsList>
           <TabsTrigger value="info">Information</TabsTrigger>
+          {isManager && (
+            <TabsTrigger value="projects">
+              <FolderKanban className="h-4 w-4 mr-1" />
+              Projects ({managedProjects.length})
+            </TabsTrigger>
+          )}
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
@@ -218,13 +253,36 @@ export default function UserDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
+                <Briefcase className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Job Title</p>
+                  <p className="font-medium">{formatJobTitle((user as any).jobTitle)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Users className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Department</p>
+                  <p className="font-medium">{(user as any).departmentName || "—"}</p>
+                </div>
+              </div>
+              {(user as any).managerName && (
+                <div className="flex items-center gap-3">
+                  <User className="w-5 h-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Reporting To</p>
+                    <p className="font-medium">{(user as any).managerName}</p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-3">
                 <Calendar className="w-5 h-5 text-muted-foreground" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Created At</p>
+                  <p className="text-sm text-muted-foreground">Member Since</p>
                   <p className="font-medium">
                     {user.createdAt
                       ? format(new Date(user.createdAt), "PPP")
-                      : "-"}
+                      : "—"}
                   </p>
                 </div>
               </div>
@@ -240,21 +298,119 @@ export default function UserDetailPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Calendar className="w-5 h-5 text-muted-foreground" />
+                <Clock className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="text-sm text-muted-foreground">Shift</p>
                   <p className="font-medium">
                     {user.shiftType === "day_shift"
-                      ? "Day Shift (9 AM - 6 PM)"
+                      ? "Day Shift (9 AM – 6 PM)"
                       : user.shiftType === "night_shift"
-                        ? "Night Shift (7 PM - 4 AM)"
+                        ? "Night Shift (7 PM – 4 AM)"
                         : "Not Set"}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* RBAC Roles */}
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Tag className="h-4 w-4" />
+                  Assigned Roles
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {rolesLoading ? (
+                  <div className="flex gap-2">
+                    {[1, 2].map((i) => <Skeleton key={i} className="h-6 w-28 rounded-full" />)}
+                  </div>
+                ) : userRbacRoles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No RBAC roles assigned.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {userRbacRoles.map((r: any) => (
+                      <Badge
+                        key={r.id || r.roleId}
+                        variant="outline"
+                        className={
+                          r.scope === "global"
+                            ? "border-red-300 bg-red-50 text-red-700"
+                            : "border-blue-300 bg-blue-50 text-blue-700"
+                        }
+                      >
+                        {r.name || r.roleName}
+                        {r.departmentName && (
+                          <span className="ml-1 opacity-60">· {r.departmentName}</span>
+                        )}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
+
+        {isManager && (
+          <TabsContent value="projects" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FolderKanban className="h-5 w-5" />
+                  Managed Projects
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {projectsLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} className="h-14" />
+                    ))}
+                  </div>
+                ) : managedProjects.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">
+                    No projects managed by this user.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {managedProjects.map((project: any) => (
+                      <Link
+                        key={project.id}
+                        href={`/projects/${project.id}/overview`}
+                        className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                            <FolderKanban className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+                              {project.name}
+                            </p>
+                            {project.clientName && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {project.clientName}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-xs shrink-0 ml-2"
+                        >
+                          {project.status?.replace(/_/g, " ") || "planned"}
+                        </Badge>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         <TabsContent value="activity" className="space-y-4">
           <Card>

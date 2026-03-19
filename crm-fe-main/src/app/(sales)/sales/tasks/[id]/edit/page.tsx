@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { tasksApi, usersApi } from "@/lib/api";
 import useSWR from "swr";
 import { getTodayIST } from "@/lib/date-utils";
-import { useAuth, useIsManager } from "@/providers/auth-provider";
+import { useAuth, useIsManager, useIsAdmin } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +55,7 @@ export default function EditTaskPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const isManager = useIsManager();
+  const isAdmin = useIsAdmin();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Due date/time state
@@ -73,7 +74,7 @@ export default function EditTaskPage() {
 
   // Only fetch users list for managers/admins
   const { data: usersData, isLoading: loadingUsers } = useSWR(
-    isManager ? "users-list" : null,
+    (isManager || isAdmin) ? "users-list" : null,
     () => usersApi.list(),
   );
 
@@ -160,7 +161,7 @@ export default function EditTaskPage() {
       await tasksApi.update(id as string, {
         ...data,
         dueDate: buildDueDateISO(),
-        assignedTo: isManager ? data.assignedTo : undefined, // Only update assignee if manager
+        assignedTo: (isManager || isAdmin) ? data.assignedTo : undefined, // Only update assignee if manager/admin
       });
       toast.success("Task updated successfully");
       router.push(`/sales/tasks/${id}`);
@@ -232,8 +233,8 @@ export default function EditTaskPage() {
               )}
             </div>
 
-            {/* Only show assignee selector for managers */}
-            {isManager && (
+            {/* Only show assignee selector for managers and admins */}
+            {(isManager || isAdmin) && (
               <div className="space-y-2">
                 <Label htmlFor="assignedTo">Assign To</Label>
                 <Select

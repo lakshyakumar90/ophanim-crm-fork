@@ -172,12 +172,12 @@ export const TOKEN_TYPES = {
 
 export type TokenType = (typeof TOKEN_TYPES)[keyof typeof TOKEN_TYPES];
 
-// Departments
+// Departments — values must match the `slug` column in the departments table exactly
 export const DEPARTMENTS = {
   SALES: "sales",
   HR: "hr",
   FINANCE: "finance",
-  PROJECT_MANAGEMENT: "project_management",
+  PROJECT_MANAGEMENT: "project-management", // DB slug uses hyphen, not underscore
 } as const;
 
 export type Department = (typeof DEPARTMENTS)[keyof typeof DEPARTMENTS];

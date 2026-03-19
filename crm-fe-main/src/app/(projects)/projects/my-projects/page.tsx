@@ -33,6 +33,7 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
 interface Project {
   id: string;
@@ -90,12 +91,8 @@ export default function MyProjectsPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  const fetchProjects = async () => {
-    setLoading(true);
+  const fetchProjects = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const token = localStorage.getItem("crm_access_token");
       const res = await fetch(`${API_URL}/projects/my-projects`, {
@@ -114,6 +111,13 @@ export default function MyProjectsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchProjects();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useHeaderRefresh({ onRefresh: () => fetchProjects(true), isRefreshing: loading });
 
   const activeProjects = projects.filter(
     (p) => p.status === "in_progress" || p.status === "planned",
@@ -144,7 +148,7 @@ export default function MyProjectsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">My Projects</h1>
         <p className="text-muted-foreground">
-          Projects you are assigned to as a team member.
+          Projects you manage or are assigned to as a team member.
         </p>
       </div>
 

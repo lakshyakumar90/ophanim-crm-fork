@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import useSWR, { mutate } from "swr";
 import { activitiesApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
@@ -38,6 +39,7 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowRight,
+  ExternalLink,
 } from "lucide-react";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
@@ -53,6 +55,9 @@ interface ActivityLog {
   description: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
+  entity_type?: string;
+  entity_id?: string;
+  project_id?: string;
   user?: {
     id: string;
     full_name: string;
@@ -62,6 +67,7 @@ interface ActivityLog {
   lead?: {
     id: string;
     lead_name: string;
+    lead_id?: string;
   };
 }
 
@@ -240,7 +246,7 @@ export default function ProjectActivityPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
@@ -392,13 +398,38 @@ export default function ProjectActivityPage() {
 
                         <div className="flex items-center gap-3 text-sm flex-wrap">
                           {activity.lead && (
-                            <Badge
-                              variant="outline"
-                              className="flex items-center gap-1"
-                            >
-                              <Target className="h-3 w-3" />
-                              {activity.lead.lead_name}
-                            </Badge>
+                            <Link href={`/leads/${activity.lead.id || activity.lead_id}`}>
+                              <Badge
+                                variant="outline"
+                                className="flex items-center gap-1 cursor-pointer hover:bg-accent transition-colors"
+                              >
+                                <Target className="h-3 w-3" />
+                                {activity.lead.lead_name}
+                                <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                              </Badge>
+                            </Link>
+                          )}
+                          {activity.entity_type === "project" && activity.entity_id && (
+                            <Link href={`/projects/${activity.entity_id}/overview`}>
+                              <Badge
+                                variant="outline"
+                                className="flex items-center gap-1 cursor-pointer hover:bg-accent transition-colors"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                View Project
+                              </Badge>
+                            </Link>
+                          )}
+                          {activity.entity_type === "task" && activity.entity_id && activity.project_id && (
+                            <Link href={`/projects/${activity.project_id}/tasks`}>
+                              <Badge
+                                variant="outline"
+                                className="flex items-center gap-1 cursor-pointer hover:bg-accent transition-colors"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                View Task
+                              </Badge>
+                            </Link>
                           )}
                           {hasChanges && (
                             <button

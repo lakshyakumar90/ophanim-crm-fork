@@ -129,24 +129,56 @@ export async function getUsers(
     { count: "exact" },
   );
 
-  // Role-based filtering
-  // Role-based filtering
-  if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
-    // Check if HR
-    const { data: dept } = await supabaseAdmin
-      .from("departments")
-      .select("slug")
-      .eq("id", authUser.departmentId)
-      .single();
-
-    if (dept?.slug !== "hr") {
-      // Managers (non-HR) see only members in their department
-      baseQuery = baseQuery.eq("department_id", authUser.departmentId);
+  // Role-based filtering: admins, isGlobal, and crm:admin see all users
+  const isAdminOrGlobal =
+    authUser.role === USER_ROLES.ADMIN ||
+    authUser.isGlobal ||
+    (authUser.permissions ?? []).includes("crm:admin");
+  if (!isAdminOrGlobal && authUser.role === USER_ROLES.MANAGER) {
+    const deptIds =
+      (authUser.departmentIds?.length ?? 0) > 0
+        ? authUser.departmentIds!
+        : authUser.departmentId
+          ? [authUser.departmentId]
+          : [];
+    if (deptIds.length > 0) {
+      // Multi-department: use .in(); single department: check HR and project members
+      if (deptIds.length > 1) {
+        baseQuery = baseQuery.in("department_id", deptIds);
+      } else {
+        const deptId = deptIds[0];
+        const { data: dept } = await supabaseAdmin
+          .from("departments")
+          .select("slug")
+          .eq("id", deptId)
+          .single();
+        if (dept?.slug !== "hr") {
+          const { data: managedProjects } = await supabaseAdmin
+            .from("projects")
+            .select("id")
+            .eq("manager_id", authUser.id);
+          const managedProjectIds = managedProjects?.map((p: { id: string }) => p.id) || [];
+          let extraMemberIds: string[] = [];
+          if (managedProjectIds.length > 0) {
+            const { data: pm } = await supabaseAdmin
+              .from("project_members")
+              .select("user_id")
+              .in("project_id", managedProjectIds);
+            extraMemberIds = pm?.map((m: { user_id: string }) => m.user_id) || [];
+          }
+          if (extraMemberIds.length > 0) {
+            const uniqueMembers = Array.from(new Set(extraMemberIds));
+            baseQuery = baseQuery.or(
+              `department_id.eq.${deptId},id.in.(${uniqueMembers.join(",")})`,
+            );
+          } else {
+            baseQuery = baseQuery.eq("department_id", deptId);
+          }
+        }
+      }
+    } else if (authUser.teamId) {
+      baseQuery = baseQuery.eq("team_id", authUser.teamId);
     }
-  } else if (authUser.role === USER_ROLES.MANAGER && authUser.teamId) {
-    // Fallback to team if no department id (legacy/edge case)
-    // Assuming non-HR if no department ID is present or if it falls back here
-    baseQuery = baseQuery.eq("team_id", authUser.teamId);
   }
 
   // Filters

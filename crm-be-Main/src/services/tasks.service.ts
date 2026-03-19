@@ -32,6 +32,7 @@ interface TaskRecord {
   projectId: string | null;
   relatedTeamId: string | null; // Added
   relatedUserId: string | null; // Added
+  departmentId: string | null;
   assignedTo: string;
   assignedBy: string;
   priority: string;
@@ -44,6 +45,15 @@ interface TaskRecord {
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
+  department?: { id: string; name: string; slug: string } | null;
+  assignedUser?: {
+    id: string;
+    fullName: string;
+    email: string;
+    avatarUrl: string | null;
+    departmentId: string | null;
+  } | null;
+  project?: { id: string; name: string } | null;
 }
 
 interface TaskRow {
@@ -55,6 +65,7 @@ interface TaskRow {
   project_id: string | null;
   related_team_id: string | null; // Added
   related_user_id: string | null; // Added
+  department_id: string | null;
   assigned_to: string;
   assigned_by: string;
   priority: string;
@@ -67,6 +78,9 @@ interface TaskRow {
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+  department?: { id: string; name: string; slug: string } | null;
+  assigned_user?: { id: string; full_name: string; email: string; avatar_url: string | null } | null;
+  project?: { id: string; name: string } | null;
 }
 
 function mapTaskRowToRecord(data: TaskRow): TaskRecord {
@@ -79,6 +93,7 @@ function mapTaskRowToRecord(data: TaskRow): TaskRecord {
     projectId: data.project_id,
     relatedTeamId: data.related_team_id, // Map
     relatedUserId: data.related_user_id, // Map
+    departmentId: data.department_id,
     assignedTo: data.assigned_to,
     assignedBy: data.assigned_by,
     priority: data.priority,
@@ -91,6 +106,17 @@ function mapTaskRowToRecord(data: TaskRow): TaskRecord {
     isDeleted: data.is_deleted,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
+    department: (data as any).department ?? null,
+    assignedUser: (data as any).assigned_user
+      ? {
+          id: (data as any).assigned_user.id,
+          fullName: (data as any).assigned_user.full_name,
+          email: (data as any).assigned_user.email,
+          avatarUrl: (data as any).assigned_user.avatar_url,
+          departmentId: (data as any).assigned_user.department_id ?? null,
+        }
+      : null,
+    project: (data as any).project ? { id: (data as any).project.id, name: (data as any).project.name } : null,
   };
 }
 
@@ -121,6 +147,7 @@ export async function getTasks(
       project_id,
       related_team_id,
       related_user_id,
+      department_id,
       assigned_to,
       assigned_by,
       priority,
@@ -132,21 +159,41 @@ export async function getTasks(
       reminder_sent,
       is_deleted,
       created_at,
-      updated_at
+      updated_at,
+      department:departments!department_id(id, name, slug),
+      assigned_user:users!assigned_to(id, full_name, email, avatar_url, department_id),
+      project:projects!project_id(id, name)
     `,
       { count: "exact" },
     )
     .eq("is_deleted", false);
 
   // Role-based filtering with department security
-  if (authUser.role === USER_ROLES.EMPLOYEE) {
+  const isAdminOrGlobal =
+    authUser.role === USER_ROLES.ADMIN ||
+    authUser.isGlobal ||
+    (authUser.permissions ?? []).includes("crm:admin");
+  if (isAdminOrGlobal) {
+    // Admins and global-scoped users see all tasks
+  } else if (authUser.role === USER_ROLES.EMPLOYEE) {
     // Employees see only their assigned tasks
     baseQuery = baseQuery.eq("assigned_to", authUser.id);
-  } else if (authUser.role === USER_ROLES.MANAGER && authUser.departmentId) {
-    // Managers see only tasks in their department
-    baseQuery = baseQuery.eq("department_id", authUser.departmentId);
+  } else if (authUser.role === USER_ROLES.MANAGER) {
+    const deptIds =
+      (authUser.departmentIds?.length ?? 0) > 0
+        ? authUser.departmentIds!
+        : authUser.departmentId
+          ? [authUser.departmentId]
+          : [];
+    if (deptIds.length > 0) {
+      const deptList = deptIds.join(",");
+      // Some tasks may not yet have department_id set but the assignee's
+      // user record does. Include both to ensure managers see all team tasks.
+      baseQuery = baseQuery.or(
+        `department_id.in.(${deptList}),assigned_user.department_id.in.(${deptList})`,
+      );
+    }
   }
-  // Admins see all tasks (no filter)
 
   // Apply filters
   if (query.status) {
@@ -248,8 +295,39 @@ export async function getTaskById(taskId: string): Promise<TaskRecord> {
 }
 
 /**
+ * Get allowed assignee IDs based on role hierarchy:
+ * - Admin or crm:admin: anyone
+ * - Manager: self + team members only
+ * - Employee: self only
+ */
+async function getAllowedAssigneeIds(authUser: AuthUser): Promise<Set<string>> {
+  const isAdmin = authUser.role === USER_ROLES.ADMIN;
+  const hasGlobalPerm = authUser.permissions?.includes("crm:admin") ?? false;
+  if (isAdmin || hasGlobalPerm) {
+    return new Set(); // Empty = no restriction (anyone allowed)
+  }
+
+  if (authUser.role === USER_ROLES.EMPLOYEE) {
+    return new Set([authUser.id]);
+  }
+
+  if (authUser.role === USER_ROLES.MANAGER && authUser.teamId) {
+    const { data: members } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("team_id", authUser.teamId)
+      .eq("is_active", true);
+    const ids = new Set([authUser.id, ...(members || []).map((m: { id: string }) => m.id)]);
+    return ids;
+  }
+
+  // Manager without team: only self
+  return new Set([authUser.id]);
+}
+
+/**
  * Create task
- * Non-managers can only create tasks assigned to themselves
+ * Assignment hierarchy: admin/global → anyone; manager → team; employee → self only
  */
 export async function createTask(
   input: CreateTaskInput,
@@ -260,11 +338,13 @@ export async function createTask(
   // Default assignedTo to self if not provided
   const assignedTo = input.assignedTo || createdBy;
 
-  // Non-managers can only create self-assigned tasks
-  if (authUser.role === USER_ROLES.EMPLOYEE && assignedTo !== createdBy) {
+  const allowedIds = await getAllowedAssigneeIds(authUser);
+  if (allowedIds.size > 0 && !allowedIds.has(assignedTo)) {
     throw new ApiError(
       ERROR_CODES.FORBIDDEN,
-      "You can only create tasks assigned to yourself",
+      authUser.role === USER_ROLES.EMPLOYEE
+        ? "You can only create tasks assigned to yourself"
+        : "You can only assign tasks to members of your team",
     );
   }
 
@@ -282,7 +362,7 @@ export async function createTask(
     status: input.status || "todo",
     due_date: input.dueDate,
     tags: input.tags,
-    reminder_before_minutes: input.reminderBeforeMinutes || null,
+    reminder_before_minutes: input.reminderBeforeMinutes ?? 30,
     reminder_sent: false,
     is_deleted: false,
   };
@@ -462,13 +542,25 @@ export async function updateTask(
 
 /**
  * Reassign task
+ * Admin/global (crm:admin): assign to anyone. Manager: team members only.
  */
 export async function reassignTask(
   taskId: string,
   input: ReassignTaskInput,
-  reassignedBy: string,
+  authUser: AuthUser,
 ): Promise<TaskRecord> {
+  const reassignedBy = authUser.id;
   const currentTask = await getTaskById(taskId);
+
+  const allowedIds = await getAllowedAssigneeIds(authUser);
+  if (allowedIds.size > 0 && !allowedIds.has(input.assignTo)) {
+    throw new ApiError(
+      ERROR_CODES.FORBIDDEN,
+      authUser.role === USER_ROLES.EMPLOYEE
+        ? "You can only reassign tasks to yourself"
+        : "You can only reassign tasks to members of your team",
+    );
+  }
 
   if (currentTask.assignedTo === input.assignTo) {
     throw new ApiError(
@@ -699,4 +791,77 @@ export async function getMyTasksSummary(userId: string) {
   summary.overdue = overdueData?.length || 0;
 
   return summary;
+}
+
+/**
+ * Check and send reminder notifications for due tasks.
+ * Finds tasks where NOW() >= due_date - reminder_before_minutes and reminder_sent = false.
+ * Creates a notification for each due reminder and marks the task reminder_sent = true.
+ * Pass userId to restrict to a single user, or omit to check all users (e.g. from a cron job).
+ */
+export async function checkDueReminders(userId?: string): Promise<{ notified: number }> {
+  const { createNotification } = await import("./notifications.service.js");
+  const nowTs = new Date().toISOString();
+
+  // Fetch tasks where reminder is due and not yet sent
+  let query = supabaseAdmin
+    .from("tasks")
+    .select(
+      "id, title, due_date, reminder_before_minutes, assigned_to, project_id",
+    )
+    .eq("is_deleted", false)
+    .eq("reminder_sent", false)
+    .not("reminder_before_minutes", "is", null)
+    .not("due_date", "is", null)
+    .not("status", "in", '("completed","cancelled")');
+
+  if (userId) {
+    query = query.eq("assigned_to", userId);
+  }
+
+  const { data: tasks, error } = await query;
+  if (error) throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+
+  let notified = 0;
+  for (const task of tasks || []) {
+    const t = task as {
+      id: string;
+      title: string;
+      due_date: string;
+      reminder_before_minutes: number;
+      assigned_to: string;
+      project_id: string | null;
+    };
+    // Check: NOW >= due_date - reminder_before_minutes
+    const reminderAt = new Date(new Date(t.due_date).getTime() - t.reminder_before_minutes * 60 * 1000);
+    if (new Date(nowTs) >= reminderAt) {
+      try {
+        const dueDateStr = new Date(t.due_date).toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          dateStyle: "medium",
+          timeStyle: "short",
+        });
+        await createNotification({
+          userId: t.assigned_to,
+          title: "Task Reminder",
+          message: `"${t.title}" is due on ${dueDateStr}`,
+          type: "reminder",
+          relatedEntityType: "task",
+          relatedEntityId: t.id,
+          actionUrl: t.project_id ? `/projects/${t.project_id}/tasks` : "/tasks",
+          priority: "high",
+        });
+        // Mark reminder as sent
+        await supabaseAdmin
+          .from("tasks")
+          .update({ reminder_sent: true })
+          .eq("id", t.id);
+        notified++;
+      } catch {
+        // Continue even if one notification fails
+      }
+    }
+  }
+
+  return { notified };
 }

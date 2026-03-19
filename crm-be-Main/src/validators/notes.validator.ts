@@ -3,6 +3,7 @@ import { z } from "zod";
 // Create note schema
 export const createNoteSchema = z.object({
   content: z.string().min(1, "Note content is required").max(10000),
+  isPrivate: z.boolean().optional(),
 });
 
 // Update note schema

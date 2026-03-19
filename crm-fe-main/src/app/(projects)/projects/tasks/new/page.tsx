@@ -66,9 +66,9 @@ export default function NewProjectTaskPage() {
   const [dueMinute, setDueMinute] = useState("00");
   const [duePeriod, setDuePeriod] = useState<"AM" | "PM">("AM");
 
-  // Data Fetching
+  // Data Fetching - only fetch users for managers/admins who can assign to others
   const { data: usersData, isLoading: loadingUsers } = useSWR(
-    "users-list",
+    (isManager || isAdmin) ? "users-list" : null,
     () => usersApi.list(),
   );
 
@@ -167,28 +167,8 @@ export default function NewProjectTaskPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="projectId">Related Project</Label>
-              <Select
-                onValueChange={(v) =>
-                  setValue("projectId", v === "none" ? null : v)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {projects.map((proj: any) => (
-                    <SelectItem key={proj.id} value={proj.id}>
-                      {proj.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Assign To - Always show for Project Context (Usually PM assigns) */}
+            {/* Assign To - Only for managers and admins; employees can only assign to self */}
+            {(isManager || isAdmin) && (
             <div className="space-y-2">
               <Label htmlFor="assignedTo">Assign To</Label>
               <Select
@@ -219,6 +199,62 @@ export default function NewProjectTaskPage() {
                 </SelectContent>
               </Select>
             </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="projectId">Related Project</Label>
+              <Select
+                onValueChange={(v) =>
+                  setValue("projectId", v === "none" ? null : v)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {projects.map((proj: any) => (
+                    <SelectItem key={proj.id} value={proj.id}>
+                      {proj.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Assign To - Only admins and managers can assign to others; employees assign to self only */}
+            {(isManager || isAdmin) && (
+              <div className="space-y-2">
+                <Label htmlFor="assignedTo">Assign To</Label>
+                <Select
+                  defaultValue={user?.id}
+                  onValueChange={(v) => setValue("assignedTo", v)}
+                  disabled={loadingUsers}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        loadingUsers ? "Loading..." : "Select assignee"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {user && (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.fullName} (Me)
+                      </SelectItem>
+                    )}
+                    {users
+                      ?.filter((u: any) => u.id !== user?.id)
+                      .map((u: any) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.fullName}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Priority */}
             <div className="space-y-2">

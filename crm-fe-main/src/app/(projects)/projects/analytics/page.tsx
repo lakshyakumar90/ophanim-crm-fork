@@ -170,7 +170,7 @@ export default function ProjectAnalyticsPage() {
     })) || [];
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-background overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col gap-4 p-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b z-10">
         <div className="flex items-center justify-between">

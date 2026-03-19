@@ -35,7 +35,7 @@ export default function RootLayout({
               <SWRProvider>
                 <div className="h-full overflow-hidden">
                   {children}
-                  <Toaster />
+                  <Toaster duration={8000} />
                 </div>
               </SWRProvider>
             </DepartmentProvider>

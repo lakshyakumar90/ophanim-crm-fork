@@ -15,6 +15,7 @@ import {
   getCurrentTimestamp,
 } from "../utils/helpers.js";
 import { nowIST, getTimestampIST } from "../utils/date-utils.js";
+import { deriveMostSeniorJobTitle } from "../utils/job-title.utils.js";
 import {
   generateTOTPSecret,
   generateQRCode,
@@ -298,6 +299,17 @@ export async function register(
     }
   }
 
+  // Determine job_title: use provided value, or derive from RBAC roles (most senior wins)
+  let derivedJobTitle: string | null = input.jobTitle || null;
+  if (!derivedJobTitle && input.rbacRoleIds && input.rbacRoleIds.length > 0) {
+    const { data: roleRows } = await supabaseAdmin
+      .from("roles")
+      .select("slug")
+      .in("id", input.rbacRoleIds);
+    const slugs = (roleRows || []).map((r: any) => r.slug as string).filter(Boolean);
+    derivedJobTitle = deriveMostSeniorJobTitle(slugs);
+  }
+
   const { data: user, error } = await supabaseAdmin
     .from("users")
     .insert({
@@ -308,7 +320,7 @@ export async function register(
       team_id: teamId,
       department_id: input.departmentId || null,
       phone: input.phone || null,
-      job_title: input.jobTitle || null,
+      job_title: derivedJobTitle,
       shift_type: input.shiftType || "day_shift",
       is_active: true,
     })
@@ -322,6 +334,16 @@ export async function register(
       ERROR_CODES.DATABASE_ERROR,
       "Failed to create user profile",
     );
+  }
+
+  // Assign RBAC roles if provided
+  if (input.rbacRoleIds && input.rbacRoleIds.length > 0) {
+    const roleInserts = input.rbacRoleIds.map((roleId) => ({
+      user_id: userId,
+      role_id: roleId,
+      assigned_by: createdBy,
+    }));
+    await supabaseAdmin.from("user_roles").insert(roleInserts);
   }
 
   // Generate tokens

@@ -542,6 +542,8 @@ export const tasksApi = {
   },
   addComment: (id: string, commentText: string) =>
     api.post(`/tasks/${id}/comments`, { commentText }),
+  /** Check and send due reminder notifications for the current user. Idempotent. */
+  checkReminders: () => api.post("/tasks/reminders/check"),
 };
 
 // =====================================================
@@ -550,13 +552,13 @@ export const tasksApi = {
 
 export const projectsApi = {
   list: async () => {
-    try {
-      return await sq.getProjects();
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase projects read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get("/projects");
-      return unwrap(res);
-    }
+    // Always use the backend API for project listing.
+    // The Supabase client uses user-facing RLS which can silently return an empty
+    // array for managers from non-project departments (e.g. Sales Manager who is
+    // also a project manager). The backend uses supabaseAdmin with role-aware
+    // getAccessibleProjectIds() logic to correctly scope the results.
+    const res = await api.get("/projects");
+    return unwrap(res);
   },
   get: async (id: string) => {
     try {
@@ -805,6 +807,8 @@ export const activitiesApi = {
     userId?: string;
     teamId?: string;
     resourceType?: string;
+    /** Filter to a specific entity by ID (e.g. a project UUID) */
+    entityId?: string;
     action?: string;
     startDate?: string;
     endDate?: string;
@@ -1008,22 +1012,27 @@ export const emailApi = {
 // =====================================================
 
 export const rolesApi = {
-  // List all roles (with department populated)
+  // List all roles (with department populated) — Supabase direct with backend fallback
   list: async () => {
-    const res = await api.get("/roles");
-    return unwrap(res) as Array<{
-      id: string;
-      name: string;
-      slug: string;
-      scope: "global" | "department";
-      departmentId: string | null;
-      departmentName: string | null;
-      departmentSlug: string | null;
-      permissions: string[];
-      isSystem: boolean;
-      createdAt: string;
-      updatedAt: string;
-    }>;
+    try {
+      return await sq.getRoles();
+    } catch {
+      const res = await api.get("/roles");
+      return unwrap(res) as Array<{
+        id: string;
+        name: string;
+        slug: string;
+        scope: "global" | "department";
+        departmentId: string | null;
+        departmentIds: string[];
+        departmentName: string | null;
+        departmentSlug: string | null;
+        permissions: string[];
+        isSystem: boolean;
+        createdAt: string;
+        updatedAt: string;
+      }>;
+    }
   },
 
   // Get a single role

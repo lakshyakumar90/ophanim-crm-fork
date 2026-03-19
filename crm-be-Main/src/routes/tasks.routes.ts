@@ -137,7 +137,7 @@ router.post(
     const task = await tasksService.reassignTask(
       req.params["id"] as string,
       req.body,
-      authReq.user.id,
+      authReq.user,
     );
     sendSuccess(res, task);
   }),
@@ -176,6 +176,20 @@ router.post(
       authReq.user.id,
     );
     sendCreated(res, { message: "Comment added successfully" });
+  }),
+);
+
+/**
+ * POST /tasks/reminders/check
+ * Check and send reminder notifications for due tasks assigned to the current user.
+ * Safe to call on app load and periodically (every 5 min). Idempotent — uses reminder_sent flag.
+ */
+router.post(
+  "/reminders/check",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const result = await tasksService.checkDueReminders(authReq.user.id);
+    sendSuccess(res, result);
   }),
 );
 

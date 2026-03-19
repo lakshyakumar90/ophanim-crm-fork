@@ -24,6 +24,8 @@ interface UserOption {
   full_name?: string;
   email?: string;
   role?: string;
+  departmentName?: string;
+  jobTitle?: string;
 }
 
 interface UserSelectorProps {
@@ -141,7 +143,13 @@ export function UserSelector({
                     <div className="flex flex-col">
                       <span className="font-medium">{name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {user.email || "No email"} • {user.role || "user"}
+                        {[
+                          user.email || "No email",
+                          user.role || user.jobTitle || null,
+                          user.departmentName || null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </span>
                     </div>
                   </CommandItem>

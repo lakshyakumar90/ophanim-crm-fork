@@ -1,10 +1,9 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { Bell, Menu, Sun, Moon, RefreshCw } from "lucide-react";
+import { Menu, Sun, Moon, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +22,8 @@ import { DepartmentSwitcher } from "@/components/layout/department-switcher";
 import { GlobalSearch } from "@/components/search/global-search";
 import { usePollingCoordinator } from "@/lib/polling-coordinator";
 import { useHeaderRefreshController } from "@/providers/header-refresh-provider";
+import { NotificationsPopover } from "@/components/notifications/notifications-popover";
+import { RemindersPopover } from "@/components/notifications/reminders-popover";
 
 export function Header() {
   const router = useRouter();
@@ -47,7 +48,7 @@ export function Header() {
   // Track the last theme value synced from DB to prevent reverting optimistic updates
   const syncedThemeRef = useRef<string | null>(null);
 
-  // Fetch unread count - use same key as sidebar for shared cache
+  // Fetch unread count - used to sync via polling coordinator
   const { data: unreadData, mutate: mutateUnreadCount } = useSWR(
     user ? "notifications-unread-count" : null,
     () => notificationsApi.getUnreadCount(),
@@ -87,6 +88,7 @@ export function Header() {
   };
 
   const unreadCount = unreadData?.count || 0;
+  void unreadCount; // Used by polling coordinator publish below
 
   const handleRefresh = async () => {
     if (!isPageRefreshEnabled || isPageRefreshing) {
@@ -156,20 +158,11 @@ export function Header() {
           <RefreshCw className={`h-4 w-4 ${isPageRefreshing ? "animate-spin" : ""}`} />
         </Button>
 
-        {/* Notifications */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative text-muted-foreground hover:bg-accent"
-          onClick={() => router.push("/notifications")}
-        >
-          <Bell className="h-5 w-5" />
-          {unreadCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-500">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </Badge>
-          )}
-        </Button>
+        {/* Reminders popover */}
+        {user && <RemindersPopover />}
+
+        {/* Notifications popover */}
+        {user && <NotificationsPopover />}
 
         {/* Theme toggle */}
         <Button

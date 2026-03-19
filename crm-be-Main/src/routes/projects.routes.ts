@@ -65,10 +65,10 @@ router.get(
   asyncHandler(projectController.resources) as RequestHandler,
 );
 
-// Get projects by manager (Admin viewing specific PM's projects)
+// Get projects by manager (Admin sees any PM; Manager can only see their own)
 router.get(
   "/by-manager/:managerId",
-  requireRole(USER_ROLES.ADMIN) as RequestHandler,
+  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
   asyncHandler(projectController.byManager) as RequestHandler,
 );
 
@@ -92,10 +92,10 @@ router.get(
   asyncHandler(projectController.list) as RequestHandler,
 );
 
-// Get my projects (for team members)
+// Get my projects (for team members and managers)
 router.get(
   "/my-projects",
-  requireRole(USER_ROLES.EMPLOYEE) as RequestHandler,
+  requireRole(USER_ROLES.EMPLOYEE, USER_ROLES.MANAGER) as RequestHandler,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
     const projects = await getMyProjects(authReq.user.id);
@@ -189,7 +189,12 @@ router.get(
       );
     }
 
-    const notes = await notesService.getProjectNotes(projectId);
+    const isPrivate = req.query.private === "true";
+    const notes = await notesService.getProjectNotes(
+      projectId,
+      isPrivate,
+      isPrivate ? authReq.user.id : undefined,
+    );
     sendSuccess(res, notes);
   }) as RequestHandler,
 );
@@ -223,6 +228,7 @@ router.post(
       projectId,
       input.content,
       authReq.user.id,
+      input.isPrivate ?? false,
     );
     sendSuccess(res, note, 201);
   }) as RequestHandler,
@@ -249,24 +255,9 @@ router.put(
   }) as RequestHandler,
 );
 
-// Delete a note
-router.delete(
-  "/:id/notes/:noteId",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as unknown as AuthenticatedRequest;
-    await notesService.deleteNote(
-      req.params.noteId as string,
-      authReq.user.id,
-      authReq.user,
-    );
-    sendSuccess(res, { message: "Note deleted successfully" });
-  }) as RequestHandler,
-);
+// Delete a note — disabled: discussion messages are permanent records.
+// Only admins can delete via direct DB access if absolutely necessary.
+// router.delete("/:id/notes/:noteId", ...)
 
 // Pin a note (Manager/Admin only)
 router.post(

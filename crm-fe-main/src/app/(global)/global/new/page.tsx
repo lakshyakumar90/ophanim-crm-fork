@@ -6,7 +6,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { authApi, usersApi } from "@/lib/api";
+import useSWR from "swr";
+import { authApi, rolesApi } from "@/lib/api";
 import { useDepartment } from "@/providers/department-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,9 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Department-to-job-titles mapping
@@ -60,6 +63,33 @@ const DEPARTMENT_JOB_TITLES: Record<
   },
 };
 
+/**
+ * Convert a role slug to a job_title value (dynamic — works for any slug).
+ * Convention: "some-role-name" → "some_role_name"
+ */
+function slugToJobTitle(slug: string): string {
+  return slug.replace(/-/g, "_");
+}
+
+/**
+ * Compute seniority for sorting: lower = more senior.
+ * - "admin"               → 0
+ * - ends with "-manager"  → 1
+ * - anything else         → 2
+ */
+function slugSeniority(slug: string): number {
+  if (slug === "admin") return 0;
+  if (slug.endsWith("-manager") || slug === "manager") return 1;
+  return 2;
+}
+
+/** Human-readable label from a job_title value or role slug. */
+function jobTitleLabel(jobTitle: string): string {
+  return jobTitle
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // User schema - Admin role NOT allowed
 const userSchema = z.object({
   fullName: z.string().min(2, "Name is required"),
@@ -83,6 +113,11 @@ export default function NewUserPage() {
   const router = useRouter();
   const { departments } = useDepartment();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedRbacRoleIds, setSelectedRbacRoleIds] = useState<string[]>([]);
+  const [jobTitleAutoSuggested, setJobTitleAutoSuggested] = useState(false);
+
+  // Fetch all RBAC roles for selection
+  const { data: allRoles = [] } = useSWR("all-roles", () => rolesApi.list());
 
   const {
     register,
@@ -90,7 +125,6 @@ export default function NewUserPage() {
     setValue,
     watch,
     formState: { errors },
-    trigger,
   } = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
     defaultValues: {
@@ -121,9 +155,9 @@ export default function NewUserPage() {
     return currentRole === "manager" ? deptConfig.manager : deptConfig.employee;
   }, [currentDepartmentSlug, currentRole]);
 
-  // Reset job title when department or role changes
+  // Reset job title when department or role changes (only if not auto-suggested from RBAC)
   useEffect(() => {
-    if (currentJobTitle) {
+    if (currentJobTitle && !jobTitleAutoSuggested) {
       const isValidTitle = availableJobTitles.some(
         (jt) => jt.value === currentJobTitle,
       );
@@ -136,8 +170,39 @@ export default function NewUserPage() {
     currentRole,
     availableJobTitles,
     currentJobTitle,
+    jobTitleAutoSuggested,
     setValue,
   ]);
+
+  // Auto-suggest job title from selected RBAC roles (most senior slug wins)
+  const suggestedJobTitle = useMemo(() => {
+    if (selectedRbacRoleIds.length === 0) return null;
+    const slugs = selectedRbacRoleIds
+      .map((rid) => (allRoles as any[]).find((r: any) => r.id === rid)?.slug)
+      .filter(Boolean) as string[];
+    if (!slugs.length) return null;
+    const best = [...slugs].sort((a, b) => {
+      const diff = slugSeniority(a) - slugSeniority(b);
+      return diff !== 0 ? diff : a.localeCompare(b);
+    })[0];
+    return slugToJobTitle(best);
+  }, [selectedRbacRoleIds, allRoles]);
+
+  // Apply auto-suggestion whenever it changes
+  useEffect(() => {
+    if (suggestedJobTitle) {
+      setValue("jobTitle", suggestedJobTitle);
+      setJobTitleAutoSuggested(true);
+    } else {
+      setJobTitleAutoSuggested(false);
+    }
+  }, [suggestedJobTitle, setValue]);
+
+  const toggleRbacRole = (roleId: string) => {
+    setSelectedRbacRoleIds((prev) =>
+      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
+    );
+  };
 
   const onSubmit = async (data: UserFormData) => {
     setIsSubmitting(true);
@@ -150,7 +215,8 @@ export default function NewUserPage() {
         departmentId: data.departmentId,
         jobTitle: data.jobTitle,
         shiftType: data.shiftType,
-      });
+        ...(selectedRbacRoleIds.length > 0 ? { rbacRoleIds: selectedRbacRoleIds } : {}),
+      } as any);
 
       toast.success("User created successfully");
       router.push("/global/users");
@@ -309,29 +375,98 @@ export default function NewUserPage() {
               )}
             </div>
 
+            {/* RBAC Roles Multi-Select */}
+            <div className="space-y-2">
+              <Label>
+                RBAC Roles
+                <span className="ml-1 text-muted-foreground font-normal text-xs">
+                  (optional — auto-suggests job title)
+                </span>
+              </Label>
+              <div className="rounded-lg border divide-y max-h-52 overflow-y-auto">
+                {(allRoles as any[]).length === 0 ? (
+                  <p className="text-sm text-muted-foreground px-3 py-4">Loading roles...</p>
+                ) : (
+                  (allRoles as any[]).map((r: any) => (
+                    <label
+                      key={r.id}
+                      className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/40 transition-colors"
+                    >
+                      <Checkbox
+                        checked={selectedRbacRoleIds.includes(r.id)}
+                        onCheckedChange={() => toggleRbacRole(r.id)}
+                      />
+                      <span className="text-sm flex-1">{r.name}</span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${r.scope === "global" ? "border-red-300 text-red-600" : "border-blue-300 text-blue-600"}`}
+                      >
+                        {r.scope === "global" ? "Global" : r.departmentName || "Dept"}
+                      </Badge>
+                    </label>
+                  ))
+                )}
+              </div>
+              {selectedRbacRoleIds.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {selectedRbacRoleIds.length} role{selectedRbacRoleIds.length > 1 ? "s" : ""} selected
+                </p>
+              )}
+            </div>
+
             {/* Job Title - Required, filtered by department */}
             <div className="space-y-2">
-              <Label htmlFor="jobTitle">Job Title *</Label>
+              <Label htmlFor="jobTitle">
+                Job Title *
+                {jobTitleAutoSuggested && suggestedJobTitle && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-xs text-primary font-normal">
+                    <Sparkles className="h-3 w-3" />
+                    Auto-suggested from roles
+                  </span>
+                )}
+              </Label>
               <Select
                 value={currentJobTitle}
-                onValueChange={(v) => setValue("jobTitle", v)}
-                disabled={!currentDepartmentSlug}
+                onValueChange={(v) => {
+                  setValue("jobTitle", v);
+                  setJobTitleAutoSuggested(false);
+                }}
+                disabled={!currentDepartmentSlug && !jobTitleAutoSuggested}
               >
                 <SelectTrigger>
                   <SelectValue
                     placeholder={
-                      currentDepartmentSlug
+                      currentDepartmentSlug || jobTitleAutoSuggested
                         ? "Select job title..."
                         : "Select department first"
                     }
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableJobTitles.map((jt) => (
-                    <SelectItem key={jt.value} value={jt.value}>
-                      {jt.label}
-                    </SelectItem>
-                  ))}
+                  {jobTitleAutoSuggested
+                    ? /* Show all roles as job title options, derived dynamically from slugs */
+                      (allRoles as any[])
+                        .sort((a: any, b: any) => {
+                          const diff = slugSeniority(a.slug) - slugSeniority(b.slug);
+                          return diff !== 0 ? diff : a.name.localeCompare(b.name);
+                        })
+                        .map((r: any) => {
+                          const val = slugToJobTitle(r.slug);
+                          return (
+                            <SelectItem key={val} value={val}>
+                              {jobTitleLabel(val)}
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                ({r.name})
+                              </span>
+                            </SelectItem>
+                          );
+                        })
+                    : availableJobTitles.map((jt) => (
+                        <SelectItem key={jt.value} value={jt.value}>
+                          {jt.label}
+                        </SelectItem>
+                      ))
+                  }
                 </SelectContent>
               </Select>
               {errors.jobTitle && (
@@ -339,9 +474,9 @@ export default function NewUserPage() {
                   {errors.jobTitle.message}
                 </p>
               )}
-              {!currentDepartmentSlug && (
+              {!currentDepartmentSlug && !jobTitleAutoSuggested && (
                 <p className="text-xs text-muted-foreground">
-                  Please select a department to see available job titles
+                  Select a department or assign RBAC roles to auto-suggest a job title
                 </p>
               )}
             </div>
@@ -376,9 +511,9 @@ export default function NewUserPage() {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Job titles are filtered based on the selected department and
-                role. Managers get management titles, employees get specialized
-                titles.
+                Assign RBAC roles to automatically suggest a job title based on the most senior role.
+                You can still override the job title manually. RBAC roles control detailed permissions
+                across the CRM.
               </AlertDescription>
             </Alert>
 

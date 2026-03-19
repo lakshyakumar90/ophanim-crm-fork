@@ -12,6 +12,7 @@ import { ERROR_CODES } from "../utils/error-codes.js";
 import type { AuthenticatedRequest } from "../types/api.types.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { ALL_PERMISSION_KEYS } from "../lib/permissions.js";
+import { slugToJobTitle } from "../utils/job-title.utils.js";
 
 const router: Router = Router();
 
@@ -67,6 +68,7 @@ router.get(
       slug: r.slug,
       scope: r.scope,
       departmentId: r.department_id,
+      departmentIds: r.department_ids ?? (r.department_id ? [r.department_id] : []),
       departmentName: r.departments?.name ?? null,
       departmentSlug: r.departments?.slug ?? null,
       permissions: r.permissions ?? [],
@@ -102,6 +104,7 @@ router.get(
       slug: data.slug,
       scope: data.scope,
       departmentId: data.department_id,
+      departmentIds: (data as any).department_ids ?? (data.department_id ? [data.department_id] : []),
       departmentName: (data as any).departments?.name ?? null,
       departmentSlug: (data as any).departments?.slug ?? null,
       permissions: data.permissions ?? [],
@@ -121,12 +124,23 @@ router.post(
   requirePermission("roles:manage") as any,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
-    const { name, scope, department_id, permissions } = req.body as {
+    const { name, scope, department_id, department_ids, permissions } = req.body as {
       name: string;
       scope: "global" | "department";
       department_id?: string;
+      department_ids?: string[];
       permissions: string[];
     };
+
+    // Normalise: prefer department_ids array, fall back to single department_id
+    const resolvedDeptIds: string[] | null =
+      scope === "global"
+        ? null
+        : Array.isArray(department_ids) && department_ids.length > 0
+          ? department_ids
+          : department_id
+            ? [department_id]
+            : null;
 
     if (!name || typeof name !== "string" || !name.trim()) {
       throw ApiError.badRequest("name is required");
@@ -134,9 +148,9 @@ router.post(
     if (!scope || !["global", "department"].includes(scope)) {
       throw ApiError.badRequest("scope must be 'global' or 'department'");
     }
-    if (scope === "department" && !department_id) {
+    if (scope === "department" && (!resolvedDeptIds || resolvedDeptIds.length === 0)) {
       throw ApiError.badRequest(
-        "department_id is required for department-scoped roles",
+        "At least one department is required for department-scoped roles",
       );
     }
 
@@ -154,7 +168,8 @@ router.post(
         name: name.trim(),
         slug, // Set once at creation — never changes again (✅ Issue 1)
         scope,
-        department_id: scope === "global" ? null : department_id,
+        department_id: resolvedDeptIds ? resolvedDeptIds[0] : null,
+        department_ids: resolvedDeptIds,
         permissions: permissions ?? [],
         is_system: false, // UI can never create a system role
         created_by: authReq.user.id,
@@ -189,17 +204,18 @@ router.put(
   requirePermission("roles:manage") as any,
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, scope, department_id, permissions } = req.body as {
+    const { name, scope, department_id, department_ids, permissions } = req.body as {
       name?: string;
       scope?: "global" | "department";
       department_id?: string | null;
+      department_ids?: string[] | null;
       permissions?: string[];
     };
 
     // Fetch existing role
     const { data: existing, error: fetchErr } = await supabaseAdmin
       .from("roles")
-      .select("id, name, slug, scope, department_id, is_system, permissions")
+      .select("id, name, slug, scope, department_id, department_ids, is_system, permissions")
       .eq("id", id)
       .single();
 
@@ -239,31 +255,39 @@ router.put(
       }
     }
 
-    if (department_id !== undefined) {
+    // Handle department_ids (new multi-dept) or legacy department_id
+    if (department_ids !== undefined || department_id !== undefined) {
       const resolvedScope = (updates.scope ?? existing.scope) as string;
-      const nextDepartmentId =
-        resolvedScope === "global" ? null : department_id;
 
-      if (existing.is_system && nextDepartmentId !== existing.department_id) {
-        throw ApiError.forbidden(
-          "System role department cannot be changed.",
-        );
+      const newDeptIds: string[] | null =
+        resolvedScope === "global"
+          ? null
+          : Array.isArray(department_ids) && department_ids.length > 0
+            ? department_ids
+            : department_id
+              ? [department_id]
+              : null;
+
+      if (existing.is_system) {
+        throw ApiError.forbidden("System role department cannot be changed.");
       }
 
-      if (nextDepartmentId !== existing.department_id) {
-        updates.department_id = nextDepartmentId;
-      }
+      updates.department_ids = newDeptIds;
+      updates.department_id = newDeptIds ? newDeptIds[0] : null;
     }
 
     // Validate that department-scoped roles still have a department after update
     const finalScope = (updates.scope ?? existing.scope) as string;
+    const finalDeptIds = (updates.department_ids !== undefined
+      ? updates.department_ids
+      : (existing as any).department_ids) as string[] | null;
     const finalDeptId = (updates.department_id !== undefined
       ? updates.department_id
       : existing.department_id) as string | null;
 
-    if (finalScope === "department" && !finalDeptId) {
+    if (finalScope === "department" && (!finalDeptIds?.length && !finalDeptId)) {
       throw ApiError.badRequest(
-        "department_id is required for department-scoped roles",
+        "At least one department is required for department-scoped roles",
       );
     }
 
@@ -423,10 +447,10 @@ router.post(
       .single();
     if (!targetUser) throw ApiError.notFound("User");
 
-    // Verify role exists
+    // Verify role exists (also fetch slug and department to sync job_title)
     const { data: roleExists } = await supabaseAdmin
       .from("roles")
-      .select("id, name")
+      .select("id, name, slug, department_id, departments(slug)")
       .eq("id", role_id)
       .single();
     if (!roleExists) throw ApiError.notFound("Role");
@@ -448,6 +472,35 @@ router.post(
         );
       }
       throw new ApiError(ERROR_CODES.INTERNAL_ERROR, error.message);
+    }
+
+    // Sync job_title on the users table based on the assigned RBAC role slug.
+    // Only set job_title if the user has none yet — never overwrite an existing one.
+    // Multi-role users keep their primary department's job_title; the RBAC role_names
+    // array is the source of truth for what roles they actually hold.
+    // slugToJobTitle is dynamic: any slug → job_title by replacing hyphens with underscores.
+    const roleSlug = (roleExists as any).slug as string | undefined;
+    const derivedJobTitle = roleSlug ? slugToJobTitle(roleSlug) : undefined;
+    if (derivedJobTitle) {
+      const { data: currentUser } = await supabaseAdmin
+        .from("users")
+        .select("job_title")
+        .eq("id", userId)
+        .single();
+      const currentJobTitle = (currentUser as any)?.job_title as string | null;
+      // Only set if no job_title exists yet — don't overwrite primary department title
+      if (!currentJobTitle) {
+        await supabaseAdmin
+          .from("users")
+          .update({ job_title: derivedJobTitle })
+          .eq("id", userId);
+      }
+    }
+
+    // Invalidate auth cache for this user so next request gets fresh permissions
+    const cacheHost = globalThis as any;
+    if (cacheHost.__authUserCache) {
+      cacheHost.__authUserCache.delete(userId);
     }
 
     sendCreated(res, data);
@@ -477,6 +530,12 @@ router.delete(
       .eq("role_id", roleId);
 
     if (error) throw new ApiError(ERROR_CODES.INTERNAL_ERROR, error.message);
+
+    // Invalidate auth cache for this user so next request gets fresh permissions
+    const cacheHost = globalThis as any;
+    if (cacheHost.__authUserCache) {
+      cacheHost.__authUserCache.delete(userId);
+    }
 
     sendNoContent(res);
   }),

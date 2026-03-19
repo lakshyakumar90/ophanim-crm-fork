@@ -57,6 +57,8 @@ export const registerSchema = z.object({
   phone: z.string().optional().nullable(),
   jobTitle: z.enum(ALL_JOB_TITLES).optional().nullable(),
   shiftType: z.enum(["day_shift", "night_shift"]).default("day_shift").optional(),
+  // Optional RBAC role IDs to assign immediately after creation
+  rbacRoleIds: z.array(z.string().uuid()).optional().nullable(),
 });
 
 // Refresh token

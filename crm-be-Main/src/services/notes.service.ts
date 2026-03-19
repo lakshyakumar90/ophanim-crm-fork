@@ -4,6 +4,7 @@ import { ERROR_CODES } from "../utils/error-codes.js";
 import { USER_ROLES } from "../config/constants.js";
 import type { AuthUser } from "../types/api.types.js";
 import { createNotification } from "./notifications.service.js";
+import { logActivity } from "./activity-events.service.js";
 
 // ====================
 // TYPES
@@ -70,21 +71,32 @@ async function notifyMentionedUsers(params: {
 // ====================
 
 /**
- * Get all notes for a project
+ * Get notes for a project.
+ * @param isPrivate - true = only the calling user's private notes,
+ *                   false (default) = only shared discussion messages
+ * @param userId - required when isPrivate is true
  */
 export async function getProjectNotes(
   projectId: string,
+  isPrivate: boolean = false,
+  userId?: string,
 ): Promise<ProjectNote[]> {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("project_notes")
     .select(
       `
       *,
-      user:user_id (full_name, avatar_url)
+      user:users!user_id (id, full_name, email, avatar_url)
     `,
     )
     .eq("project_id", projectId)
-    .order("is_pinned", { ascending: false })
+    .eq("is_private", isPrivate);
+
+  if (isPrivate && userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -95,8 +107,8 @@ export async function getProjectNotes(
     id: note.id,
     projectId: note.project_id,
     userId: note.user_id,
-    userName: note.user?.full_name,
-    userAvatar: note.user?.avatar_url,
+    userName: note.user?.full_name || note.user?.email || "Unknown User",
+    userAvatar: note.user?.avatar_url || null,
     content: note.content,
     isPinned: note.is_pinned,
     createdAt: note.created_at,
@@ -113,7 +125,7 @@ export async function getNoteById(noteId: string): Promise<ProjectNote> {
     .select(
       `
       *,
-      user:user_id (full_name, avatar_url)
+      user:user_id (full_name, email, avatar_url)
     `,
     )
     .eq("id", noteId)
@@ -127,7 +139,7 @@ export async function getNoteById(noteId: string): Promise<ProjectNote> {
     id: data.id,
     projectId: data.project_id,
     userId: data.user_id,
-    userName: (data as any).user?.full_name,
+    userName: (data as any).user?.full_name || (data as any).user?.email || "Unknown User",
     userAvatar: (data as any).user?.avatar_url,
     content: data.content,
     isPinned: data.is_pinned,
@@ -138,11 +150,13 @@ export async function getNoteById(noteId: string): Promise<ProjectNote> {
 
 /**
  * Create a note
+ * @param isPrivate - true = private note visible only to the author
  */
 export async function createNote(
   projectId: string,
   content: string,
   userId: string,
+  isPrivate: boolean = false,
 ): Promise<ProjectNote> {
   // Verify project exists
   const { data: project, error: projError } = await supabaseAdmin
@@ -162,6 +176,7 @@ export async function createNote(
       user_id: userId,
       content: content,
       is_pinned: false,
+      is_private: isPrivate,
     })
     .select()
     .single();
@@ -186,6 +201,30 @@ export async function createNote(
     noteId: note.id,
     mentionedUserIds: extractMentionedUserIds(content),
   });
+
+  // Log project activity
+  await logActivity({
+    actorId: userId,
+    entityType: "project",
+    entityId: projectId,
+    entityName: (project as any).name || undefined,
+    eventType: "comment",
+    source: "project",
+    metadata: { noteId: note.id },
+  });
+
+  // Also write to user_activities for the all_activities view (fire-and-forget)
+  supabaseAdmin.from("user_activities" as any).insert({
+    user_id: userId,
+    entity_type: "project",
+    entity_id: projectId,
+    activity_type: "comment",
+    title: "posted a message",
+    description: content.slice(0, 200),
+  }).then(
+    () => null,
+    () => null,
+  );
 
   return note;
 }
@@ -251,6 +290,28 @@ export async function updateNote(
       mentionedUserIds: nextMentionedUserIds,
     });
   }
+
+  // Log project activity
+  await logActivity({
+    actorId: userId,
+    entityType: "project",
+    entityId: updatedNote.projectId,
+    eventType: "update",
+    source: "project",
+    metadata: { noteId: updatedNote.id },
+  });
+
+  supabaseAdmin.from("user_activities" as any).insert({
+    user_id: userId,
+    entity_type: "project",
+    entity_id: updatedNote.projectId,
+    activity_type: "update",
+    title: "edited a message",
+    description: content.slice(0, 200),
+  }).then(
+    () => null,
+    () => null,
+  );
 
   return updatedNote;
 }

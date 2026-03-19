@@ -105,7 +105,7 @@ export default function ProjectRemindersPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 lg:p-6 max-w-3xl mx-auto">
+    <div className="flex flex-col gap-6 p-4 lg:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">

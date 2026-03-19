@@ -59,9 +59,6 @@ export default function ProjectLayout({
   const { user } = useAuth();
   const id = params.id as string;
 
-  const isManagerOrAbove =
-    user?.role === "admin" || user?.role === "manager";
-
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -74,6 +71,18 @@ export default function ProjectLayout({
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [id]);
+
+  // A user has project-level manager access if they are:
+  // 1. A global admin
+  // 2. The assigned manager_id on this specific project
+  // 3. Listed as project_manager in project_members for this project
+  const isGlobalAdmin = user?.role === "admin";
+  const isProjectManager =
+    project?.manager?.id === user?.id ||
+    project?.members?.some(
+      (m: any) => m.userId === user?.id && m.role === "project_manager",
+    );
+  const isManagerOrAbove = isGlobalAdmin || !!isProjectManager;
 
   const navItems: NavItem[] = [
     { label: "Overview", href: `/projects/${id}/overview`, icon: LayoutDashboard },
@@ -208,7 +217,7 @@ export default function ProjectLayout({
         </div>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-y-auto min-w-0">
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto flex flex-col">
           {children}
         </div>
       </div>

@@ -60,6 +60,7 @@ router.get(
          limit: req.query.limit as string,
          userId: req.query.userId as string,
          resourceType: req.query.resourceType as string,
+         entityId: req.query.entityId as string,
          action: req.query.action as string,
          startDate: req.query.startDate as string,
          endDate: req.query.endDate as string,

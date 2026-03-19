@@ -193,7 +193,7 @@ export default function ProjectFilesPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-6">
         <Card>
           <CardContent className="p-10 flex justify-center">
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -204,7 +204,7 @@ export default function ProjectFilesPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>

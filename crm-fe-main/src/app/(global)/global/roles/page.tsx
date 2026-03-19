@@ -292,7 +292,7 @@ function PermissionChecklist({
 interface RoleFormState {
   name: string;
   scope: "global" | "department";
-  department_id: string;
+  department_ids: string[];
   permissions: string[];
 }
 
@@ -314,10 +314,10 @@ function RoleModal({
       ? {
           name: role.name,
           scope: role.scope,
-          department_id: role.departmentId ?? "",
+          department_ids: role.departmentIds?.length ? role.departmentIds : (role.departmentId ? [role.departmentId] : []),
           permissions: role.permissions,
         }
-      : { name: "", scope: "department", department_id: "", permissions: [] };
+      : { name: "", scope: "department", department_ids: [], permissions: [] };
 
   const [form, setForm] = useState<RoleFormState>(toForm(editingRole));
   const [saving, setSaving] = useState(false);
@@ -343,13 +343,22 @@ function RoleModal({
     setForm((f) => ({ ...f, permissions: preset.permissions }));
   };
 
+  const toggleDept = (deptId: string) => {
+    setForm((f) => ({
+      ...f,
+      department_ids: f.department_ids.includes(deptId)
+        ? f.department_ids.filter((d) => d !== deptId)
+        : [...f.department_ids, deptId],
+    }));
+  };
+
   const handleSave = async () => {
     if (!form.name.trim()) {
       toast.error("Role name is required");
       return;
     }
-    if (form.scope === "department" && !form.department_id) {
-      toast.error("Please select a department for this role");
+    if (form.scope === "department" && form.department_ids.length === 0) {
+      toast.error("Please select at least one department for this role");
       return;
     }
 
@@ -363,7 +372,8 @@ function RoleModal({
           : {
               name: form.name,
               scope: form.scope,
-              department_id: form.scope === "global" ? null : form.department_id,
+              department_ids: form.scope === "global" ? null : form.department_ids,
+              department_id: form.scope === "global" ? null : form.department_ids[0] ?? null,
               permissions: form.permissions,
             };
 
@@ -373,9 +383,10 @@ function RoleModal({
         await rolesApi.create({
           name: form.name,
           scope: form.scope,
-          department_id: form.scope === "global" ? null : form.department_id,
+          department_ids: form.scope === "global" ? undefined : form.department_ids,
+          department_id: form.scope === "global" ? undefined : form.department_ids[0],
           permissions: form.permissions,
-        });
+        } as any);
         toast.success("Role created");
       }
       onSaved();
@@ -450,36 +461,47 @@ function RoleModal({
             <p className="text-xs text-muted-foreground">
               {form.scope === "global"
                 ? "Global roles can see data across all departments."
-                : "Department roles are scoped to users in one specific department."}
+                : "Department roles are scoped to selected departments. A role can span multiple departments."}
             </p>
           </div>
 
-          {/* Department (only when scope = department) */}
+          {/* Departments (multi-checkbox, only when scope = department) */}
           {form.scope === "department" && (
             <div className="space-y-1.5">
-              <Label htmlFor="role-dept">Department</Label>
-              <Select
-                value={form.department_id || "none"}
-                onValueChange={(v) =>
-                  setForm((f) => ({
-                    ...f,
-                    department_id: v === "none" ? "" : v,
-                  }))
-                }
-                disabled={editingRole?.isSystem}
-              >
-                <SelectTrigger id="role-dept">
-                  <SelectValue placeholder="Select department..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Select department —</SelectItem>
-                  {departments.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>
+                Departments
+                <span className="ml-1 text-muted-foreground font-normal text-xs">
+                  (select one or more)
+                </span>
+              </Label>
+              <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
+                {departments.map((d) => (
+                  <label
+                    key={d.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/40 transition-colors ${editingRole?.isSystem ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <Checkbox
+                      checked={form.department_ids.includes(d.id)}
+                      onCheckedChange={() => {
+                        if (!editingRole?.isSystem) toggleDept(d.id);
+                      }}
+                      disabled={editingRole?.isSystem}
+                    />
+                    <span className="text-sm">{d.name}</span>
+                    {d.slug && (
+                      <span className="text-xs text-muted-foreground font-mono ml-auto">{d.slug}</span>
+                    )}
+                  </label>
+                ))}
+                {departments.length === 0 && (
+                  <p className="text-sm text-muted-foreground px-3 py-4">No departments available.</p>
+                )}
+              </div>
+              {form.department_ids.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Selected: {departments.filter((d) => form.department_ids.includes(d.id)).map((d) => d.name).join(", ")}
+                </p>
+              )}
             </div>
           )}
 
@@ -617,6 +639,7 @@ export default function RolesPage() {
   const [viewingRole, setViewingRole] = useState<Role | null>(null);
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const { departments } = useDepartment();
 
   const { data: roles = [], isLoading, mutate: mutateRoles } = useSWR(
     "all-roles",
@@ -767,9 +790,24 @@ export default function RolesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell onClick={() => setViewingRole(role)}>
-                      <span className="text-sm text-muted-foreground">
-                        {role.departmentName ?? "—"}
-                      </span>
+                      {role.scope === "global" ? (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      ) : role.departmentIds && role.departmentIds.length > 1 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {role.departmentIds.map((dId, idx) => {
+                            const dept = departments.find((d) => d.id === dId);
+                            return (
+                              <Badge key={dId} variant="outline" className="text-xs font-normal">
+                                {dept?.name ?? (idx === 0 && role.departmentName ? role.departmentName : dId.slice(0, 8))}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          {role.departmentName ?? "—"}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell
                       className="text-center cursor-pointer"

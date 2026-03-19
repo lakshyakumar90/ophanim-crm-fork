@@ -36,15 +36,14 @@ const taskSchema = z.object({
   description: z.string().optional(),
   assignedTo: z.string().optional(),
   priority: z.enum(["low", "medium", "high"]),
-  reminderBeforeMinutes: z.number().optional().nullable(),
+  reminderBeforeMinutes: z.number({ error: "Reminder is required" }).min(1, "Reminder must be at least 1 minute"),
 });
 
 type TaskFormData = z.infer<typeof taskSchema>;
 
 const REMINDER_OPTIONS = [
-  { value: "none", label: "No reminder" },
   { value: "15", label: "15 minutes before" },
-  { value: "30", label: "30 minutes before" },
+  { value: "30", label: "30 minutes before (default)" },
   { value: "60", label: "1 hour before" },
   { value: "1440", label: "1 day before" },
 ];
@@ -97,7 +96,7 @@ export function CreateTaskDialog({ projectId: fixedProjectId, onSuccess }: Creat
     defaultValues: {
       priority: "medium",
       assignedTo: user?.id,
-      reminderBeforeMinutes: null,
+      reminderBeforeMinutes: 30,
     },
   });
 
@@ -193,35 +192,37 @@ export function CreateTaskDialog({ projectId: fixedProjectId, onSuccess }: Creat
               </div>
             )}
 
-            {/* Assignee */}
-            <div className="space-y-2">
-              <Label>Assign To</Label>
-              <Select
-                defaultValue={user?.id}
-                onValueChange={(v) => setValue("assignedTo", v)}
-                disabled={loadingUsers}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={loadingUsers ? "Loading..." : "Select assignee"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {user && (
-                    <SelectItem value={user.id}>
-                      {user.fullName} (Me)
-                    </SelectItem>
-                  )}
-                  {users
-                    .filter((u: any) => u.id !== user?.id)
-                    .map((u: any) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.fullName}
+            {/* Assignee — only admins/managers can assign to others; employees always assign to self */}
+            {(isAdmin || isManager) && (
+              <div className="space-y-2">
+                <Label>Assign To</Label>
+                <Select
+                  defaultValue={user?.id}
+                  onValueChange={(v) => setValue("assignedTo", v)}
+                  disabled={loadingUsers}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={loadingUsers ? "Loading..." : "Select assignee"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {user && (
+                      <SelectItem value={user.id}>
+                        {user.fullName} (Me)
                       </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
+                    )}
+                    {users
+                      .filter((u: any) => u.id !== user?.id)
+                      .map((u: any) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.fullName}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Priority */}
             <div className="space-y-2">
@@ -302,23 +303,20 @@ export function CreateTaskDialog({ projectId: fixedProjectId, onSuccess }: Creat
               </div>
             </div>
 
-            {/* Reminder */}
+            {/* Reminder — required, defaults to 30 min */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Bell className="h-4 w-4" />
-                Reminder
+                Reminder <span className="text-destructive">*</span>
               </Label>
               <Select
-                defaultValue="none"
+                defaultValue="30"
                 onValueChange={(v) =>
-                  setValue(
-                    "reminderBeforeMinutes",
-                    v === "none" ? null : parseInt(v),
-                  )
+                  setValue("reminderBeforeMinutes", parseInt(v))
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="No reminder" />
+                  <SelectValue placeholder="Select reminder" />
                 </SelectTrigger>
                 <SelectContent>
                   {REMINDER_OPTIONS.map((opt) => (
@@ -328,6 +326,9 @@ export function CreateTaskDialog({ projectId: fixedProjectId, onSuccess }: Creat
                   ))}
                 </SelectContent>
               </Select>
+              {errors.reminderBeforeMinutes && (
+                <p className="text-xs text-destructive">{errors.reminderBeforeMinutes.message}</p>
+              )}
             </div>
 
             {/* Description */}

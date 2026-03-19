@@ -608,6 +608,45 @@ export async function getRemindersCount(params?: {
   return { count: count || 0 };
 }
 
+export async function getUpcomingLeadReminders(userId: string) {
+  const now = new Date();
+  const minus7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const plus48h = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("lead_reminders")
+    .select(
+      `
+      id,
+      lead_id,
+      reminder_at,
+      note,
+      is_done,
+      lead:leads!lead_id(id, lead_name)
+    `,
+    )
+    .eq("user_id", userId)
+    .eq("is_done", false)
+    .gte("reminder_at", minus7d)
+    .lte("reminder_at", plus48h)
+    .order("reminder_at", { ascending: true })
+    .limit(50);
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") console.warn("Error fetching upcoming lead reminders:", (error as any)?.message || (error as any)?.code || String(error));
+    throw error;
+  }
+
+  return (data || []).map((r: any) => ({
+    id: r.id as string,
+    leadId: r.lead_id as string,
+    reminderAt: r.reminder_at as string,
+    note: (r.note ?? null) as string | null,
+    isDone: r.is_done as boolean,
+    leadName: (r.lead?.lead_name ?? null) as string | null,
+  }));
+}
+
 export async function getLeadStatsByUser() {
   const { data, error } = await supabase
     .from("leads")
@@ -686,7 +725,11 @@ export async function getTasks(params?: {
     .select(
       `id, title, description, task_type, related_lead_id, project_id,
        assigned_to, assigned_by, priority, status, due_date, completed_at,
-       tags, is_deleted, created_at, updated_at`,
+       reminder_before_minutes, department_id,
+       tags, is_deleted, created_at, updated_at,
+       assigned_user:users!assigned_to(id, full_name, avatar_url, email, department_id),
+       department:departments!department_id(id, name, slug),
+       project:projects!project_id(id, name)`,
       { count: "exact" },
     )
     .eq("is_deleted", false);
@@ -1614,4 +1657,160 @@ export async function getDistinctLeadsWorkedByUser(): Promise<
     result[uid] = ledSet.size;
   }
   return result;
+}
+
+// ===================
+// PROJECT NOTES (direct Supabase — requires 052_fix_pm_rls migration)
+// ===================
+
+export async function getProjectNotes(projectId: string) {
+  const { data, error } = await supabase
+    .from("project_notes")
+    .select("*, user:users!user_id(id, full_name, avatar_url, email)")
+    .eq("project_id", projectId)
+    .eq("is_private", false)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") console.warn("[supabase] getProjectNotes:", (error as any)?.message || (error as any)?.code || error);
+    throw error;
+  }
+
+  return (data || []).map((note: any) => ({
+    id: note.id as string,
+    projectId: note.project_id as string,
+    userId: note.user_id as string | null,
+    userName: (note.user?.full_name || note.user?.email || "Unknown") as string,
+    userAvatar: (note.user?.avatar_url || null) as string | null,
+    content: note.content as string,
+    isPinned: note.is_pinned as boolean,
+    createdAt: note.created_at as string,
+    updatedAt: note.updated_at as string,
+  }));
+}
+
+// ===================
+// PROJECT ACTIVITIES (direct Supabase via all_activities view)
+// ===================
+
+export async function getProjectActivities(params: {
+  projectId: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}) {
+  const limit = params.limit || 500;
+
+  let query = supabase
+    .from("all_activities" as any)
+    .select("*")
+    .eq("entity_id", params.projectId)
+    .eq("entity_type", "project")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (params.startDate) query = query.gte("created_at", params.startDate);
+  if (params.endDate) query = query.lte("created_at", params.endDate);
+
+  const { data, error } = await query;
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") console.warn("[supabase] getProjectActivities:", (error as any)?.message || (error as any)?.code || error);
+    throw error;
+  }
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    user_id: row.user_id,
+    entity_id: row.entity_id,
+    activity_type: row.activity_type,
+    title: row.title,
+    description: row.description,
+    metadata: row.metadata,
+    created_at: row.created_at,
+    entity_type: row.entity_type,
+    user: row.user_id
+      ? {
+          id: row.user_id,
+          full_name: row.user_name,
+          email: row.user_email,
+          avatar_url: row.user_avatar,
+        }
+      : null,
+  }));
+}
+
+// ===================
+// ROLES (direct Supabase)
+// ===================
+
+export async function getRoles() {
+  const { data, error } = await supabase
+    .from("roles")
+    .select(`
+      id, name, slug, scope, department_id, department_ids, permissions,
+      is_system, created_at, updated_at,
+      department:departments!department_id(id, name, slug)
+    `)
+    .order("name", { ascending: true });
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") console.warn("[supabase] getRoles:", (error as any)?.message || (error as any)?.code || error);
+    throw error;
+  }
+
+  return (data || []).map((r: any) => ({
+    id: r.id as string,
+    name: r.name as string,
+    slug: r.slug as string,
+    scope: r.scope as "global" | "department",
+    departmentId: (r.department_id ?? null) as string | null,
+    departmentIds: (r.department_ids ?? []) as string[],
+    departmentName: (r.department?.name ?? null) as string | null,
+    departmentSlug: (r.department?.slug ?? null) as string | null,
+    permissions: (r.permissions ?? []) as string[],
+    isSystem: r.is_system as boolean,
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+  }));
+}
+
+// ===================
+// UPCOMING REMINDERS (direct Supabase — tasks assigned to current user with reminders due)
+// ===================
+
+export async function getUpcomingReminders(userId: string) {
+  const now = new Date().toISOString();
+  const plus48h = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .select(`
+      id, title, due_date, reminder_before_minutes, priority, status, project_id,
+      project:projects!project_id(id, name)
+    `)
+    .eq("assigned_to", userId)
+    .not("reminder_before_minutes", "is", null)
+    .not("due_date", "is", null)
+    .not("status", "in", '("completed","cancelled")')
+    .lte("due_date", plus48h)
+    .gte("due_date", now)
+    .order("due_date", { ascending: true })
+    .limit(20);
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") console.warn("[supabase] getUpcomingReminders:", (error as any)?.message || (error as any)?.code || error);
+    throw error;
+  }
+
+  return (data || []).map((t: any) => ({
+    id: t.id as string,
+    title: t.title as string,
+    dueDate: t.due_date as string,
+    reminderBeforeMinutes: t.reminder_before_minutes as number,
+    priority: t.priority as string,
+    status: t.status as string,
+    projectId: (t.project_id ?? null) as string | null,
+    projectName: (t.project?.name ?? null) as string | null,
+  }));
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { MessageSquare } from "lucide-react";
 import { ProjectNotes } from "@/components/projects/project-notes";
 
 export default function ProjectDiscussionPage() {
@@ -9,7 +8,7 @@ export default function ProjectDiscussionPage() {
   const id = params.id as string;
 
   return (
-    <div className="flex flex-col gap-4 p-6 mx-auto">
+    <div className="flex flex-col h-full min-h-0">
       <ProjectNotes projectId={id} />
     </div>
   );

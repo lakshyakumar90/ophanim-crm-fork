@@ -37,6 +37,8 @@ export interface ActivityFilters {
   limit?: string;
   userId?: string;
   resourceType?: string;
+  /** Filter to a specific entity by ID (e.g. a project UUID) */
+  entityId?: string;
   action?: string;
   startDate?: string;
   endDate?: string;
@@ -257,6 +259,10 @@ function applyActivityFilters(
     } else {
       query = query.eq("id", EMPTY_UUID);
     }
+  }
+
+  if (filters.entityId) {
+    query = query.eq("entity_id", filters.entityId);
   }
 
   const resourceType = normalizeResourceType(filters.resourceType);

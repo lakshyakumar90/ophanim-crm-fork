@@ -195,16 +195,22 @@ export const resources = async (
   }
 };
 
-// Get Projects by Manager (Admin viewing specific PM's projects)
+// Get Projects by Manager (Admin viewing specific PM's projects; Manager sees own)
 export const byManager = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    const projects = await getProjectsByManagerId(
-      req.params.managerId as string,
-    );
+    // Admins (role=admin or crm:admin permission) can query any manager's projects.
+    // Everyone else can only query their own ID.
+    const isAdmin =
+      req.user.role === "admin" ||
+      req.user.permissions.includes("crm:admin");
+    const managerId = isAdmin
+      ? (req.params.managerId as string)
+      : req.user.id;
+    const projects = await getProjectsByManagerId(managerId);
     sendSuccess(res, projects);
   } catch (error) {
     next(error);

@@ -90,9 +90,9 @@ export default function NewTaskPage() {
   // Admins can select projects from any context if they wish, or explicitly in PM context
   const canSelectProject = isAdmin;
 
-  // Data Fetching
+  // Data Fetching - fetch users for managers/admins who can assign to others
   const { data: usersData, isLoading: loadingUsers } = useSWR(
-    isManager || isHR ? "users-list" : null,
+    (isManager || isAdmin || isHR) ? "users-list" : null,
     () => usersApi.list(),
   );
 
@@ -151,7 +151,7 @@ export default function NewTaskPage() {
       await tasksApi.create({
         ...data,
         dueDate: buildDueDateISO(),
-        assignedTo: isManager ? data.assignedTo : user?.id,
+        assignedTo: (isManager || isAdmin) ? data.assignedTo : user?.id,
         // Ensure strictly typed optional fields are handled
         relatedLeadId: data.relatedLeadId || undefined,
         projectId: data.projectId || undefined,
@@ -353,8 +353,8 @@ export default function NewTaskPage() {
               </div>
             )}
 
-            {/* Only show assignee selector for managers */}
-            {isManager && (
+            {/* Only show assignee selector for managers and admins */}
+            {(isManager || isAdmin) && (
               <div className="space-y-2">
                 <Label htmlFor="assignedTo">Assign To</Label>
                 <Select

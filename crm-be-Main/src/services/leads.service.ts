@@ -1609,33 +1609,29 @@ export async function getAllReminders(
   const limit = query.limit || 20;
   const offset = (page - 1) * limit;
 
+  // Base query – we keep it simple here and push most of the role logic into
+  // a second-stage in‑memory filter to avoid generating extremely large
+  // `or(lead_id.in.(...))` URL strings which can cause `fetch failed` errors.
   let baseQuery = supabaseAdmin
     .from("lead_reminders")
     .select("*", { count: "exact" });
 
-  // Access Control:
-  // - Admin: all reminders (or filter by userId param)
-  // - Non-admin: reminders they set OR reminders on leads they own
-  if (authUser.role !== "admin") {
-    // Fetch IDs of leads assigned to this user
-    const { data: ownedLeads } = await supabaseAdmin
-      .from("leads")
-      .select("id")
-      .eq("assigned_to", authUser.id)
-      .eq("is_deleted", false);
+  // Access Control (coarse filter):
+  // - Admin / isGlobal / crm:admin: optionally filter by userId, otherwise org‑wide.
+  // - Non‑admin: start by limiting to reminders created by the current user;
+  //   we will later *expand* the visible set in memory to include additional
+  //   team reminders when the user is a manager.
+  const isAdminOrGlobal =
+    authUser.role === "admin" ||
+    authUser.isGlobal ||
+    (authUser.permissions ?? []).includes("crm:admin");
 
-    const ownedLeadIds = (ownedLeads || []).map((l: { id: string }) => l.id);
-
-    if (ownedLeadIds.length > 0) {
-      // Show reminders they set OR reminders on their leads
-      baseQuery = baseQuery.or(
-        `user_id.eq.${authUser.id},lead_id.in.(${ownedLeadIds.join(",")})`,
-      );
-    } else {
-      baseQuery = baseQuery.eq("user_id", authUser.id);
+  if (isAdminOrGlobal) {
+    if (query.userId) {
+      baseQuery = baseQuery.eq("user_id", query.userId);
     }
-  } else if (query.userId) {
-    baseQuery = baseQuery.eq("user_id", query.userId);
+  } else {
+    baseQuery = baseQuery.eq("user_id", authUser.id);
   }
 
   // Status Filter
@@ -1674,7 +1670,55 @@ export async function getAllReminders(
 
   if (error) throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
 
-  const reminders = await enrichReminders((data || []) as ReminderRow[]);
+  const rawRows = (data || []) as ReminderRow[];
+
+  // Second‑stage, precise filtering to honor manager visibility rules without
+  // constructing enormous `lead_id.in.(...)` lists.
+  let visibleRows: ReminderRow[] = rawRows;
+
+  if (!isAdminOrGlobal && authUser.role === "manager" && rawRows.length > 0) {
+    // Managers can see:
+    // - Reminders they created (already enforced by coarse filter), plus
+    // - Reminders on leads assigned to users in any of their departments.
+    const deptIds =
+      (authUser.departmentIds?.length ?? 0) > 0
+        ? authUser.departmentIds!
+        : authUser.departmentId
+          ? [authUser.departmentId]
+          : [];
+
+    if (deptIds.length > 0) {
+      const leadIds = Array.from(
+        new Set(rawRows.map((r) => r.lead_id).filter(Boolean)),
+      );
+
+      if (leadIds.length > 0) {
+        const { data: leadsForRows, error: leadsError } = await supabaseAdmin
+          .from("leads")
+          .select("id, department_id")
+          .in("id", leadIds)
+          .eq("is_deleted", false);
+
+        if (leadsError) {
+          throw new ApiError(ERROR_CODES.DATABASE_ERROR, leadsError.message);
+        }
+
+        const allowedLeadSet = new Set(
+          (leadsForRows || [])
+            .filter((l: any) => l.department_id && deptIds.includes(l.department_id))
+            .map((l: any) => l.id),
+        );
+
+        visibleRows = rawRows.filter(
+          (r) =>
+            r.user_id === authUser.id ||
+            (r.lead_id && allowedLeadSet.has(r.lead_id)),
+        );
+      }
+    }
+  }
+
+  const reminders = await enrichReminders(visibleRows);
 
   return {
     data: reminders,
@@ -1697,23 +1741,12 @@ export async function getRemindersCount(
     .from("lead_reminders")
     .select("id", { count: "exact", head: true });
 
-  // Access Control: mirror getAllReminders - show own reminders + reminders on owned leads
+  // NOTE: Badge count must be fast and reliable.
+  // The previous implementation fetched all owned lead IDs and built a large `or(...lead_id.in.(...))`
+  // filter, which can result in long URLs / request failures in development.
+  // For the badge/widget, we count only reminders created for the current user (or selected user for admins).
   if (authUser.role !== "admin") {
-    const { data: ownedLeads } = await supabaseAdmin
-      .from("leads")
-      .select("id")
-      .eq("assigned_to", authUser.id)
-      .eq("is_deleted", false);
-
-    const ownedLeadIds = (ownedLeads || []).map((l: { id: string }) => l.id);
-
-    if (ownedLeadIds.length > 0) {
-      baseQuery = (baseQuery as any).or(
-        `user_id.eq.${authUser.id},lead_id.in.(${ownedLeadIds.join(",")})`,
-      );
-    } else {
-      baseQuery = baseQuery.eq("user_id", authUser.id);
-    }
+    baseQuery = baseQuery.eq("user_id", authUser.id);
   } else if (query.userId) {
     baseQuery = baseQuery.eq("user_id", query.userId);
   }

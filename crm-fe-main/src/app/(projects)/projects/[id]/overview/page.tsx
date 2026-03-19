@@ -13,6 +13,7 @@ import {
   Circle,
   ArrowRight,
   Link2,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Card,
@@ -50,6 +51,13 @@ interface DashboardStats {
     todo: number;
   };
   upcomingTasks: {
+    id: string;
+    title: string;
+    status: string;
+    priority: string;
+    due_date: string;
+  }[];
+  overdueTasks: {
     id: string;
     title: string;
     status: string;
@@ -215,7 +223,7 @@ export default function ProjectOverviewPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-0">
             <CardTitle className="text-base">Team Snapshot</CardTitle>
             <Button variant="ghost" size="sm" asChild className="h-7 text-xs gap-1">
-              <Link href={`/projects/${id}/resources`}>
+              <Link href={`/projects/${id}/members`}>
                 Manage <ArrowRight className="h-3 w-3" />
               </Link>
             </Button>
@@ -393,6 +401,69 @@ export default function ProjectOverviewPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Overdue Tasks */}
+        {stats?.overdueTasks && stats.overdueTasks.length > 0 && (
+          <Card className="flex flex-col border-red-200 bg-red-50/30 dark:bg-red-950/10">
+            <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-base font-semibold flex items-center gap-2 text-red-700">
+                  <AlertTriangle className="h-4 w-4" />
+                  Overdue Tasks
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
+                    {stats.overdueTasks.length}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>Tasks past their due date</CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                className="h-7 text-xs gap-1 shrink-0"
+              >
+                <Link href={`/projects/${id}/tasks`}>
+                  All tasks <ArrowRight className="h-3 w-3" />
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="flex-1">
+              <div className="space-y-3">
+                {stats.overdueTasks.slice(0, 6).map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-start gap-3 pb-3 border-b border-red-100 last:border-0 last:pb-0"
+                  >
+                    <div className="mt-0.5 p-1 rounded-full border shrink-0 bg-red-100 border-red-200 text-red-600">
+                      <AlertTriangle className="h-3 w-3" />
+                    </div>
+                    <div className="flex-1 space-y-1 min-w-0">
+                      <p className="text-sm font-medium leading-none truncate">
+                        {task.title}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] px-1 py-0 h-4 ${
+                            PRIORITY_COLORS[task.priority] || ""
+                          }`}
+                        >
+                          {task.priority}
+                        </Badge>
+                        {task.due_date && (
+                          <span className="text-xs text-red-600 flex items-center gap-1 font-medium">
+                            <Calendar className="h-3 w-3" />
+                            {format(new Date(task.due_date), "MMM d")} · overdue
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

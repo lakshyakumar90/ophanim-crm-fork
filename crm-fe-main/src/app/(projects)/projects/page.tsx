@@ -95,15 +95,24 @@ export default function ProjectsPage() {
     fetchProjects();
   }, []);
 
-  // Get unique managers for filter dropdown
+  // Get unique managers for filter dropdown — includes both manager_id and project_manager members
   const managerOptions = useMemo(() => {
     const managers = new Map<string, { id: string; name: string }>();
     projects.forEach((p) => {
+      // Primary manager (manager_id)
       if (p.manager) {
-        managers.set(p.manager.id, {
-          id: p.manager.id,
-          name: p.manager.fullName,
-        });
+        managers.set(p.manager.id, { id: p.manager.id, name: p.manager.fullName });
+      }
+      // Also include project_manager role members
+      if (p.members) {
+        p.members
+          .filter((m: any) => m.role === "project_manager" && m.user)
+          .forEach((m: any) => {
+            managers.set(m.user.id, {
+              id: m.user.id,
+              name: m.user.fullName || m.user.full_name || "Unknown",
+            });
+          });
       }
     });
     return Array.from(managers.values()).sort((a, b) =>
@@ -138,9 +147,14 @@ export default function ProjectsPage() {
       const matchesPriority =
         priorityFilter === "all" || p.priority === priorityFilter;
 
-      // Manager filter
+      // Manager filter — check both manager_id and project_manager role in members
       const matchesManager =
-        managerFilter === "all" || p.managerId === managerFilter;
+        managerFilter === "all" ||
+        p.managerId === managerFilter ||
+        (p.members &&
+          (p.members as any[]).some(
+            (m) => m.role === "project_manager" && (m.user?.id || m.userId) === managerFilter,
+          ));
 
       // Date range filter
       let matchesDateRange = true;
@@ -230,12 +244,21 @@ export default function ProjectsPage() {
     },
   ];
 
+  if (stats && (stats as any).totalOverdueTasks > 0) {
+    statsCards.push({
+      label: "Overdue Tasks",
+      value: (stats as any).totalOverdueTasks || 0,
+      icon: AlertTriangle,
+      color: "text-red-600 bg-red-100",
+    });
+  }
+
   if (isAdmin && stats) {
     statsCards.push({
       label: "Idle",
       value: stats.idle || 0,
       icon: AlertTriangle,
-      color: "text-red-600 bg-red-100",
+      color: "text-orange-600 bg-orange-100",
     });
   }
 

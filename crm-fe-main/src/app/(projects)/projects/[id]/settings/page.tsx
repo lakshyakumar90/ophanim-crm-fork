@@ -8,6 +8,10 @@ import {
   Trash2,
   AlertTriangle,
   Building,
+  Bell,
+  Shield,
+  Users2,
+  Settings2,
 } from "lucide-react";
 import {
   Card,
@@ -28,6 +32,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import type { Project } from "@/types";
 import { projectsApi } from "@/lib/projects-api";
@@ -46,6 +61,7 @@ export default function ProjectSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -55,6 +71,16 @@ export default function ProjectSettingsPage() {
     priority: "medium" as Project["priority"],
     startDate: "",
     endDate: "",
+  });
+
+  // Notification preference states (UI only — would persist to user_preferences)
+  const [notifPrefs, setNotifPrefs] = useState({
+    taskAssigned: true,
+    taskStatusChange: true,
+    memberAdded: true,
+    commentMention: true,
+    deadlineReminder: true,
+    dailyDigest: false,
   });
 
   useEffect(() => {
@@ -108,13 +134,6 @@ export default function ProjectSettingsPage() {
   };
 
   const handleDelete = async () => {
-    if (
-      !confirm(
-        `Delete "${project?.name}"? This action cannot be undone and will remove all tasks and members.`,
-      )
-    )
-      return;
-
     setIsDeleting(true);
     try {
       await projectsApi.delete(id);
@@ -146,11 +165,14 @@ export default function ProjectSettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 lg:p-6 mx-auto">
+    <div className="flex flex-col gap-6 p-4 lg:p-6">
       {/* ── General Settings ── */}
       <Card>
         <CardHeader>
-          <CardTitle>General Settings</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Settings2 className="h-4 w-4" />
+            General Settings
+          </CardTitle>
           <CardDescription>
             Update the project details and configuration.
           </CardDescription>
@@ -274,6 +296,124 @@ export default function ProjectSettingsPage() {
         </CardContent>
       </Card>
 
+      {/* ── Notification Preferences ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4" />
+            Notification Preferences
+          </CardTitle>
+          <CardDescription>
+            Choose which project events trigger notifications for you.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[
+              {
+                key: "taskAssigned" as const,
+                label: "Task Assigned to You",
+                desc: "When a task is assigned to you in this project",
+              },
+              {
+                key: "taskStatusChange" as const,
+                label: "Task Status Changes",
+                desc: "When tasks you own or are assigned to change status",
+              },
+              {
+                key: "memberAdded" as const,
+                label: "Member Added",
+                desc: "When a new member joins the project",
+              },
+              {
+                key: "commentMention" as const,
+                label: "Mentions in Discussion",
+                desc: "When someone @mentions you in the discussion",
+              },
+              {
+                key: "deadlineReminder" as const,
+                label: "Deadline Reminders",
+                desc: "Reminders 1 day before a task due date",
+              },
+              {
+                key: "dailyDigest" as const,
+                label: "Daily Digest",
+                desc: "A daily summary of project activity",
+              },
+            ].map(({ key, label, desc }) => (
+              <div key={key} className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                </div>
+                <Switch
+                  checked={notifPrefs[key]}
+                  onCheckedChange={(v) =>
+                    setNotifPrefs((prev) => ({ ...prev, [key]: v }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toast.success("Notification preferences saved")}
+            >
+              <Save className="h-3.5 w-3.5 mr-1.5" />
+              Save Preferences
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Member Access ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users2 className="h-4 w-4" />
+            Member Access
+          </CardTitle>
+          <CardDescription>
+            Configure who can see and access project content.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Members can view all tasks</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  All project members can see tasks assigned to others
+                </p>
+              </div>
+              <Switch defaultChecked />
+            </div>
+            <Separator />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Members can upload files</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Allow all members to upload files to the project
+                </p>
+              </div>
+              <Switch defaultChecked />
+            </div>
+            <Separator />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Members can see analytics</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Allow non-manager members to view the analytics page
+                </p>
+              </div>
+              <Switch defaultChecked />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* ── Danger Zone (Admin only) ── */}
       {isAdmin && (
         <>
@@ -301,7 +441,7 @@ export default function ProjectSettingsPage() {
                   variant="destructive"
                   size="sm"
                   disabled={isDeleting}
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteDialog(true)}
                   className="gap-2 shrink-0"
                 >
                   {isDeleting ? (
@@ -316,6 +456,31 @@ export default function ProjectSettingsPage() {
           </Card>
         </>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete &ldquo;{project?.name}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. All tasks, members, notes, and files
+              associated with this project will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Delete Project
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

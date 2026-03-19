@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
+import useSWR from "swr";
+import { notificationsApi, leadsApi } from "@/lib/api";
 import {
   LayoutDashboard,
   Users,
@@ -23,6 +25,7 @@ import {
   FolderKanban,
   ListTodo,
   Users2,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -46,6 +49,7 @@ const navItems: NavItem[] = [
   { title: "Activity", href: "/activity", icon: Activity, roles: ["admin"] },
   { title: "Analytics", href: "/analytics", icon: PieChart, roles: ["admin"] },
   { title: "Notifications", href: "/notifications", icon: Bell },
+  { title: "Reminders", href: "/reminders", icon: CalendarClock },
   { title: "Settings", href: "/settings", icon: Settings },
   // Delivery Items
   {
@@ -99,6 +103,21 @@ export function MobileSidebar() {
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
 
+  // Match desktop sidebar badge sources/keys for consistent UI
+  const { data: unreadData } = useSWR(
+    user ? "notifications-unread-count" : null,
+    () => notificationsApi.getUnreadCount(),
+    { revalidateOnFocus: false, refreshInterval: 120000 },
+  );
+  const unreadCount = unreadData?.count || 0;
+
+  const { data: remindersData } = useSWR(
+    user ? "sidebar-reminders-count" : null,
+    () => leadsApi.getRemindersCount({ status: "pending" }),
+    { revalidateOnFocus: false, refreshInterval: 180000 },
+  );
+  const remindersCount = remindersData?.count || 0;
+
   const filteredNav = navItems.filter((item) => {
     if (!item.roles) return true;
     if (item.roles.includes("admin") && isAdmin) return true;
@@ -132,6 +151,15 @@ export function MobileSidebar() {
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href));
 
+          const badgeCount =
+            item.title === "Notifications"
+              ? unreadCount
+              : item.title === "Reminders"
+                ? remindersCount
+                : 0;
+          const badgeBg =
+            item.title === "Reminders" ? "bg-amber-500" : "bg-red-500";
+
           return (
             <Link
               key={item.href}
@@ -143,12 +171,24 @@ export function MobileSidebar() {
                   : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent",
               )}
             >
-              <item.icon
-                className={cn(
-                  "w-5 h-5 shrink-0",
-                  isActive ? "text-primary" : "text-muted-foreground",
+              <div className="relative">
+                <item.icon
+                  className={cn(
+                    "w-5 h-5 shrink-0",
+                    isActive ? "text-primary" : "text-muted-foreground",
+                  )}
+                />
+                {badgeCount > 0 && (
+                  <span
+                    className={cn(
+                      "absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full text-[10px] font-semibold text-white flex items-center justify-center",
+                      badgeBg,
+                    )}
+                  >
+                    {badgeCount > 9 ? "9+" : badgeCount}
+                  </span>
                 )}
-              />
+              </div>
               <span className="font-medium">{item.title}</span>
             </Link>
           );

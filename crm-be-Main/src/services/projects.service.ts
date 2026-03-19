@@ -5,6 +5,7 @@ import { USER_ROLES } from "../config/constants.js";
 import { getCurrentTimestamp } from "../utils/helpers.js";
 import type { AuthUser } from "../types/api.types.js";
 import { Database } from "../types/database.types.js";
+import { logger } from "../utils/logger.js";
 
 type ProjectRow = Database["public"]["Tables"]["projects"]["Row"];
 type ProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
@@ -13,6 +14,40 @@ type ProjectUpdate = Database["public"]["Tables"]["projects"]["Update"];
 type ProjectMemberRow = Database["public"]["Tables"]["project_members"]["Row"];
 type ProjectMemberInsert =
   Database["public"]["Tables"]["project_members"]["Insert"];
+
+interface ResolvedUserPermissions {
+  role: string;
+  permissions: string[];
+  isGlobal: boolean;
+}
+
+async function getResolvedUserPermissions(
+  userId: string,
+): Promise<ResolvedUserPermissions> {
+  const [{ data: userRow, error: userError }, { data: permRow }] =
+    await Promise.all([
+      supabaseAdmin
+        .from("users")
+        .select("id, role")
+        .eq("id", userId)
+        .single(),
+      supabaseAdmin
+        .from("user_resolved_permissions" as any)
+        .select("permissions, is_global")
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ]);
+
+  if (userError || !userRow) {
+    throw new ApiError(ERROR_CODES.NOT_FOUND, "User not found");
+  }
+
+  return {
+    role: userRow.role,
+    permissions: (permRow as any)?.permissions ?? [],
+    isGlobal: ((permRow as any)?.is_global ?? false) as boolean,
+  };
+}
 
 // Public Interface for Project
 export interface ProjectRecord {
@@ -31,6 +66,7 @@ export interface ProjectRecord {
   manager?: {
     id: string;
     fullName: string;
+    email?: string;
     avatarUrl: string | null;
   };
   members?: ProjectMemberRecord[];
@@ -65,7 +101,7 @@ function mapProjectMemberRow(
     user: row.user
       ? {
           id: row.user.id,
-          fullName: row.user.full_name,
+          fullName: row.user.full_name || row.user.email || "Unknown User",
           email: row.user.email,
           avatarUrl: row.user.avatar_url,
         }
@@ -92,7 +128,8 @@ function mapProjectRow(
     manager: row.manager
       ? {
           id: row.manager.id,
-          fullName: row.manager.full_name,
+          fullName: row.manager.full_name || row.manager.email || "Unknown User",
+          email: row.manager.email,
           avatarUrl: row.manager.avatar_url,
         }
       : undefined,
@@ -102,58 +139,86 @@ function mapProjectRow(
   };
 }
 
+// Short-lived in-memory cache to deduplicate concurrent requests for the same user
+const _accessibleProjectsCache = new Map<string, { ids: string[] | null; expiresAt: number }>();
+
+async function getAccessibleProjectIds(authUser: AuthUser): Promise<string[] | null> {
+  // Only true admins and globally-scoped role users can see ALL projects.
+  // A globally-scoped role (scope = 'global') is what makes someone an operations manager
+  // or similar cross-department overseer. Department-scoped managers (including PMs)
+  // only see projects they are explicitly assigned to.
+  const isAdmin =
+    authUser.role === USER_ROLES.ADMIN ||
+    authUser.permissions.includes("crm:admin") ||
+    authUser.isGlobal === true;
+
+  if (isAdmin) {
+    return null; // null = all projects
+  }
+
+  // Cache hit: return previously computed IDs (valid for 5 seconds)
+  const cached = _accessibleProjectsCache.get(authUser.id);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.ids;
+  }
+
+  // Everyone else can only see projects they are explicitly part of:
+  //   1. Listed as manager_id on the project
+  //   2. Listed in project_members (any role — developer, designer, project_manager, etc.)
+  const [managerRes, memberRes] = await Promise.all([
+    supabaseAdmin.from("projects").select("id").eq("manager_id", authUser.id),
+    supabaseAdmin.from("project_members").select("project_id").eq("user_id", authUser.id),
+  ]);
+
+  if (managerRes.error) {
+    logger.warn({ userId: authUser.id, error: managerRes.error.message }, "projects: error fetching manager projects");
+  }
+  if (memberRes.error) {
+    logger.warn({ userId: authUser.id, error: memberRes.error.message }, "projects: error fetching member projects");
+  }
+
+  const managerProjectIds = managerRes.data?.map((p: any) => p.id) || [];
+  const memberProjectIds = memberRes.data?.map((m: any) => m.project_id) || [];
+  const allIds = Array.from(new Set([...managerProjectIds, ...memberProjectIds]));
+
+  logger.info(
+    { userId: authUser.id, role: authUser.role, isGlobal: authUser.isGlobal, managerCount: managerProjectIds.length, memberCount: memberProjectIds.length, total: allIds.length },
+    "[getAccessibleProjectIds] result",
+  );
+
+  _accessibleProjectsCache.set(authUser.id, { ids: allIds, expiresAt: Date.now() + 5000 });
+
+  return allIds;
+}
+
 /**
  * Get Projects (Filtered by Role)
- * OPTIMIZED: Employee query now uses inner join instead of 2 sequential queries
+ * Features role-based visibility rules spanning direct assignment and team management.
  */
 export async function getProjects(
   authUser: AuthUser,
 ): Promise<ProjectRecord[]> {
-  // For employees, use a different query structure with inner join
-  if (authUser.role === USER_ROLES.EMPLOYEE) {
-    // Use inner join to filter projects where user is a member - single query
-    const { data, error } = await supabaseAdmin
-      .from("projects")
-      .select(
-        `
-        *,
-        manager:users!manager_id(id, full_name, avatar_url),
-        members:project_members!inner(
-          *,
-          user:users(id, full_name, avatar_url)
-        )
-      `,
-      )
-      .eq("members.user_id", authUser.id)
-      .order("updated_at", { ascending: false });
+  const projectIds = await getAccessibleProjectIds(authUser);
 
-    if (error) {
-      throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
-    }
-
-    return (data || []).map((row: any) => mapProjectRow(row));
+  if (projectIds !== null && projectIds.length === 0) {
+    return [];
   }
 
-  // For managers and admins, use normal query
   let query = supabaseAdmin
     .from("projects")
-    .select(
-      `
+    .select(`
       *,
-      manager:users!manager_id(id, full_name, avatar_url),
+      manager:users!manager_id(id, full_name, email, avatar_url),
       members:project_members(
         *,
-        user:users(id, full_name, avatar_url)
+        user:users(id, full_name, email, avatar_url)
       )
-    `,
-    )
+    `)
     .order("updated_at", { ascending: false });
 
-  if (authUser.role === USER_ROLES.MANAGER) {
-    // Managers see projects they manage
-    query = query.eq("manager_id", authUser.id);
+  if (projectIds !== null) {
+    query = query.in("id", projectIds);
   }
-  // Admin sees all
 
   const { data, error } = await query;
 
@@ -175,7 +240,7 @@ export async function getProjectById(
     .select(
       `
       *,
-      manager:users!manager_id(id, full_name, avatar_url),
+      manager:users!manager_id(id, full_name, email, avatar_url),
       members:project_members(
         *,
         user:users(id, full_name, email, avatar_url)
@@ -255,7 +320,7 @@ export async function createProject(
     .select(
       `
       *,
-      manager:users!manager_id(id, full_name, avatar_url)
+      manager:users!manager_id(id, full_name, email, avatar_url)
     `,
     )
     .single();
@@ -341,7 +406,7 @@ export async function updateProject(
     .select(
       `
       *,
-      manager:users!manager_id(id, full_name, avatar_url)
+      manager:users!manager_id(id, full_name, email, avatar_url)
     `,
     )
     .single();
@@ -376,18 +441,38 @@ export async function addProjectMember(input: {
   role: string;
   allocationPercentage?: number;
 }): Promise<ProjectMemberRecord> {
-  // Check if already exists
+  // Enforce that the target user is actually allowed to work on projects:
+  // they must either be admin/global (crm:admin / isGlobal) or have at least
+  // one explicit `projects:*` permission assigned via RBAC.
+  const resolved = await getResolvedUserPermissions(input.userId);
+  const isAdminOrGlobal =
+    resolved.role === USER_ROLES.ADMIN ||
+    resolved.isGlobal ||
+    resolved.permissions.includes("crm:admin");
+  const hasProjectPermission = resolved.permissions.some((p) =>
+    p.startsWith("projects:"),
+  );
+
+  if (!isAdminOrGlobal && !hasProjectPermission) {
+    throw new ApiError(
+      ERROR_CODES.FORBIDDEN,
+      "User does not have project-related permissions and cannot be added to projects",
+    );
+  }
+
+  // Check if this user+role combo already exists (multi-role is allowed)
   const { data: existing } = await supabaseAdmin
     .from("project_members")
     .select("id")
     .eq("project_id", input.projectId)
     .eq("user_id", input.userId)
+    .eq("role", input.role)
     .single();
 
   if (existing) {
     throw new ApiError(
       ERROR_CODES.VALIDATION_ERROR,
-      "User is already a member of this project",
+      "User already has this role on the project",
     );
   }
 
@@ -492,65 +577,71 @@ export interface ProjectStats {
 
 /**
  * Get Project Statistics for Dashboard
- * Admin sees all, PM sees only their projects
+ * Admin sees all, PM/Manager sees their projects, Employee sees assigned
  */
 export async function getProjectStats(
   authUser: AuthUser,
 ): Promise<ProjectStats> {
+  const projectIds = await getAccessibleProjectIds(authUser);
+
+  if (projectIds !== null && projectIds.length === 0) {
+    return {
+      total: 0,
+      active: 0,
+      completed: 0,
+      onHold: 0,
+      planned: 0,
+      cancelled: 0,
+      idle: 0,
+      byManager: [],
+      byPriority: { high: 0, medium: 0, low: 0 },
+      totalOverdueTasks: 0,
+    };
+  }
+
   // Get all projects based on role
-  let query = supabaseAdmin.from("projects").select(
+  let baseQuery = supabaseAdmin.from("projects").select(
     `
       id,
       status,
       priority,
       manager_id,
       updated_at,
-      manager:users!manager_id(id, full_name, avatar_url)
+      manager:users!manager_id(id, full_name, email, avatar_url)
     `,
   );
 
-  if (authUser.role === USER_ROLES.MANAGER) {
-    query = query.eq("manager_id", authUser.id);
-  } else if (authUser.role === USER_ROLES.EMPLOYEE) {
-    // Get projects where employee is a member
-    const { data: memberData } = await supabaseAdmin
-      .from("project_members")
-      .select("project_id")
-      .eq("user_id", authUser.id);
-
-    const projectIds = (memberData || []).map((m) => m.project_id);
-    if (projectIds.length === 0) {
-      return {
-        total: 0,
-        active: 0,
-        completed: 0,
-        onHold: 0,
-        planned: 0,
-        cancelled: 0,
-        idle: 0,
-        byManager: [],
-        byPriority: { high: 0, medium: 0, low: 0 },
-        totalOverdueTasks: 0,
-      };
-    }
-    query = query.in("id", projectIds);
+  if (projectIds !== null) {
+    baseQuery = baseQuery.in("id", projectIds);
   }
-  // Admin sees all
 
-  const { data: projects, error } = await query;
+  const { data: projects, error } = await baseQuery;
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
   const allProjects = projects || [];
-  const projectIds = allProjects.map((p) => p.id);
+  const fetchedProjectIds = allProjects.map((p) => p.id);
+
+  // Also fetch project_members with project_manager role for these projects
+  // so they show up in the "Project Managers Overview" section
+  const { data: pmMembers } = fetchedProjectIds.length > 0
+    ? await supabaseAdmin
+        .from("project_members")
+        .select("project_id, user_id, role, user:users(id, full_name, avatar_url)")
+        .in("project_id", fetchedProjectIds)
+        .eq("role", "project_manager")
+    : { data: [] };
 
   // Fetch task stats related to these projects
-  const { data: tasks } = await supabaseAdmin
-    .from("tasks")
-    .select("id, status, due_date, project_id, assignee_id")
-    .in("project_id", projectIds);
+  const { data: tasks } = fetchedProjectIds.length > 0
+    ? await supabaseAdmin
+        .from("tasks")
+        .select("id, status, due_date, project_id, assigned_to")
+        .in("project_id", fetchedProjectIds)
+        .eq("is_deleted", false)
+    : { data: [] };
 
   const allTasks = tasks || [];
   const today = new Date().toISOString().split("T")[0] || "";
@@ -568,7 +659,7 @@ export async function getProjectStats(
     return updatedAt < sevenDaysAgo;
   });
 
-  // Group by manager
+  // Build manager map — includes both manager_id (primary PM) and project_members with PM role
   const managerMap = new Map<
     string,
     {
@@ -581,45 +672,77 @@ export async function getProjectStats(
       totalTasks: number;
       completedTasks: number;
       overdueTasks: number;
+      projectIds: Set<string>;
     }
   >();
 
-  // Initialize managers from projects
-  for (const p of allProjects as any[]) {
-    const managerId = p.manager_id;
-    const manager = p.manager;
+  const upsertManager = (managerId: string, managerName: string, managerAvatar: string | null) => {
     if (!managerMap.has(managerId)) {
       managerMap.set(managerId, {
         managerId,
-        managerName: manager?.full_name || "Unknown",
-        managerAvatar: manager?.avatar_url || null,
+        managerName,
+        managerAvatar,
         projectCount: 0,
         activeCount: 0,
         completedCount: 0,
         totalTasks: 0,
         completedTasks: 0,
         overdueTasks: 0,
+        projectIds: new Set(),
       });
     }
-    const entry = managerMap.get(managerId)!;
-    entry.projectCount++;
-    if (p.status === "in_progress") entry.activeCount++;
-    if (p.status === "completed") entry.completedCount++;
+    return managerMap.get(managerId)!;
+  };
+
+  // Add managers from manager_id field
+  for (const p of allProjects as any[]) {
+    const entry = upsertManager(
+      p.manager_id,
+      p.manager?.full_name || "Unknown",
+      p.manager?.avatar_url || null,
+    );
+    if (!entry.projectIds.has(p.id)) {
+      entry.projectIds.add(p.id);
+      entry.projectCount++;
+      if (p.status === "in_progress") entry.activeCount++;
+      if (p.status === "completed") entry.completedCount++;
+    }
+  }
+
+  // Add project_manager members (users assigned as PM in project_members but not manager_id)
+  for (const pm of (pmMembers || []) as any[]) {
+    if (!pm.user) continue;
+    const entry = upsertManager(
+      pm.user_id,
+      pm.user.full_name || "Unknown",
+      pm.user.avatar_url || null,
+    );
+    // Only count this project if not already counted via manager_id
+    if (!entry.projectIds.has(pm.project_id)) {
+      entry.projectIds.add(pm.project_id);
+      const proj = allProjects.find((p: any) => p.id === pm.project_id) as any;
+      if (proj) {
+        entry.projectCount++;
+        if (proj.status === "in_progress") entry.activeCount++;
+        if (proj.status === "completed") entry.completedCount++;
+      }
+    }
   }
 
   // Aggregate task stats per manager's projects
   for (const t of allTasks as any[]) {
-    const project = allProjects.find((p) => p.id === t.project_id) as any;
-    if (project && managerMap.has(project.manager_id)) {
-      const entry = managerMap.get(project.manager_id)!;
-      entry.totalTasks++;
-      if (t.status === "done") entry.completedTasks++;
-      if (t.due_date && t.due_date < today && t.status !== "done")
-        entry.overdueTasks++;
+    for (const [, entry] of managerMap) {
+      if (entry.projectIds.has(t.project_id)) {
+        entry.totalTasks++;
+        if (t.status === "done") entry.completedTasks++;
+        if (t.due_date && t.due_date < today && t.status !== "done")
+          entry.overdueTasks++;
+        break; // each task belongs to one project, only count once per manager
+      }
     }
   }
 
-  const byManager = Array.from(managerMap.values()).map((m) => ({
+  const byManager = Array.from(managerMap.values()).map(({ projectIds: _pids, ...m }) => ({
     ...m,
     taskCompletionRate:
       m.totalTasks > 0
@@ -652,8 +775,8 @@ export async function getProjectStats(
     const assigneeIds = [
       ...new Set(
         allTasks
-          .filter((t: any) => t.status !== "done" && t.assignee_id)
-          .map((t: any) => t.assignee_id),
+          .filter((t: any) => t.status !== "done" && t.assigned_to)
+          .map((t: any) => t.assigned_to),
       ),
     ];
 
@@ -667,16 +790,16 @@ export async function getProjectStats(
       );
 
       for (const t of allTasks as any[]) {
-        if (t.status !== "done" && t.assignee_id) {
-          const name = userMap.get(t.assignee_id) || "Unknown";
-          if (!workloadMap.has(t.assignee_id)) {
-            workloadMap.set(t.assignee_id, {
-              userId: t.assignee_id,
+        if (t.status !== "done" && t.assigned_to) {
+          const name = userMap.get(t.assigned_to) || "Unknown";
+          if (!workloadMap.has(t.assigned_to)) {
+            workloadMap.set(t.assigned_to, {
+              userId: t.assigned_to,
               userName: name,
               activeTasks: 0,
             });
           }
-          const entry = workloadMap.get(t.assignee_id)!;
+          const entry = workloadMap.get(t.assigned_to)!;
           entry.activeTasks++;
         }
       }
@@ -714,10 +837,10 @@ export async function getIdleProjects(): Promise<ProjectRecord[]> {
     .select(
       `
       *,
-      manager:users!manager_id(id, full_name, avatar_url),
+      manager:users!manager_id(id, full_name, email, avatar_url),
       members:project_members(
         *,
-        user:users(id, full_name, avatar_url)
+        user:users(id, full_name, email, avatar_url)
       )
     `,
     )
@@ -738,19 +861,42 @@ export async function getIdleProjects(): Promise<ProjectRecord[]> {
 export async function getProjectsByManagerId(
   managerId: string,
 ): Promise<ProjectRecord[]> {
+  // Query both sources in parallel:
+  // 1. Projects where this user is the main manager_id
+  // 2. Projects where this user is listed in project_members with role "project_manager"
+  const [directRes, memberRes] = await Promise.all([
+    supabaseAdmin
+      .from("projects")
+      .select("id")
+      .eq("manager_id", managerId),
+    supabaseAdmin
+      .from("project_members")
+      .select("project_id")
+      .eq("user_id", managerId)
+      .eq("role", "project_manager"),
+  ]);
+
+  const directIds = (directRes.data || []).map((r) => r.id);
+  const memberIds = (memberRes.data || []).map((r) => r.project_id);
+  const allProjectIds = Array.from(new Set([...directIds, ...memberIds]));
+
+  if (allProjectIds.length === 0) {
+    return [];
+  }
+
   const { data, error } = await supabaseAdmin
     .from("projects")
     .select(
       `
       *,
-      manager:users!manager_id(id, full_name, avatar_url),
+      manager:users!manager_id(id, full_name, email, avatar_url),
       members:project_members(
         *,
-        user:users(id, full_name, avatar_url)
+        user:users(id, full_name, email, avatar_url)
       )
     `,
     )
-    .eq("manager_id", managerId)
+    .in("id", allProjectIds)
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -759,6 +905,7 @@ export async function getProjectsByManagerId(
 
   return (data || []).map((row: any) => mapProjectRow(row));
 }
+
 
 /**
  * Get All Project Members with their job titles for resource management
@@ -770,33 +917,59 @@ export async function getProjectResources(authUser: AuthUser): Promise<{
   contentWriters: any[];
   projectManagers: any[];
 }> {
-  // Get all active users with job titles
-  const { data: users, error } = await supabaseAdmin
-    .from("users")
-    .select("id, full_name, email, avatar_url, job_title, role")
-    .eq("is_active", true)
-    .not("job_title", "is", null);
+  // Fetch all active users and the resolved RBAC role names in parallel
+  const [usersRes, rbacRes] = await Promise.all([
+    supabaseAdmin
+      .from("users")
+      .select("id, full_name, email, avatar_url, job_title, role")
+      .eq("is_active", true),
+    supabaseAdmin
+      .from("user_resolved_permissions" as any)
+      .select("user_id, role_names"),
+  ]);
 
-  if (error) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  if (usersRes.error) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersRes.error.message);
   }
 
-  const allUsers = users || [];
+  const allUsers = usersRes.data || [];
+
+  // Build a map of user_id -> role_names from RBAC
+  const rbacRoleNames = new Map<string, string[]>();
+  for (const row of (rbacRes.data || []) as any[]) {
+    rbacRoleNames.set(row.user_id, row.role_names || []);
+  }
+
+  const hasRbacRole = (userId: string, roleName: string) =>
+    (rbacRoleNames.get(userId) || []).some(
+      (n: string) => n.toLowerCase() === roleName.toLowerCase(),
+    );
 
   return {
-    developers: allUsers.filter((u: any) => u.job_title === "developer"),
-    designers: allUsers.filter((u: any) => u.job_title === "designer"),
+    developers: allUsers.filter(
+      (u: any) =>
+        u.job_title === "developer" || hasRbacRole(u.id, "Developer"),
+    ),
+    designers: allUsers.filter(
+      (u: any) =>
+        u.job_title === "designer" || hasRbacRole(u.id, "Designer"),
+    ),
     seoSpecialists: allUsers.filter(
-      (u: any) => u.job_title === "seo_specialist",
+      (u: any) =>
+        u.job_title === "seo_specialist" ||
+        hasRbacRole(u.id, "SEO Specialist"),
     ),
     contentWriters: allUsers.filter(
-      (u: any) => u.job_title === "content_writer",
+      (u: any) =>
+        u.job_title === "content_writer" ||
+        hasRbacRole(u.id, "Content Writer"),
     ),
+    // Project Managers: anyone with PM job title, PM RBAC role, admin, or manager role
     projectManagers: allUsers.filter(
       (u: any) =>
         u.job_title === "project_manager" ||
         u.role === "admin" ||
-        u.role === "manager",
+        hasRbacRole(u.id, "Project Manager"),
     ),
   };
 }
@@ -805,17 +978,25 @@ export async function getProjectResources(authUser: AuthUser): Promise<{
  * Get "My Projects" for team members
  */
 export async function getMyProjects(userId: string): Promise<ProjectRecord[]> {
-  // 1. Get Project IDs where user is a member
-  const { data: memberData, error: memberError } = await supabaseAdmin
-    .from("project_members")
-    .select("project_id")
-    .eq("user_id", userId);
+  // 1. Get Project IDs where user is a member OR the manager
+  const [memberRes, managerRes] = await Promise.all([
+    supabaseAdmin
+      .from("project_members")
+      .select("project_id")
+      .eq("user_id", userId),
+    supabaseAdmin
+      .from("projects")
+      .select("id")
+      .eq("manager_id", userId),
+  ]);
 
-  if (memberError) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, memberError.message);
+  if (memberRes.error) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, memberRes.error.message);
   }
 
-  const projectIds = (memberData || []).map((m) => m.project_id);
+  const memberProjectIds = (memberRes.data || []).map((m) => m.project_id);
+  const managedProjectIds = (managerRes.data || []).map((p) => p.id);
+  const projectIds = Array.from(new Set([...memberProjectIds, ...managedProjectIds]));
 
   if (projectIds.length === 0) {
     return [];
@@ -855,13 +1036,15 @@ export async function getProjectDashboardStats(projectId: string): Promise<{
     todo: number;
   };
   upcomingTasks: any[];
+  overdueTasks: any[];
   teamMembers: any[];
 }> {
   // 1. Get Task Stats
   const { data: tasks, error: tasksError } = await supabaseAdmin
     .from("tasks")
-    .select("id, title, status, due_date, priority, assignee_id")
-    .eq("project_id", projectId);
+    .select("id, title, status, due_date, priority, assigned_to")
+    .eq("project_id", projectId)
+    .eq("is_deleted", false);
 
   if (tasksError) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, tasksError.message);
@@ -881,12 +1064,15 @@ export async function getProjectDashboardStats(projectId: string): Promise<{
     .sort((a, b) => (a.due_date > b.due_date ? 1 : -1))
     .slice(0, 5);
 
-  // 2. Get Team Members with Roles (Explicitly to ensure we have them)
-  // Re-fetching might be redundant if we use getProjectById, but this ensures we get specific details if needed
-  // Let's rely on the project details fetch for team members, but we can augment if needed.
-  // Actually, let's just return the task stats and let the frontend use existing team data,
-  // OR we can fetch refined team stats here if "team view" needs more than just list.
-  // For now, let's just return task stats and upcoming tasks.
+  const overdueTasks = allTasks
+    .filter(
+      (t) =>
+        t.due_date &&
+        t.due_date < today &&
+        t.status !== "done" &&
+        t.status !== "cancelled",
+    )
+    .sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
 
   return {
     taskProgress: {
@@ -896,6 +1082,7 @@ export async function getProjectDashboardStats(projectId: string): Promise<{
       todo,
     },
     upcomingTasks,
-    teamMembers: [], // Placeholder if we want to move team logic here
+    overdueTasks,
+    teamMembers: [],
   };
 }

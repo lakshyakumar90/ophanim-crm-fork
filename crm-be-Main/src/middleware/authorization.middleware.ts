@@ -238,13 +238,37 @@ export function checkResourceAccess(
           if (req.user.role === USER_ROLES.MANAGER) {
             const { data: targetUser } = await supabaseAdmin
               .from("users")
-              .select("team_id")
+              .select("team_id, department_id")
               .eq("id", resourceId)
               .single();
 
+            let targetDepartmentId = targetUser?.department_id;
+            if (targetUser?.team_id && !targetDepartmentId) {
+              const { data: teamData } = await supabaseAdmin
+                .from("teams")
+                .select("department_id")
+                .eq("id", targetUser.team_id)
+                .single();
+              targetDepartmentId = teamData?.department_id;
+            }
+
             hasAccess =
               resourceId === req.user.id ||
-              targetUser?.team_id === req.user.teamId;
+              (targetDepartmentId && targetDepartmentId === req.user.departmentId);
+
+            // If not in the same department, check if they manage a project the user is assigned to
+            if (!hasAccess) {
+              const { data: projectMember } = await supabaseAdmin
+                .from("project_members")
+                .select(`project_id, projects!inner(manager_id)`)
+                .eq("user_id", resourceId)
+                .eq("projects.manager_id", req.user.id)
+                .limit(1);
+
+              if (projectMember && projectMember.length > 0) {
+                hasAccess = true;
+              }
+            }
           } else {
             hasAccess = resourceId === req.user.id;
           }
@@ -346,7 +370,14 @@ export async function getTeamMemberIds(
 }
 
 /**
- * Exclude users from specific departments from accessing a route
+ * Exclude users from specific departments from accessing a route.
+ *
+ * Cross-department bypass rules (applied before department check):
+ * 1. Users with `crm:admin` permission always pass.
+ * 2. Users with any explicit `projects:*` permission pass (RBAC-assigned PMs).
+ * 3. Users who are the `manager_id` on at least one project pass —
+ *    this covers the case of a Sales Manager who is also a Project Manager.
+ * 4. Users with a `project_manager` role in `project_members` pass.
  */
 export function excludeDepartment(...departmentSlugs: string[]) {
   return async (
@@ -360,11 +391,41 @@ export function excludeDepartment(...departmentSlugs: string[]) {
       }
 
       // Admins always have access
-      if (req.user.role === USER_ROLES.ADMIN) {
+      if (req.user.role === USER_ROLES.ADMIN || req.user.permissions.includes("crm:admin")) {
         return next();
       }
 
-      // Get user's department slug
+      // RBAC: If the user has any explicit projects:* permission, allow through
+      if (req.user.permissions.some(p => p.startsWith("projects:"))) {
+        return next();
+      }
+
+      // Cross-department project participant check:
+      // Allow if user is the manager_id on any project OR is a member (any role)
+      // of any project — regardless of their primary department.
+      // This covers Sales Managers assigned as developers, designers, etc. on a project.
+      const [managerRes, memberRes] = await Promise.all([
+        supabaseAdmin
+          .from("projects")
+          .select("id")
+          .eq("manager_id", req.user.id)
+          .limit(1),
+        supabaseAdmin
+          .from("project_members")
+          .select("id")
+          .eq("user_id", req.user.id)
+          .limit(1),
+      ]);
+
+      const isProjectParticipant =
+        (managerRes.data && managerRes.data.length > 0) ||
+        (memberRes.data && memberRes.data.length > 0);
+
+      if (isProjectParticipant) {
+        return next();
+      }
+
+      // Resolve user's primary department slug
       const { data: userData } = await supabaseAdmin
         .from("users")
         .select("team_id")
