@@ -32,6 +32,7 @@ import {
   CircleDollarSign,
   ClipboardCheck,
   CalendarClock,
+  CalendarDays,
   BarChart3,
   FolderKanban,
   ListTodo,
@@ -480,6 +481,11 @@ function GlobalSidebar({
       href: "/reminders",
       icon: CalendarClock,
       showReminderBadge: true,
+    },
+    {
+      title: "Calendar",
+      href: "/calendar",
+      icon: CalendarDays,
     },
     { title: "Settings", href: "/settings", icon: Settings },
   ];

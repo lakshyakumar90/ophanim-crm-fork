@@ -84,12 +84,19 @@ router.get(
     const authReq = req as unknown as AuthenticatedRequest;
     const teamId = req.params["id"] as string;
 
-    // Check access: admin can see any team, others only their own team
-    if (authReq.user.role !== "admin" && authReq.user.teamId !== teamId) {
-      throw new ApiError(
-        ERROR_CODES.FORBIDDEN,
-        "You can only view your own team members",
-      );
+    // Admins, HR managers (isHR), or the manager of this specific team can view members
+    const isAdmin = authReq.user.role === "admin";
+    if (!isAdmin) {
+      // Allow if manager of this team or user is a member
+      const team = await teamsService.getTeamById(teamId);
+      const isTeamManager = team.managerId === authReq.user.id;
+      const isMember = authReq.user.teamId === teamId;
+      if (!isTeamManager && !isMember) {
+        throw new ApiError(
+          ERROR_CODES.FORBIDDEN,
+          "You can only view your own team members",
+        );
+      }
     }
 
     const members = await teamsService.getTeamMembersWithDetails(teamId);
@@ -169,7 +176,9 @@ router.delete(
   "/:id/members/:userId",
   requireAdmin as any,
   asyncHandler(async (req: Request, res: Response) => {
-    await teamsService.removeUserFromTeam(req.params["userId"] as string);
+    const teamId = req.params["id"] as string;
+    const userId = req.params["userId"] as string;
+    await teamsService.removeUserFromTeam(userId, teamId);
     sendSuccess(res, { message: "User removed from team successfully" });
   }),
 );

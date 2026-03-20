@@ -1,7 +1,7 @@
 "use client";
 
 import type { Dispatch, ElementType, SetStateAction } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { formatInTimeZone } from "date-fns-tz";
 import { startOfMonth, subDays } from "date-fns";
 import {
@@ -24,6 +24,10 @@ import {
   Trash2,
   User,
   Users,
+  Search,
+  Filter as FilterIcon,
+  X,
+  Settings2
 } from "lucide-react";
 import useSWR, { mutate } from "swr";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -229,39 +233,117 @@ const formatValue = (value: unknown): string => {
 const getChangesFromMetadata = (
   metadata: Record<string, unknown> | null,
   activityType: string,
+  userMap?: Map<string, string>
 ): ActivityChange[] => {
   if (!metadata || activityType === "comment") return [];
 
   const changes: ActivityChange[] = [];
 
-  if (activityType === "status_change") {
-    changes.push({
-      field: "Status",
-      oldVal: formatValue(metadata.from_status),
-      newVal: formatValue(metadata.to_status),
-    });
-    return changes;
+  const formatMetadataValue = (key: string, val: any): string => {
+    if (val === null || val === undefined) return "-";
+    
+    // User resolution
+    if (
+      (key.toLowerCase().includes("user") || 
+       key.toLowerCase().includes("assign") || 
+       key.toLowerCase().includes("member")) && 
+      typeof val === "string" && 
+      userMap?.has(val)
+    ) {
+      return userMap.get(val)!;
+    }
+
+    // Date resolution - match common date keys or ISO strings
+    if (
+      (key.toLowerCase().includes("date") || key.toLowerCase().endsWith("at")) && 
+      typeof val === "string" && 
+      /^\d{4}-\d{2}-\d{2}/.test(val)
+    ) {
+      try {
+        return formatIST(val, "MMM d, yyyy");
+      } catch (e) {
+        return String(val);
+      }
+    }
+
+    if (typeof val === "boolean") return val ? "Yes" : "No";
+    if (Array.isArray(val)) return val.map(v => formatValue(v)).join(", ") || "-";
+    if (typeof val === "object") return JSON.stringify(val);
+    return String(val);
+  };
+
+  // Capture from_status and to_status safely if they exist, ignoring general keys.
+  if (("from_status" in metadata && "to_status" in metadata) || activityType === "status_change") {
+    const oldStatus = formatValue(metadata.from_status || metadata.from || metadata.old_status);
+    const newStatus = formatValue(metadata.to_status || metadata.to || metadata.new_status);
+    
+    if (oldStatus !== newStatus || activityType === "status_change") {
+      changes.push({
+        field: "Status",
+        oldVal: oldStatus,
+        newVal: newStatus,
+      });
+    }
+    
+    // If it's pure status_change we return, but if it's an update with status we can continue parsing others
+    if (activityType === "status_change" || (Object.keys(metadata).length <= 2 && oldStatus !== newStatus)) return changes;
   }
+
+  const metadataKeys = Object.keys(metadata);
 
   Object.entries(metadata).forEach(([key, value]) => {
     if (
       value === null ||
       value === undefined ||
       key === "comment_preview" ||
-      key === "commented_on"
+      key === "commented_on" ||
+      key === "from_status" ||
+      key === "to_status"
     ) {
       return;
     }
 
+    // If this is a summary key like 'updates', check if we have individual field keys.
+    // If we do, skip the summary key to avoid clutter.
+    if (key === "updates" || key === "changed_fields") {
+       const updatesList = Array.isArray(value) ? value : String(value).split(",");
+       const hasIndividualKeys = updatesList.some(f => metadataKeys.includes(String(f).trim()));
+       if (hasIndividualKeys) return; 
+    }
+
+    let oldValStr = "";
+    let newValStr = "";
+
+    // Support nested object patterns like { old: "A", new: "B" }
+    if (typeof value === "object" && !Array.isArray(value)) {
+      const vObj = value as Record<string, any>;
+      const hasOldNew = ("old" in vObj && "new" in vObj) || ("from" in vObj && "to" in vObj);
+      
+      if (hasOldNew) {
+         let oldV = "old" in vObj ? vObj.old : vObj.from;
+         let newV = "new" in vObj ? vObj.new : vObj.to;
+         
+         oldValStr = formatMetadataValue(key, oldV);
+         newValStr = formatMetadataValue(key, newV);
+      } else {
+         newValStr = formatMetadataValue(key, value);
+      }
+    } else {
+      newValStr = formatMetadataValue(key, value);
+    }
+
+    if (oldValStr && newValStr && oldValStr === newValStr) return;
+
     changes.push({
       field: formatFieldName(key),
-      oldVal: "",
-      newVal: formatValue(value),
+      oldVal: oldValStr,
+      newVal: newValStr,
     });
   });
 
   return changes;
 };
+
 
 const formatActivityDescription = (activity: ActivityLog) => {
   if (activity.title) return activity.title;
@@ -310,77 +392,89 @@ const getDateLabel = (createdAt: string) =>
 const getDateKey = (createdAt: string) =>
   formatInTimeZone(new Date(createdAt), IST_TIMEZONE, "yyyy-MM-dd");
 
-const buildTimeSections = (activities: ActivityLog[], preset: TimePreset): TimeSection[] => {
-  if (isDateAccordionRange(preset)) {
-    const dateMap = new Map<string, TimeSection>();
-
-    activities.forEach((activity) => {
-      const key = getDateKey(activity.created_at);
-      const existing = dateMap.get(key);
-      if (existing) {
-        existing.activities.push(activity);
-        return;
-      }
-
-      dateMap.set(key, {
-        key,
-        label: getDateLabel(activity.created_at),
-        activities: [activity],
-        collapsible: true,
-      });
-    });
-
-    return [...dateMap.values()].sort((a, b) => b.key.localeCompare(a.key));
-  }
-
-  const bucketMap: Record<TimeBucketKey, ActivityLog[]> = {
-    today: [],
-    yesterday: [],
-    earlier: [],
-  };
+const buildTimeSections = (activities: ActivityLog[]): TimeSection[] => {
+  const dateMap = new Map<string, TimeSection>();
 
   activities.forEach((activity) => {
-    bucketMap[getTimeBucket(activity.created_at)].push(activity);
-  });
-
-  return (Object.keys(timeBucketLabels) as TimeBucketKey[])
-    .filter((bucketKey) => bucketMap[bucketKey].length > 0)
-    .map((bucketKey) => ({
-      key: bucketKey,
-      label: timeBucketLabels[bucketKey],
-      activities: bucketMap[bucketKey],
-      collapsible: false,
-    }));
-};
-
-const buildDateEntitySections = (
-  entities: EntityGroup[],
-  preset: TimePreset,
-): DateEntitySection[] => {
-  if (!isDateAccordionRange(preset)) return [];
-
-  const dateMap = new Map<string, DateEntitySection>();
-
-  entities.forEach((entity) => {
-    const latestActivity = entity.activities[0];
-    if (!latestActivity) return;
-
-    const key = getDateKey(latestActivity.created_at);
+    const key = getDateKey(activity.created_at);
     const existing = dateMap.get(key);
-
     if (existing) {
-      existing.entities.push(entity);
+      existing.activities.push(activity);
       return;
     }
 
+    const today = formatInTimeZone(new Date(), IST_TIMEZONE, "yyyy-MM-dd");
+    const yesterday = formatInTimeZone(subDays(new Date(), 1), IST_TIMEZONE, "yyyy-MM-dd");
+    let label = getDateLabel(activity.created_at);
+    if (key === today) label = "Today";
+    else if (key === yesterday) label = "Yesterday";
+
     dateMap.set(key, {
       key,
-      label: getDateLabel(latestActivity.created_at),
-      entities: [entity],
+      label,
+      activities: [activity],
+      collapsible: true, // Only for potential compatibility elsewhere, Timeline doesn't use it
     });
   });
 
   return [...dateMap.values()].sort((a, b) => b.key.localeCompare(a.key));
+};
+
+interface DateResourceGroup {
+  key: ResourceGroupKey;
+  label: string;
+  icon: ElementType;
+  accentClass: string;
+  activities: ActivityLog[];
+}
+
+interface DateDetailedSection {
+  dateKey: string;
+  dateLabel: string;
+  resources: DateResourceGroup[];
+}
+
+const buildDetailedSections = (activities: ActivityLog[]): DateDetailedSection[] => {
+  const dateMap = new Map<string, DateDetailedSection>();
+  
+  activities.forEach(activity => {
+    const dateKey = getDateKey(activity.created_at);
+    let section = dateMap.get(dateKey);
+    if (!section) {
+      const today = formatInTimeZone(new Date(), IST_TIMEZONE, "yyyy-MM-dd");
+      const yesterday = formatInTimeZone(subDays(new Date(), 1), IST_TIMEZONE, "yyyy-MM-dd");
+      let dLabel = getDateLabel(activity.created_at);
+      if (dateKey === today) dLabel = "Today";
+      else if (dateKey === yesterday) dLabel = "Yesterday";
+      
+      section = { dateKey, dateLabel: dLabel, resources: [] };
+      dateMap.set(dateKey, section);
+    }
+    
+    const resourceKey = getResourceGroupKey(activity);
+    let rGroup = section.resources.find(r => r.key === resourceKey);
+    if (!rGroup) {
+      rGroup = {
+        key: resourceKey,
+        label: resourceLabels[resourceKey],
+        icon: resourceIcons[resourceKey],
+        accentClass: resourceAccent[resourceKey],
+        activities: [],
+      };
+      section.resources.push(rGroup);
+    }
+    
+    rGroup.activities.push(activity);
+  });
+  
+  const order: ResourceGroupKey[] = ["lead", "task", "user", "attendance", "project", "other"];
+  const sortedDates = [...dateMap.values()].sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+  
+  sortedDates.forEach(dateSec => {
+    dateSec.resources.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+  });
+  
+  return sortedDates;
 };
 
 const isLeadUpdate = (activity: ActivityLog) =>
@@ -497,71 +591,25 @@ const getSummaryItems = (activities: ActivityLog[]): QuickSummaryItem[] => {
   ];
 };
 
-const buildResourceGroups = (activities: ActivityLog[]): ResourceGroup[] => {
-  const resourceMap = new Map<ResourceGroupKey, ResourceGroup>();
-
-  activities.forEach((activity) => {
-    const resourceKey = getResourceGroupKey(activity);
-    const entityId = getEntityGroupId(activity, resourceKey);
-    const resourceGroup =
-      resourceMap.get(resourceKey) ||
-      {
-        key: resourceKey,
-        label: resourceLabels[resourceKey],
-        icon: resourceIcons[resourceKey],
-        accentClass: resourceAccent[resourceKey],
-        activities: [],
-        entities: [],
-      };
-
-    resourceGroup.activities.push(activity);
-
-    let entityGroup = resourceGroup.entities.find((entity) => entity.entityId === entityId);
-    if (!entityGroup) {
-      entityGroup = {
-        entityId,
-        entityName: getEntityLabel(activity),
-        resourceLabel: resourceLabels[resourceKey].endsWith("s")
-          ? resourceLabels[resourceKey].slice(0, -1)
-          : resourceLabels[resourceKey],
-        activities: [],
-      };
-      resourceGroup.entities.push(entityGroup);
-    }
-
-    entityGroup.activities.push(activity);
-    resourceMap.set(resourceKey, resourceGroup);
-  });
-
-  const order: ResourceGroupKey[] = ["lead", "task", "user", "attendance", "project", "other"];
-  return order
-    .map((key) => resourceMap.get(key))
-    .filter((group): group is ResourceGroup => Boolean(group))
-    .map((group) => ({
-      ...group,
-      entities: group.entities.sort(
-        (a, b) =>
-          new Date(b.activities[0]?.created_at || 0).getTime() -
-          new Date(a.activities[0]?.created_at || 0).getTime(),
-      ),
-    }));
-};
+// Extant code removed to save lines. Group structures replaced by buildDetailedSections
 
 const renderActivityItem = ({
   activity,
   entityName,
   expandedActivities,
   setExpandedActivities,
+  userMap,
 }: {
   activity: ActivityLog;
   entityName: string;
   expandedActivities: Set<string>;
   setExpandedActivities: Dispatch<SetStateAction<Set<string>>>;
+  userMap?: Map<string, string>;
 }) => {
   const ActionIcon = actionIcons[activity.activity_type] || Activity;
   const colorClass =
     actionColors[activity.activity_type] || "bg-slate-100 text-slate-700 ring-slate-200";
-  const changes = getChangesFromMetadata(activity.metadata, activity.activity_type);
+  const changes = getChangesFromMetadata(activity.metadata, activity.activity_type, userMap);
   const commentPreview =
     typeof activity.metadata?.comment_preview === "string"
       ? activity.metadata.comment_preview
@@ -643,11 +691,11 @@ const renderActivityItem = ({
               {changes.map((change, index) => (
                 <div
                   key={`${activity.id}-${index}`}
-                  className="grid gap-1 text-sm md:grid-cols-[140px_1fr_1fr]"
+                  className="grid gap-2 text-sm md:grid-cols-[140px_1fr_1fr]"
                 >
-                  <span className="font-medium text-slate-500">{change.field}</span>
-                  <span className="text-slate-500">{change.oldVal || "-"}</span>
-                  <span className="text-slate-900">{change.newVal}</span>
+                  <span className="font-semibold text-slate-500 uppercase tracking-widest text-[10px]">{change.field}</span>
+                  <span className="text-slate-400 line-through truncate">{change.oldVal || "-"}</span>
+                  <span className="text-slate-900 font-medium truncate">{change.newVal}</span>
                 </div>
               ))}
             </div>
@@ -662,6 +710,109 @@ const renderActivityItem = ({
     </div>
   );
 };
+
+
+const renderTimelineActivityItem = ({
+  activity,
+  entityName,
+  expandedActivities,
+  setExpandedActivities,
+  userMap,
+}: {
+  activity: ActivityLog;
+  entityName: string;
+  expandedActivities: Dispatch<SetStateAction<Set<string>>> | any;
+  setExpandedActivities: Dispatch<SetStateAction<Set<string>>> | any;
+  userMap?: Map<string, string>;
+}) => {
+  const ActionIcon = actionIcons[activity.activity_type] || Activity;
+  const colorClass = actionColors[activity.activity_type] || "bg-slate-100 text-slate-700 ring-slate-200";
+  const changes = getChangesFromMetadata(activity.metadata, activity.activity_type, userMap);
+  const commentPreview =
+    typeof activity.metadata?.comment_preview === "string" ? activity.metadata.comment_preview : null;
+  const isExpanded = expandedActivities.has(activity.id);
+
+  return (
+    <div key={activity.id} className="relative flex items-start gap-4 group">
+      {/* Timeline Time and Node */}
+      <div className="flex flex-col items-center gap-1 w-[50px] sm:w-[60px] shrink-0 pt-0.5">
+        <span className="text-[11px] sm:text-xs font-semibold text-slate-500">{formatIST(activity.created_at, "HH:mm")}</span>
+        <div className={cn("relative z-10 rounded-full p-1.5 ring-4 ring-white bg-white", colorClass)}>
+          <ActionIcon className="h-3.5 w-3.5" />
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pb-6 border-b border-slate-100 group-last:border-transparent transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
+          <p className="text-sm text-slate-700 leading-snug">
+            <span className="font-bold text-slate-900">{activity.user?.full_name || "System"}</span>{" "}
+            <span className="font-medium text-slate-600">{formatActivityDescription(activity)}</span>{" "}
+            {entityName !== "Activity" && (
+              <span className="font-semibold text-[10px] tracking-widest uppercase bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded ml-1">
+                {entityName}
+              </span>
+            )}
+          </p>
+          <span className="text-xs text-slate-400 shrink-0 whitespace-nowrap hidden sm:block">
+            {formatDistanceToNowIST(activity.created_at, { addSuffix: true })}
+          </span>
+        </div>
+
+        {changes.length > 0 && (
+          <button
+            type="button"
+            onClick={() =>
+              setExpandedActivities((prev: any) => {
+                const next = new Set(prev);
+                if (next.has(activity.id)) next.delete(activity.id);
+                else next.add(activity.id);
+                return next;
+              })
+            }
+            className="mt-1.5 flex items-center gap-1 text-xs font-medium text-blue-600 transition-colors hover:text-blue-800"
+          >
+            {isExpanded ? (
+              <><ChevronUp className="h-3 w-3" /> Hide changes</>
+            ) : (
+              <><ChevronDown className="h-3 w-3" /> View changes ({changes.length})</>
+            )}
+          </button>
+        )}
+
+        {commentPreview && (
+          <p className="mt-2 text-sm italic text-slate-600 border-l-2 border-slate-300 pl-3 py-1 bg-slate-50/50 rounded-r-md">
+            &quot;{commentPreview}&quot;
+          </p>
+        )}
+
+        {isExpanded && changes.length > 0 && (
+          <div className="mt-2 space-y-1.5 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+            {changes.map((change, index) => (
+              <div key={`${activity.id}-${index}`} className="grid gap-2 text-sm md:grid-cols-[140px_1fr_1fr]">
+                <span className="font-semibold text-slate-500 uppercase tracking-widest text-[10px]">{change.field}</span>
+                <span className="text-slate-400 line-through truncate">{change.oldVal || "-"}</span>
+                <span className="text-slate-900 font-medium truncate">{change.newVal}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+function ScrollAnchor({ onIntersect, disabled }: { onIntersect: () => void; disabled?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current || disabled) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) onIntersect();
+    });
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [onIntersect, disabled]);
+  return <div ref={ref} className="h-4 w-full opacity-0 pointer-events-none" aria-hidden="true" />;
+}
 
 export default function ActivityPage() {
   const { user } = useAuth();
@@ -694,6 +845,14 @@ export default function ActivityPage() {
     return (new URLSearchParams(window.location.search).get("quick") as QuickFilter) || "all";
   });
 
+    const [viewMode, setViewMode] = useState<"timeline" | "detailed">("timeline");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const url = new URLSearchParams(window.location.search);
+    return Boolean(url.get("userId") || url.get("teamId") || (url.get("rtype") && url.get("rtype") !== "all") || url.get("preset") === "custom");
+  });
+
   const [filterDeptId, setFilterDeptId] = useState("");
   const [filterDesignation, setFilterDesignation] = useState("all");
   const [filterTeamId, setFilterTeamId] = useState(() => {
@@ -709,6 +868,8 @@ export default function ActivityPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams();
+    if (viewMode !== "timeline") params.set("view", viewMode);
+    if (searchQuery) params.set("q", searchQuery);
     if (scope !== "self") params.set("scope", scope);
     if (timePreset !== "today") params.set("preset", timePreset);
     if (timePreset === "custom" && customStartDate) params.set("from", customStartDate);
@@ -755,9 +916,9 @@ export default function ActivityPage() {
       : null;
 
   const usersKey =
-    (isAdmin || isManager) && scope !== "self"
+    (isAdmin || isManager)
       ? [
-          "activity-filter-users",
+          "activity-filter-users-all",
           userListParams?.departmentId || "",
           userListParams?.teamId || "",
           userListParams?.role || "",
@@ -766,6 +927,12 @@ export default function ActivityPage() {
 
   const { data: usersData } = useSWR(usersKey, () => usersApi.list(userListParams!));
   const userOptions: UserOption[] = usersData?.data || [];
+
+  const userMap = useMemo(() => {
+    const map = new Map<string, string>();
+    userOptions.forEach(u => map.set(u.id, u.fullName));
+    return map;
+  }, [userOptions]);
 
   useEffect(() => {
     setFilterDeptId("");
@@ -924,14 +1091,23 @@ export default function ActivityPage() {
     () => allActivities.filter((activity) => matchesQuickFilter(activity, quickFilter)),
     [allActivities, quickFilter],
   );
-  const visibleActivities = useMemo(
-    () =>
-      baseVisibleActivities.filter((activity) =>
-        showSystemEvents ? true : !SYSTEM_ACTIVITY_TYPES.has(activity.activity_type),
-      ),
-    [baseVisibleActivities, showSystemEvents],
-  );
-  const groupedActivities = useMemo(() => buildResourceGroups(visibleActivities), [visibleActivities]);
+  const visibleActivities = useMemo(() => {
+    let evs = baseVisibleActivities;
+    if (!showSystemEvents) {
+      evs = evs.filter((a) => !SYSTEM_ACTIVITY_TYPES.has(a.activity_type));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      evs = evs.filter((a) => 
+        (a.user?.full_name || "").toLowerCase().includes(q) ||
+        (formatActivityDescription(a)).toLowerCase().includes(q) ||
+        (getEntityLabel(a)).toLowerCase().includes(q) ||
+        (a.activity_type || "").toLowerCase().includes(q)
+      );
+    }
+    return evs;
+  }, [baseVisibleActivities, showSystemEvents, searchQuery]);
+  const detailedSections = useMemo(() => buildDetailedSections(visibleActivities), [visibleActivities]);
   const hiddenSystemCount = useMemo(
     () =>
       baseVisibleActivities.filter((activity) =>
@@ -939,6 +1115,22 @@ export default function ActivityPage() {
       ).length,
     [baseVisibleActivities],
   );
+
+  const activeFilterLabels = useMemo(() => {
+    const labels = [];
+    if (timePreset !== "today") labels.push(timePreset === "custom" ? "Custom Range" : timePreset.replace("-", " "));
+    if (activityType !== "all") labels.push(formatFieldName(activityType));
+    if (resourceType !== "all") labels.push(resourceLabels[resourceType as ResourceGroupKey] || resourceType);
+    if (filterDeptId) labels.push("Department");
+    if (filterTeamId) labels.push("Team");
+    if (filterDesignation !== "all") labels.push(filterDesignation);
+    if (filterUserId && userOptions.length) {
+      const u = userOptions.find(u => u.id === filterUserId);
+      if (u) labels.push(u.fullName);
+    }
+    return labels;
+  }, [timePreset, activityType, resourceType, filterDeptId, filterTeamId, filterDesignation, filterUserId, userOptions]);
+
 
   const scopeOptions: Array<{ value: ActivityScope; label: string }> = isAdmin
     ? [
@@ -980,48 +1172,47 @@ export default function ActivityPage() {
           )}
         </div>
       </div>
-      <Card className="border-slate-200">
+      <Card className="border-slate-200 overflow-visible shadow-sm">
         <CardContent className="space-y-4 p-5">
-          <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Today&apos;s Activity</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {summaryItems.map((item) => {
-                  const isActive = quickFilter === item.id;
-                  return (
-                    <Button
-                      key={item.id}
-                      type="button"
-                      variant={isActive ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setQuickFilter(isActive ? "all" : item.id)}
-                      className={cn(
-                        "h-auto rounded-full px-3 py-1.5 font-medium",
-                        isActive
-                          ? "bg-slate-900 text-white hover:bg-slate-800"
-                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100",
-                      )}
-                    >
-                      {item.title} ({item.value})
-                    </Button>
-                  );
-                })}
-              </div>
+          {/* Summary String */}
+          <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold text-slate-900">
+                Showing {visibleActivities.length} activities
+              </span>
+              {activeFilterLabels.length > 0 && (
+                <span className="text-sm text-slate-600">
+                  • Filtered by: <span className="font-medium capitalize text-slate-800">{activeFilterLabels.join(" • ")}</span>
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-600">Show system events</span>
+              <span className="text-sm font-medium text-slate-600">Show system events</span>
               <Switch checked={showSystemEvents} onCheckedChange={setShowSystemEvents} />
             </div>
           </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Date Range
+
+          {/* Primary Filters Row */}
+          <div className="flex flex-wrap items-end gap-3 pt-1">
+            <div className="flex-1 min-w-[200px] flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                Search
               </label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                <Input 
+                  placeholder="Search activities..." 
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-9 h-10 w-full"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Date Range</label>
               <Select value={timePreset} onValueChange={(value) => setTimePreset(value as TimePreset)}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-40 h-10"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="today">Today</SelectItem>
                   <SelectItem value="yesterday">Yesterday</SelectItem>
@@ -1032,162 +1223,91 @@ export default function ActivityPage() {
               </Select>
             </div>
 
-            {timePreset === "custom" && (
-              <>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    From
-                  </label>
-                  <Input
-                    type="date"
-                    value={customStartDate}
-                    onChange={(event) => setCustomStartDate(event.target.value)}
-                    className="w-40"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    To
-                  </label>
-                  <Input
-                    type="date"
-                    value={customEndDate}
-                    onChange={(event) => setCustomEndDate(event.target.value)}
-                    className="w-40"
-                  />
-                </div>
-              </>
-            )}
-          </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Activity Type</label>
+              <Select value={activityType} onValueChange={setActivityType}>
+                <SelectTrigger className="w-40 h-10"><SelectValue placeholder="All Types" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="create">Created</SelectItem>
+                  <SelectItem value="update">Updated</SelectItem>
+                  <SelectItem value="status_change">Status Change</SelectItem>
+                  <SelectItem value="comment">Comment</SelectItem>
+                  <SelectItem value="complete">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="h-px bg-slate-100" />
-
-          <div className="flex flex-wrap items-end gap-3">
             {(isAdmin || isManager) && (
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  User Scope
-                </label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">User Scope</label>
                 <Select value={scope} onValueChange={(value) => setScope(value as ActivityScope)}>
-                  <SelectTrigger className="w-52">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="w-48 h-10"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {scopeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
+                    {scopeOptions.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
             )}
 
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Activity Type
-              </label>
-              <Select value={activityType} onValueChange={setActivityType}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="comment">Comments</SelectItem>
-                  <SelectItem value="status_change">Status Changes</SelectItem>
-                  <SelectItem value="create">Creates</SelectItem>
-                  <SelectItem value="update">Updates</SelectItem>
-                  <SelectItem value="delete">Deletes</SelectItem>
-                  <SelectItem value="complete">Completions</SelectItem>
-                  <SelectItem value="task_create">Task Created</SelectItem>
-                  <SelectItem value="task_update">Task Updated</SelectItem>
-                  <SelectItem value="task_reassign">Task Reassigned</SelectItem>
-                  <SelectItem value="clock_in">Clock In</SelectItem>
-                  <SelectItem value="clock_out">Clock Out</SelectItem>
-                  <SelectItem value="login">Logins</SelectItem>
-                  <SelectItem value="logout">Logouts</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Resource Type
-              </label>
-              <Select value={resourceType} onValueChange={setResourceType}>
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Resources</SelectItem>
-                  <SelectItem value="lead">Leads</SelectItem>
-                  <SelectItem value="task">Tasks</SelectItem>
-                  <SelectItem value="user">Users</SelectItem>
-                  <SelectItem value="attendance">Attendance</SelectItem>
-                  <SelectItem value="project">Projects</SelectItem>
-                  <SelectItem value="team">Teams</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Button 
+              variant={showAdvancedFilters ? "secondary" : "outline"} 
+              className="h-10 gap-2" 
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            >
+              <FilterIcon className="h-4 w-4" />
+              Advanced
+            </Button>
           </div>
 
-          {showUserFilterPanel && (
-            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          {/* Advanced Filters */}
+          {showAdvancedFilters && (
+            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 mt-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Resource Type</label>
+                <Select value={resourceType} onValueChange={setResourceType}>
+                  <SelectTrigger className="w-44 bg-white"><SelectValue placeholder="All Resources" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Resources</SelectItem>
+                    <SelectItem value="lead">Leads</SelectItem>
+                    <SelectItem value="task">Tasks</SelectItem>
+                    <SelectItem value="attendance">Attendance</SelectItem>
+                    <SelectItem value="project">Projects</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {isAdmin && scope !== "team" && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Department
-                    {scopeNeedsDept && <span className="ml-1 text-red-500">*</span>}
-                  </label>
-                  <Select
-                    value={filterDeptId || "all"}
-                    onValueChange={(value) => setFilterDeptId(value === "all" ? "" : value)}
-                  >
-                    <SelectTrigger className="w-52 bg-white">
-                      <SelectValue placeholder="All Departments" />
-                    </SelectTrigger>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Org Filter (Dept)</label>
+                  <Select value={filterDeptId || "all"} onValueChange={(v) => setFilterDeptId(v === "all" ? "" : v)}>
+                    <SelectTrigger className="w-48 bg-white"><SelectValue placeholder="All Departments" /></SelectTrigger>
                     <SelectContent>
-                      {!scopeNeedsDept && <SelectItem value="all">All Departments</SelectItem>}
-                      {departments.map((department) => (
-                        <SelectItem key={department.id} value={department.id}>
-                          {department.name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="all">All Departments</SelectItem>
+                      {departments.map((d) => (<SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
 
               {isAdmin && scope === "team" && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Team <span className="ml-1 text-red-500">*</span>
-                  </label>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Org Filter (Team)</label>
                   <Select value={filterTeamId || ""} onValueChange={setFilterTeamId}>
-                    <SelectTrigger className="w-52 bg-white">
-                      <SelectValue placeholder="Select Team" />
-                    </SelectTrigger>
+                    <SelectTrigger className="w-48 bg-white"><SelectValue placeholder="Select Team" /></SelectTrigger>
                     <SelectContent>
-                      {teamsForScope.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))}
+                      {teamsForScope.map((team) => (<SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Designation
-                </label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Role Filter</label>
                 <Select value={filterDesignation} onValueChange={setFilterDesignation}>
-                  <SelectTrigger className="w-44 bg-white">
-                    <SelectValue placeholder="All Designations" />
-                  </SelectTrigger>
+                  <SelectTrigger className="w-44 bg-white"><SelectValue placeholder="All Roles" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Designations</SelectItem>
+                    <SelectItem value="all">All Roles</SelectItem>
                     {isAdmin && <SelectItem value="admin">Admin</SelectItem>}
                     <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="employee">Employee</SelectItem>
@@ -1195,68 +1315,111 @@ export default function ActivityPage() {
                 </Select>
               </div>
 
-              {scope !== "team" && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    User
-                    {scopeNeedsUser && <span className="ml-1 text-red-500">*</span>}
-                  </label>
-                  <Select
-                    value={filterUserId || "all"}
-                    onValueChange={(value) => setFilterUserId(value === "all" ? "" : value)}
-                    disabled={userOptions.length === 0}
-                  >
-                    <SelectTrigger className="w-56 bg-white">
-                      <SelectValue placeholder={scopeNeedsUser ? "Select User" : "All Users"} />
-                    </SelectTrigger>
+              {showUserFilterPanel && scope !== "team" && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">User</label>
+                  <Select value={filterUserId || "all"} onValueChange={(v) => setFilterUserId(v === "all" ? "" : v)}>
+                    <SelectTrigger className="w-56 bg-white"><SelectValue placeholder="All Users" /></SelectTrigger>
                     <SelectContent>
-                      {!scopeNeedsUser && <SelectItem value="all">All Users</SelectItem>}
-                      {userOptions.map((option) => (
-                        <SelectItem key={option.id} value={option.id}>
-                          <span>{option.fullName}</span>
-                          <span className="ml-1.5 text-xs capitalize text-slate-400">
-                            ({option.role || "-"})
-                          </span>
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="all">All Users</SelectItem>
+                      {userOptions.map((o) => (<SelectItem key={o.id} value={o.id}>{o.fullName}</SelectItem>))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
+            </div>
+          )}
 
-              <button
-                type="button"
+          {/* Smart Filter Chips */}
+          {activeFilterLabels.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 mt-2">
+              <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Active Filters:</span>
+              {activeFilterLabels.map((lbl, i) => (
+                <Badge key={i} variant="secondary" className="px-2.5 py-1 rounded border-slate-200 text-xs font-semibold capitalize bg-white text-slate-700">
+                  {lbl} <X className="h-3 w-3 ml-1.5 -mr-0.5 opacity-50 block" /> {/* Pseudo delete icon, full delete handled by clear all for now */}
+                </Badge>
+              ))}
+              <button 
                 onClick={() => {
+                  setTimePreset("today");
+                  setActivityType("all");
+                  setResourceType("all");
                   setFilterDeptId("");
-                  setFilterDesignation("all");
                   setFilterTeamId("");
+                  setFilterDesignation("all");
                   setFilterUserId("");
                 }}
-                className="self-end pb-2 text-xs text-slate-500 underline underline-offset-2 transition-colors hover:text-slate-800"
+                className="text-xs font-medium text-blue-600 ml-2 hover:underline"
               >
-                Reset
+                Clear all
               </button>
             </div>
           )}
         </CardContent>
       </Card>
-      <Card className="border-slate-200">
-        <CardHeader className="border-b border-slate-100">
+      <Card className="border-slate-200 border-none shadow-none bg-transparent">
+        <CardHeader className="px-0 pt-2 pb-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <CardTitle className="flex items-center gap-2 text-xl text-slate-900">
-              <Activity className="h-5 w-5" />
-              Structured Activity Feed
+            <CardTitle className="flex items-center gap-2 text-xl text-slate-900 font-bold">
+              <Activity className="h-5 w-5 text-primary" />
+              Activity Feed
             </CardTitle>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-              <Badge variant="outline">{groupedActivities.length} resource groups</Badge>
+            
+            <div className="flex items-center gap-2">
+               <div className="flex p-1 rounded-lg border border-slate-200 bg-white shadow-sm">
+                 <button 
+                    onClick={() => setViewMode("timeline")} 
+                    className={cn("px-4 py-1.5 text-xs font-semibold rounded-md transition-all", viewMode === "timeline" ? "bg-slate-900 text-white shadow" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
+                 >
+                   Timeline
+                 </button>
+                 <button 
+                    onClick={() => setViewMode("detailed")} 
+                    className={cn("px-4 py-1.5 text-xs font-semibold rounded-md transition-all", viewMode === "detailed" ? "bg-slate-900 text-white shadow" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
+                 >
+                   Detailed View
+                 </button>
+               </div>
+            </div>
+          </div>
+          {/* We hide the old badge array or keep it minimal */}
+          <div className="hidden">
+              <Badge variant="outline">{detailedSections.length} resource groups</Badge>
               <Badge variant="outline">{visibleActivities.length} visible items</Badge>
               {!showSystemEvents && hiddenSystemCount > 0 && (
                 <Badge variant="secondary">{hiddenSystemCount} system events hidden</Badge>
               )}
             </div>
-          </div>
         </CardHeader>
-        <CardContent className="p-5">
+        <CardContent className="p-0 sm:p-2">
+          {viewMode === "timeline" && canQueryActivities && !isLoading && !error && visibleActivities.length > 0 && (
+             <div className="space-y-8 max-w-4xl pt-4 pb-12 w-full">
+               {buildTimeSections(visibleActivities).map(section => (
+                  <div key={section.key} className="relative">
+                    <div className="bg-background/95 backdrop-blur-sm py-2 px-1 mb-4 my-2 flex items-center gap-3">
+                       <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">{section.label}</h3>
+                       <Badge variant="secondary" className="text-xs px-2 bg-slate-100 text-slate-600">{section.activities.length}</Badge>
+                       <div className="h-px bg-slate-200 flex-1" />
+                    </div>
+                    <div className="relative pl-1 sm:pl-2">
+                       {/* Vertical Spine */}
+                       <div className="absolute top-4 bottom-0 left-[26px] sm:left-[31px] w-px bg-slate-200" />
+                       <div className="space-y-4">
+                         {section.activities.map(act => renderTimelineActivityItem({
+                             activity: act,
+                             entityName: getEntityLabel(act),
+                             expandedActivities,
+                             setExpandedActivities,
+                             userMap
+                         }))}
+                       </div>
+                    </div>
+                  </div>
+               ))}
+             </div>
+          )}
+
+          <div className={viewMode === "timeline" ? "hidden" : "block"}>
           {!canQueryActivities ? (
             <div className="py-12 text-center text-slate-500">
               {scopeNeedsDept
@@ -1273,331 +1436,94 @@ export default function ActivityPage() {
             </div>
           ) : error ? (
             <div className="py-12 text-center text-red-500">Failed to load activities</div>
-          ) : groupedActivities.length === 0 ? (
+          ) : detailedSections.length === 0 ? (
             <div className="py-12 text-center text-slate-500">
               <Activity className="mx-auto mb-4 h-12 w-12 text-slate-300" />
               <p>No activities found for the current filters.</p>
             </div>
           ) : (
-            <>
-              <div className="space-y-4">
-                {groupedActivities.map((group) => {
-                  const GroupIcon = group.icon;
-                  const isOpen = openResources.has(group.key);
-                  const dateEntitySections = buildDateEntitySections(group.entities, timePreset);
+            <div className="space-y-6 max-w-4xl w-full mx-auto" style={{ paddingTop: '16px', paddingBottom: '32px' }}>
+              {detailedSections.map((dateSection) => {
+                return (
+                  <div key={dateSection.dateKey} className="relative">
+                    <div className="bg-background/95 backdrop-blur-sm py-2 px-1 mb-4 flex items-center justify-between gap-3">
+                       <h3 className="text-sm font-bold tracking-tight text-slate-800">{dateSection.dateLabel}</h3>
+                       <div className="flex items-center gap-3 flex-1 ml-3">
+                         <div className="h-px bg-slate-200 flex-1" />
+                         <Badge variant="secondary" className="text-xs px-2 bg-slate-100 text-slate-600">
+                           {dateSection.resources.reduce((acc, r) => acc + r.activities.length, 0)} events
+                         </Badge>
+                       </div>
+                    </div>
 
-                  return (
-                    <Collapsible
-                      key={group.key}
-                      open={isOpen}
-                      onOpenChange={(nextOpen) =>
-                        setOpenResources((prev) => {
-                          const next = new Set(prev);
-                          if (nextOpen) next.add(group.key);
-                          else next.delete(group.key);
-                          return next;
-                        })
-                      }
-                    >
-                      <div
-                        className={cn(
-                          "overflow-hidden rounded-2xl border border-slate-200",
-                          group.accentClass,
-                        )}
-                      >
-                        <CollapsibleTrigger className="w-full">
-                          <div className="flex items-center justify-between gap-4 px-5 py-4 text-left">
-                            <div className="flex items-center gap-4">
-                              <div className="rounded-xl bg-white/80 p-3 shadow-sm">
-                                <GroupIcon className="h-5 w-5 text-slate-700" />
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h3 className="text-lg font-semibold text-slate-900">{group.label}</h3>
-                                  <Badge variant="secondary">{group.activities.length}</Badge>
-                                </div>
-                                <p className="text-sm text-slate-500">
-                                  {group.entities.length} grouped {group.entities.length === 1 ? "entity" : "entities"}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="rounded-full bg-white/80 p-2">
-                              {isOpen ? (
-                                <ChevronDown className="h-4 w-4 text-slate-700" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 text-slate-700" />
-                              )}
-                            </div>
-                          </div>
-                        </CollapsibleTrigger>
+                    <div className="space-y-4">
+                      {dateSection.resources.map((resourceGroup) => {
+                        const rKey = `${dateSection.dateKey}-${resourceGroup.key}`;
+                        const isOpen = openResources.has(rKey);
+                        const GroupIcon = resourceGroup.icon;
 
-                        <CollapsibleContent>
-                          <div className="space-y-4 border-t border-white/70 bg-white/60 p-4">
-                            {isDateAccordionRange(timePreset)
-                              ? dateEntitySections.map((dateSection) => {
-                                  const dateSectionKey = `${group.key}-${dateSection.key}`;
-                                  const isDateSectionOpen = openDateGroups.has(dateSectionKey);
-
-                                  return (
-                                    <Collapsible
-                                      key={dateSectionKey}
-                                      open={isDateSectionOpen}
-                                      onOpenChange={(nextOpen) =>
-                                        setOpenDateGroups((prev) => {
-                                          const next = new Set(prev);
-                                          if (nextOpen) next.add(dateSectionKey);
-                                          else next.delete(dateSectionKey);
-                                          return next;
-                                        })
-                                      }
-                                    >
-                                      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                                        <CollapsibleTrigger className="w-full">
-                                          <div className="flex items-center justify-between gap-4 px-4 py-4 text-left">
-                                            <div>
-                                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                                {dateSection.label}
-                                              </p>
-                                              <h4 className="mt-1 text-lg font-semibold text-slate-900">
-                                                {dateSection.entities.length}{" "}
-                                                {group.key === "lead"
-                                                  ? dateSection.entities.length === 1
-                                                    ? "lead"
-                                                    : "leads"
-                                                  : dateSection.entities.length === 1
-                                                    ? "entity"
-                                                    : "entities"}
-                                              </h4>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                              <Badge variant="outline">
-                                                {dateSection.entities.length} grouped
-                                              </Badge>
-                                              {isDateSectionOpen ? (
-                                                <ChevronDown className="h-4 w-4 text-slate-500" />
-                                              ) : (
-                                                <ChevronRight className="h-4 w-4 text-slate-500" />
-                                              )}
-                                            </div>
-                                          </div>
-                                        </CollapsibleTrigger>
-
-                                        <CollapsibleContent>
-                                          <div className="space-y-4 border-t border-slate-100 px-4 py-4">
-                                            {dateSection.entities.map((entity) => {
-                                              const isEntityOpen = openEntities.has(entity.entityId);
-                                              const timeSections = buildTimeSections(
-                                                entity.activities,
-                                                timePreset,
-                                              );
-
-                                              return (
-                                                <Collapsible
-                                                  key={entity.entityId}
-                                                  open={isEntityOpen}
-                                                  onOpenChange={(nextOpen) =>
-                                                    setOpenEntities((prev) => {
-                                                      const next = new Set(prev);
-                                                      if (nextOpen) next.add(entity.entityId);
-                                                      else next.delete(entity.entityId);
-                                                      return next;
-                                                    })
-                                                  }
-                                                >
-                                                  <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                                                    <CollapsibleTrigger className="w-full">
-                                                      <div className="flex items-center justify-between gap-4 px-4 py-4 text-left">
-                                                        <div>
-                                                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                                            {entity.resourceLabel}
-                                                          </p>
-                                                          <h4 className="mt-1 text-lg font-semibold text-slate-900">
-                                                            {entity.entityName}
-                                                          </h4>
-                                                        </div>
-                                                        <div className="flex items-center gap-3">
-                                                          <Badge variant="outline">
-                                                            {entity.activities.length} events
-                                                          </Badge>
-                                                          {isEntityOpen ? (
-                                                            <ChevronDown className="h-4 w-4 text-slate-500" />
-                                                          ) : (
-                                                            <ChevronRight className="h-4 w-4 text-slate-500" />
-                                                          )}
-                                                        </div>
-                                                      </div>
-                                                    </CollapsibleTrigger>
-
-                                                    <CollapsibleContent>
-                                                      <div className="border-t border-slate-100 px-4 py-4">
-                                                        <div className="space-y-5">
-                                                          {timeSections.map((section) => (
-                                                            <div key={`${entity.entityId}-${section.key}`} className="space-y-3">
-                                                              <div className="space-y-3">
-                                                                {section.activities.map((activity) =>
-                                                                  renderActivityItem({
-                                                                    activity,
-                                                                    entityName: entity.entityName,
-                                                                    expandedActivities,
-                                                                    setExpandedActivities,
-                                                                  }),
-                                                                )}
-                                                              </div>
-                                                            </div>
-                                                          ))}
-                                                        </div>
-                                                      </div>
-                                                    </CollapsibleContent>
-                                                  </div>
-                                                </Collapsible>
-                                              );
-                                            })}
-                                          </div>
-                                        </CollapsibleContent>
-                                      </div>
-                                    </Collapsible>
-                                  );
-                                })
-                              : group.entities.map((entity) => {
-                              const isEntityOpen = openEntities.has(entity.entityId);
-                              const timeSections = buildTimeSections(entity.activities, timePreset);
-
-                              return (
-                                <Collapsible
-                                  key={entity.entityId}
-                                  open={isEntityOpen}
-                                  onOpenChange={(nextOpen) =>
-                                    setOpenEntities((prev) => {
-                                      const next = new Set(prev);
-                                      if (nextOpen) next.add(entity.entityId);
-                                      else next.delete(entity.entityId);
-                                      return next;
-                                    })
-                                  }
-                                >
-                                  <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                                    <CollapsibleTrigger className="w-full">
-                                      <div className="flex items-center justify-between gap-4 px-4 py-4 text-left">
-                                        <div>
-                                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                            {entity.resourceLabel}
-                                          </p>
-                                          <h4 className="mt-1 text-lg font-semibold text-slate-900">
-                                            {entity.entityName}
-                                          </h4>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                          <Badge variant="outline">{entity.activities.length} events</Badge>
-                                          {isEntityOpen ? (
-                                            <ChevronDown className="h-4 w-4 text-slate-500" />
-                                          ) : (
-                                            <ChevronRight className="h-4 w-4 text-slate-500" />
-                                          )}
-                                        </div>
-                                      </div>
-                                    </CollapsibleTrigger>
-
-                                    <CollapsibleContent>
-                                      <div className="border-t border-slate-100 px-4 py-4">
-                                        <div className="space-y-5">
-                                          {timeSections.map((section) => {
-                                            const sectionKey = `${entity.entityId}-${section.key}`;
-                                            const isDateSectionOpen = openDateGroups.has(sectionKey);
-
-                                            return (
-                                              <div key={sectionKey} className="space-y-3">
-                                                {section.collapsible ? (
-                                                  <Collapsible
-                                                    open={isDateSectionOpen}
-                                                    onOpenChange={(nextOpen) =>
-                                                      setOpenDateGroups((prev) => {
-                                                        const next = new Set(prev);
-                                                        if (nextOpen) next.add(sectionKey);
-                                                        else next.delete(sectionKey);
-                                                        return next;
-                                                      })
-                                                    }
-                                                  >
-                                                    <CollapsibleTrigger className="w-full">
-                                                      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left">
-                                                        <div className="flex items-center gap-3">
-                                                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                                                            {section.label}
-                                                          </p>
-                                                          <Badge variant="outline">
-                                                            {section.activities.length} events
-                                                          </Badge>
-                                                        </div>
-                                                        {isDateSectionOpen ? (
-                                                          <ChevronDown className="h-4 w-4 text-slate-500" />
-                                                        ) : (
-                                                          <ChevronRight className="h-4 w-4 text-slate-500" />
-                                                        )}
-                                                      </div>
-                                                    </CollapsibleTrigger>
-                                                    <CollapsibleContent className="pt-3">
-                                                      <div className="space-y-3">
-                                                        {section.activities.map((activity) =>
-                                                          renderActivityItem({
-                                                            activity,
-                                                            entityName: entity.entityName,
-                                                            expandedActivities,
-                                                            setExpandedActivities,
-                                                          }),
-                                                        )}
-                                                      </div>
-                                                    </CollapsibleContent>
-                                                  </Collapsible>
-                                                ) : (
-                                                  <>
-                                                    <div className="flex items-center gap-3">
-                                                      <div className="h-px flex-1 bg-slate-100" />
-                                                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                                                        {section.label}
-                                                      </p>
-                                                      <div className="h-px flex-1 bg-slate-100" />
-                                                    </div>
-
-                                                    <div className="space-y-3">
-                                                      {section.activities.map((activity) =>
-                                                        renderActivityItem({
-                                                          activity,
-                                                          entityName: entity.entityName,
-                                                          expandedActivities,
-                                                          setExpandedActivities,
-                                                        }),
-                                                      )}
-                                                    </div>
-                                                  </>
-                                                )}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    </CollapsibleContent>
+                        return (
+                          <Collapsible
+                            key={rKey}
+                            open={isOpen}
+                            onOpenChange={(nextOpen) =>
+                              setOpenResources((prev) => {
+                                const next = new Set(prev);
+                                if (nextOpen) next.add(rKey);
+                                else next.delete(rKey);
+                                return next;
+                              })
+                            }
+                          >
+                            <div className={cn("rounded-xl border border-slate-200 shadow-sm overflow-hidden", resourceGroup.accentClass)}>
+                              <CollapsibleTrigger className="w-full">
+                                <div className="flex items-center justify-between gap-4 px-4 py-3 bg-white/50 text-left hover:bg-white/80 transition-colors">
+                                  <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100">
+                                      <GroupIcon className="h-4 w-4 text-slate-700" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-sm font-bold text-slate-900">
+                                        {resourceGroup.label} ({new Set(resourceGroup.activities.map((a: any) => a.entity_id || a.lead_id || a.user_id)).size})
+                                      </h4>
+                                      <p className="text-xs font-medium text-slate-500">
+                                        {resourceGroup.activities.length} activities
+                                      </p>
+                                    </div>
                                   </div>
-                                </Collapsible>
-                              );
-                            })}
-                          </div>
-                        </CollapsibleContent>
-                      </div>
-                    </Collapsible>
-                  );
-                })}
-              </div>
+                                  <div className="mr-2">
+                                    {isOpen ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
+                                  </div>
+                                </div>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="border-t border-slate-100 bg-white/70 p-4 space-y-3">
+                                  {resourceGroup.activities.map(act => renderActivityItem({
+                                    activity: act,
+                                    entityName: getEntityLabel(act),
+                                    expandedActivities,
+                                    setExpandedActivities,
+                                    userMap
+                                  }))}
+                                </div>
+                              </CollapsibleContent>
+                            </div>
+                          </Collapsible>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          </div>
 
-              {!isLoading && meta.total > allActivities.length && (
-                <div className="pt-6 text-center">
-                  <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
-                    {isLoadingMore
-                      ? "Loading more activity..."
-                      : `Load more (${meta.total - allActivities.length} remaining)`}
-                  </Button>
-                </div>
-              )}
-            </>
+          {!isLoading && meta.total > allActivities.length && (
+            <div className="pt-6 pb-2 text-center text-slate-500 text-sm flex justify-center w-full">
+              {isLoadingMore ? "Loading more activity..." : null}
+              <ScrollAnchor onIntersect={handleLoadMore} disabled={isLoadingMore} />
+            </div>
           )}
         </CardContent>
       </Card>

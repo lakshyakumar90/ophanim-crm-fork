@@ -5,7 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { format } from "date-fns";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
-import { tasksApi, usersApi, leadsApi } from "@/lib/api";
+import { tasksApi, usersApi, leadsApi, teamsApi } from "@/lib/api";
 import { getDepartments } from "@/lib/supabase-queries";
 import { cn } from "@/lib/utils";
 import {
@@ -49,6 +49,7 @@ import {
   UserCircle,
   ExternalLink,
   Check,
+  Trash2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -76,12 +77,34 @@ export default function RemindersPage() {
   const [searchTask, setSearchTask] = useState<string>("");
   const [reminderType, setReminderType] = useState<"all" | "tasks" | "leads">("all");
 
+  // Admin/global: see all users
   const { data: usersData } = useSWR(
-    (canSeeAllFilters || isManager) ? ["users-list", searchUser] : null,
-    () => usersApi.list({ search: searchUser, limit: 15 }),
+    canSeeAllFilters ? ["users-list", searchUser] : null,
+    () => usersApi.list({ search: searchUser, limit: 50 }),
     { revalidateOnFocus: false },
   );
 
+  // Manager (non-admin): see only their primary team's members
+  const { data: teamMembersData } = useSWR(
+    !canSeeAllFilters && isManager && user?.teamId ? ["team-members-reminder", user.teamId] : null,
+    () => teamsApi.getMembers(user!.teamId!),
+    { revalidateOnFocus: false },
+  );
+
+  // Unified list for user dropdown
+  const userListForDropdown = useMemo(() => {
+    if (canSeeAllFilters) return (usersData?.data || []) as any[];
+    if (isManager) {
+      const members = (Array.isArray(teamMembersData) ? teamMembersData : []) as any[];
+      if (!searchUser) return members;
+      return members.filter((m: any) =>
+        (m.fullName || m.full_name || "").toLowerCase().includes(searchUser.toLowerCase()),
+      );
+    }
+    return [];
+  }, [canSeeAllFilters, isManager, usersData, teamMembersData, searchUser]);
+
+  const showUserFilter = canSeeAllFilters || isManager;
   const { data: departmentsData } = useSWR("departments", () => getDepartments(), {
     revalidateOnFocus: false,
   });
@@ -220,6 +243,47 @@ export default function RemindersPage() {
     [mutateLeads],
   );
 
+  const handleDeleteLeadReminder = useCallback(
+    async (leadId: string, reminderId: string) => {
+      if (!window.confirm("Are you sure you want to delete this reminder?")) return;
+      try {
+        await leadsApi.deleteReminder(leadId, reminderId);
+        toast.success("Reminder deleted");
+        void mutateLeads();
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || "Failed to delete reminder");
+      }
+    },
+    [mutateLeads],
+  );
+
+  const handleMarkCompleteTask = useCallback(
+    async (taskId: string) => {
+      try {
+        await tasksApi.update(taskId, { status: "completed" });
+        toast.success("Task marked as completed");
+        void mutateTasks();
+      } catch (err: any) {
+        toast.error("Failed to complete task");
+      }
+    },
+    [mutateTasks],
+  );
+
+  const handleDeleteTask = useCallback(
+    async (taskId: string) => {
+      if (!window.confirm("Are you sure you want to delete this task?")) return;
+      try {
+        await tasksApi.delete(taskId);
+        toast.success("Task deleted");
+        void mutateTasks();
+      } catch (err: any) {
+        toast.error("Failed to delete task");
+      }
+    },
+    [mutateTasks],
+  );
+
   const showTasks = reminderType === "all" || reminderType === "tasks";
   const showLeads = reminderType === "all" || reminderType === "leads";
 
@@ -261,14 +325,16 @@ export default function RemindersPage() {
             <ArrowUpDown className="h-4 w-4" />
           </Button>
 
-          {(canSeeAllFilters || isManager) && (
+          {showUserFilter && (
             <div className="relative w-[220px]">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full justify-start text-left font-normal">
                     <UserIcon className="mr-2 h-4 w-4" />
                     {selectedUserId
-                      ? usersData?.data?.find((u: any) => u.id === selectedUserId)?.fullName || "Selected User"
+                      ? userListForDropdown.find((u: any) => u.id === selectedUserId)?.fullName ||
+                        userListForDropdown.find((u: any) => u.id === selectedUserId)?.full_name ||
+                        "Selected User"
                       : "All Users"}
                   </Button>
                 </DropdownMenuTrigger>
@@ -282,13 +348,13 @@ export default function RemindersPage() {
                     />
                   </div>
                   <DropdownMenuItem onClick={() => setSelectedUserId(undefined)}>All Users</DropdownMenuItem>
-                  {usersData?.data?.map((u: any) => (
+                  {userListForDropdown.map((u: any) => (
                     <DropdownMenuItem key={u.id} onClick={() => setSelectedUserId(u.id)}>
                       <Avatar className="h-6 w-6 mr-2">
-                        <AvatarImage src={u.avatarUrl} />
-                        <AvatarFallback className="text-[10px]">{getInitials(u.fullName)}</AvatarFallback>
+                        <AvatarImage src={u.avatarUrl || u.avatar_url} />
+                        <AvatarFallback className="text-[10px]">{getInitials(u.fullName || u.full_name || "U")}</AvatarFallback>
                       </Avatar>
-                      <span className="truncate">{u.fullName}</span>
+                      <span className="truncate">{u.fullName || u.full_name}</span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -453,11 +519,21 @@ export default function RemindersPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                <Button asChild size="sm" variant="ghost" className="h-7 w-7 p-0" title="Open task">
-                                  <Link href={openHref}>
-                                    <ArrowRight className="h-4 w-4" />
-                                  </Link>
-                                </Button>
+                                <div className="flex items-center justify-end gap-1">
+                                  {t.status !== "completed" && t.status !== "cancelled" && (
+                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" title="Mark done" onClick={() => handleMarkCompleteTask(t.id)}>
+                                      <Check className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" title="Delete task" onClick={() => handleDeleteTask(t.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button asChild size="sm" variant="ghost" className="h-7 w-7 p-0" title="Open task">
+                                    <Link href={openHref}>
+                                      <ArrowRight className="h-4 w-4" />
+                                    </Link>
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -550,22 +626,31 @@ export default function RemindersPage() {
                           </TableCell>
                         )}
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button asChild size="sm" variant="ghost" className="h-7 w-7 p-0" title="Open lead">
-                              <Link href={leadId ? `/sales/leads/${leadId}` : "#"}>
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </Link>
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0"
-                              title="Mark done"
-                              onClick={() => handleMarkLeadDone(r.id)}
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                title="Mark done"
+                                onClick={() => handleMarkLeadDone(r.id)}
+                              >
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                title="Delete reminder"
+                                onClick={() => handleDeleteLeadReminder(leadId, r.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                              <Button asChild size="sm" variant="ghost" className="h-7 w-7 p-0" title="Open lead">
+                                <Link href={leadId ? `/sales/leads/${leadId}` : "#"}>
+                                  <ExternalLink className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                            </div>
                         </TableCell>
                       </TableRow>
                     );

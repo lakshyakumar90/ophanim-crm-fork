@@ -506,6 +506,14 @@ export async function updateTask(
         : "status_change"
       : "task_update";
 
+  const metadataChanges: Record<string, any> = {};
+  for (const key of Object.keys(changedNewValues)) {
+    metadataChanges[key] = {
+      old: changedOldValues[key],
+      new: changedNewValues[key]
+    };
+  }
+
   await supabaseAdmin.from("user_activities").insert({
     user_id: updatedBy,
     entity_type: "task",
@@ -520,6 +528,7 @@ export async function updateTask(
       from_status: currentTask.status,
       to_status: data.status,
       updates: Object.keys(changedNewValues),
+      ...metadataChanges,
     },
     created_at: getTimestampIST(),
   });
@@ -534,6 +543,7 @@ export async function updateTask(
     metadata: {
       from_status: currentTask.status,
       to_status: data.status,
+      ...metadataChanges,
     },
   });
 

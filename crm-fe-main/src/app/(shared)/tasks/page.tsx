@@ -28,6 +28,8 @@ import {
   Clock,
   ArrowRight,
   Filter,
+  Trash2,
+  Check,
 } from "lucide-react";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 
@@ -148,6 +150,25 @@ export default function GlobalTasksPage() {
   void isManager;
 
   const onSearchChange = useCallback((v: string) => setSearch(v), []);
+
+  const handleMarkComplete = useCallback(async (taskId: string) => {
+    try {
+      await tasksApi.update(taskId, { status: "completed" });
+      void mutate();
+    } catch (err) {
+      console.error(err);
+    }
+  }, [mutate]);
+
+  const handleDelete = useCallback(async (taskId: string) => {
+    if (!window.confirm("Are you sure you want to delete this task?")) return;
+    try {
+      await tasksApi.delete(taskId);
+      void mutate();
+    } catch (err) {
+      console.error(err);
+    }
+  }, [mutate]);
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
@@ -305,11 +326,21 @@ export default function GlobalTasksPage() {
                         )}
                       </div>
                     </div>
-                    <Button asChild variant="ghost" size="sm" className="shrink-0" title="Open task">
-                      <Link href={href}>
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {statusVal !== "completed" && statusVal !== "cancelled" && (
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" title="Mark Done" onClick={() => handleMarkComplete(t.id)}>
+                          <Check className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" title="Delete task" onClick={() => handleDelete(t.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0" title="Open task">
+                        <Link href={href}>
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );

@@ -56,13 +56,22 @@ export async function getTeams(): Promise<TeamRecord[]> {
     mapTeamRowToRecord(t as unknown as TeamRow),
   );
 
-  // Get member counts
-  for (const team of teams) {
-    const { count } = await supabaseAdmin
-      .from("users")
-      .select("id", { count: "exact", head: true })
-      .eq("team_id", team.id);
-    team.memberCount = count || 0;
+  // Get member counts from user_teams junction table
+  if (teams.length > 0) {
+    const teamIds = teams.map((t) => t.id);
+    const { data: memberRows } = await supabaseAdmin
+      .from("user_teams")
+      .select("team_id")
+      .in("team_id", teamIds);
+
+    const countMap: Record<string, number> = {};
+    for (const row of memberRows || []) {
+      const teamId = (row as { team_id: string }).team_id;
+      countMap[teamId] = (countMap[teamId] || 0) + 1;
+    }
+    for (const team of teams) {
+      team.memberCount = countMap[team.id] || 0;
+    }
   }
 
   return teams;
@@ -70,13 +79,10 @@ export async function getTeams(): Promise<TeamRecord[]> {
 
 /**
  * Get teams visible to a specific user based on their role
- * - Employees: See only their own team
- * - Managers: See teams they manage (where they are the manager)
+ * - Employees: See only teams they are a member of
+ * - Managers: See teams they manage
  * - Admins: See all teams
  */
-
-// ...
-
 export async function getTeamsForUser(
   authUser: AuthUser,
 ): Promise<TeamRecord[]> {
@@ -101,11 +107,18 @@ export async function getTeamsForUser(
       query = query.eq("manager_id", authUser.id);
     }
   } else {
-    // Employee sees only their own team
-    if (!authUser.teamId) {
-      return []; // No team assigned
+    // Employee: get all teams they are a member of via user_teams
+    const { data: memberships } = await supabaseAdmin
+      .from("user_teams")
+      .select("team_id")
+      .eq("user_id", authUser.id);
+
+    const teamIds = (memberships || []).map((m: any) => m.team_id as string);
+
+    if (teamIds.length === 0) {
+      return [];
     }
-    query = query.eq("id", authUser.teamId);
+    query = query.in("id", teamIds);
   }
 
   const { data, error } = await query;
@@ -118,22 +131,19 @@ export async function getTeamsForUser(
     mapTeamRowToRecord(t as unknown as TeamRow),
   );
 
-  // OPTIMIZED: Get all member counts in a single query
+  // Get member counts from user_teams junction table
   if (teams.length > 0) {
     const teamIds = teams.map((t) => t.id);
-    const { data: memberCounts } = await supabaseAdmin
-      .from("users")
+    const { data: memberRows } = await supabaseAdmin
+      .from("user_teams")
       .select("team_id")
       .in("team_id", teamIds);
 
-    // Build count map in memory
     const countMap: Record<string, number> = {};
-    for (const user of memberCounts || []) {
-      const teamId = (user as { team_id: string }).team_id;
+    for (const row of memberRows || []) {
+      const teamId = (row as { team_id: string }).team_id;
       countMap[teamId] = (countMap[teamId] || 0) + 1;
     }
-
-    // Apply counts to teams
     for (const team of teams) {
       team.memberCount = countMap[team.id] || 0;
     }
@@ -158,10 +168,10 @@ export async function getTeamById(teamId: string): Promise<TeamRecord> {
 
   const team = mapTeamRowToRecord(data as unknown as TeamRow);
 
-  // Get member count
+  // Get member count from user_teams
   const { count } = await supabaseAdmin
-    .from("users")
-    .select("id", { count: "exact", head: true })
+    .from("user_teams")
+    .select("*", { count: "exact", head: true })
     .eq("team_id", teamId);
   team.memberCount = count || 0;
 
@@ -192,17 +202,28 @@ export async function createTeam(input: {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  // If manager assigned, update their team_id
+  // If manager assigned, update their primary team_id (legacy) and add to user_teams
   if (input.managerId) {
     await supabaseAdmin
       .from("users")
       .update({ team_id: data.id })
       .eq("id", input.managerId);
+
+    // Add manager to user_teams with 'manager' role
+    await supabaseAdmin
+      .from("user_teams")
+      .upsert({
+        user_id: input.managerId,
+        team_id: data.id,
+        role: "manager",
+      })
+      .eq("user_id", input.managerId)
+      .eq("team_id", data.id);
   }
 
   // Log activity
   await supabaseAdmin.from("user_activities").insert({
-    user_id: input.managerId || data.id, // Fallback if no manager
+    user_id: input.managerId || data.id,
     entity_type: "team",
     entity_id: data.id,
     activity_type: "team_create",
@@ -289,7 +310,13 @@ export async function updateTeam(
  * Delete team
  */
 export async function deleteTeam(teamId: string): Promise<void> {
-  // First, remove team_id from all users in this team
+  // Remove all user_teams memberships for this team
+  await supabaseAdmin
+    .from("user_teams")
+    .delete()
+    .eq("team_id", teamId);
+
+  // Remove primary team_id reference from users
   await supabaseAdmin
     .from("users")
     .update({ team_id: null })
@@ -301,20 +328,18 @@ export async function deleteTeam(teamId: string): Promise<void> {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  // Log activity
   await supabaseAdmin.from("user_activities").insert({
-    user_id: teamId, // No user context available here
+    user_id: teamId,
     entity_type: "team",
     entity_id: teamId,
     activity_type: "team_delete",
     title: "Team deleted",
     description: "Team deleted",
   });
-  // Note: logActivity dual-write skipped — no user context available in deleteTeam
 }
 
 /**
- * Add user to team
+ * Add user to team (supports multiple teams per user)
  */
 export async function addUserToTeam(
   teamId: string,
@@ -334,10 +359,7 @@ export async function addUserToTeam(
     throw ApiError.notFound("User");
   }
 
-  // Enforce department match
-  // If team has a department, user must belong to it (or have no department?)
-  // User explicitly said: "only show... of that department... do not let other department... add"
-  // So strict match if both exist.
+  // Enforce department match if both have a department set
   if (
     team.departmentId &&
     user.department_id &&
@@ -349,28 +371,37 @@ export async function addUserToTeam(
     );
   }
 
-  // If team has department but user doesn't, should we allow?
-  // Maybe allow, assuming they are being assigned to this department via the team?
-  // But usually users are assigned to department first.
-  // The user said "show employees of that department only".
-  // Let's enforce strictly: User MUST be in the department if team is in one.
   if (team.departmentId && !user.department_id) {
-    // Optional: Auto-assign user to department?
-    // Or reject? Matches "only show employees of that department".
-    // If they are not in the department, they shouldn't be added.
     throw new ApiError(
       ERROR_CODES.FORBIDDEN,
       "User is not assigned to the team's department",
     );
   }
 
+  // Insert into user_teams junction table (upsert to be idempotent)
   const { error } = await supabaseAdmin
-    .from("users")
-    .update({ team_id: teamId, updated_at: getCurrentTimestamp() })
-    .eq("id", userId);
+    .from("user_teams")
+    .upsert(
+      { user_id: userId, team_id: teamId, role: "member" },
+      { onConflict: "user_id,team_id" },
+    );
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+
+  // Also update primary team_id on users table if they don't have one yet
+  const { data: userFull } = await supabaseAdmin
+    .from("users")
+    .select("team_id")
+    .eq("id", userId)
+    .single();
+
+  if (!userFull?.team_id) {
+    await supabaseAdmin
+      .from("users")
+      .update({ team_id: teamId, updated_at: getCurrentTimestamp() })
+      .eq("id", userId);
   }
 
   // Log activity
@@ -394,23 +425,59 @@ export async function addUserToTeam(
 }
 
 /**
- * Remove user from team
+ * Remove user from a specific team
  */
-export async function removeUserFromTeam(userId: string): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from("users")
-    .update({ team_id: null, updated_at: getCurrentTimestamp() })
-    .eq("id", userId);
+export async function removeUserFromTeam(userId: string, teamId?: string): Promise<void> {
+  if (teamId) {
+    // Remove from specific team via user_teams junction
+    const { error } = await supabaseAdmin
+      .from("user_teams")
+      .delete()
+      .eq("user_id", userId)
+      .eq("team_id", teamId);
 
-  if (error) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+    if (error) {
+      throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+    }
+
+    // If this was their primary team, update primary team to another membership or null
+    const { data: userFull } = await supabaseAdmin
+      .from("users")
+      .select("team_id")
+      .eq("id", userId)
+      .single();
+
+    if (userFull?.team_id === teamId) {
+      // Find another team membership to use as primary
+      const { data: remaining } = await supabaseAdmin
+        .from("user_teams")
+        .select("team_id")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+
+      await supabaseAdmin
+        .from("users")
+        .update({ team_id: remaining?.team_id || null, updated_at: getCurrentTimestamp() })
+        .eq("id", userId);
+    }
+  } else {
+    // Legacy: remove from all teams
+    await supabaseAdmin
+      .from("user_teams")
+      .delete()
+      .eq("user_id", userId);
+
+    await supabaseAdmin
+      .from("users")
+      .update({ team_id: null, updated_at: getCurrentTimestamp() })
+      .eq("id", userId);
   }
 
-  // Log activity
   await supabaseAdmin.from("user_activities").insert({
     user_id: userId,
     entity_type: "team",
-    entity_id: userId, // No team ID easily available here without fetching
+    entity_id: teamId || userId,
     activity_type: "team_leave",
     title: "User left team",
     description: "User removed from team",
@@ -419,6 +486,7 @@ export async function removeUserFromTeam(userId: string): Promise<void> {
   await logActivity({
     actorId: userId,
     entityType: "team",
+    entityId: teamId || "",
     eventType: "team_left",
     source: "team",
     metadata: { user_id: userId },
@@ -426,30 +494,45 @@ export async function removeUserFromTeam(userId: string): Promise<void> {
 }
 
 /**
- * Get team members with details
+ * Get team members with details (using user_teams junction)
  */
 export async function getTeamMembersWithDetails(teamId: string) {
   const { data, error } = await supabaseAdmin
-    .from("users")
+    .from("user_teams")
     .select(
-      "id, email, full_name, role, phone, avatar_url, is_active, last_login",
+      "role, joined_at, users!inner(id, email, full_name, role, phone, avatar_url, is_active, last_login)",
     )
-    .eq("team_id", teamId)
-    .eq("is_active", true)
-    .order("full_name");
+    .eq("team_id", teamId);
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
 
-  return (data || []).map((u: any) => ({
-    id: u.id,
-    email: u.email,
-    fullName: u.full_name,
-    role: u.role as UserRole,
-    phone: u.phone,
-    avatarUrl: u.avatar_url,
-    isActive: u.is_active,
-    lastLogin: u.last_login,
-  }));
+  return (data || []).map((row: any) => {
+    const u = row.users;
+    return {
+      id: u.id,
+      email: u.email,
+      fullName: u.full_name,
+      role: u.role as UserRole,
+      phone: u.phone,
+      avatarUrl: u.avatar_url,
+      isActive: u.is_active,
+      lastLogin: u.last_login,
+      teamRole: row.role,
+      joinedAt: row.joined_at,
+    };
+  });
+}
+
+/**
+ * Get all team IDs a user belongs to
+ */
+export async function getUserTeamIds(userId: string): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from("user_teams")
+    .select("team_id")
+    .eq("user_id", userId);
+
+  return (data || []).map((r: any) => r.team_id as string);
 }

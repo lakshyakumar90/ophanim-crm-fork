@@ -164,23 +164,17 @@ function getShiftDateTimes(
     shiftEndBase.getTime() + (crossesMidnight ? 24 * 60 * 60 * 1000 : 0),
   );
 
-  let autoLogoutAt: Date;
-  if (rules?.auto_logout_time) {
-    const autoLogoutHHMM = parseTimeToHHMM(
-      rules.auto_logout_time,
-      shiftType === SHIFT_TYPES.NIGHT_SHIFT ? "04:15" : "18:15",
-    );
-    const autoLogoutMinutes = parseMinutes(autoLogoutHHMM);
-    const autoLogoutBase = new Date(`${effectiveDate}T${autoLogoutHHMM}:00+05:30`);
-    const autoLogoutCrossesMidnight = autoLogoutMinutes <= startMinutes;
-    autoLogoutAt = new Date(
-      autoLogoutBase.getTime() + (autoLogoutCrossesMidnight ? 24 * 60 * 60 * 1000 : 0),
-    );
-  } else {
-    autoLogoutAt = new Date(
-      shiftEnd.getTime() + AUTO_LOGOUT_GRACE_MINUTES * 60 * 1000,
-    );
-  }
+  // Default fixed auto-logout times: 04:30 for night shift, 18:30 for day shift.
+  // Admin can override by setting auto_logout_time in attendance_rules;
+  // setting it to null reverts to these fixed defaults.
+  const defaultAutoLogout = shiftType === SHIFT_TYPES.NIGHT_SHIFT ? "04:30" : "18:30";
+  const autoLogoutHHMM = parseTimeToHHMM(rules?.auto_logout_time ?? null, defaultAutoLogout);
+  const autoLogoutMinutes = parseMinutes(autoLogoutHHMM);
+  const autoLogoutBase = new Date(`${effectiveDate}T${autoLogoutHHMM}:00+05:30`);
+  const autoLogoutCrossesMidnight = autoLogoutMinutes <= startMinutes;
+  const autoLogoutAt = new Date(
+    autoLogoutBase.getTime() + (autoLogoutCrossesMidnight ? 24 * 60 * 60 * 1000 : 0),
+  );
 
   return { shiftStart, shiftEnd, autoLogoutAt };
 }
@@ -234,12 +228,10 @@ function calculateScheduledAutoLogoutTime(
     return new Date(clockInTime.getTime() + shiftDurationMs);
   }
 
-  // On-time clock-in:
-  // - If the admin set an explicit auto_logout_time rule, honour it exactly.
-  // - Otherwise use shiftEnd directly (skip the 15-minute grace that was
-  //   added in getShiftDateTimes) so the logout time matches the shift end
-  //   (e.g. exactly 6pm for morning shift, exactly 4am for night shift).
-  return rules?.auto_logout_time ? autoLogoutAt : shiftEnd;
+  // On-time clock-in: always use the computed autoLogoutAt.
+  // When auto_logout_time rule is null, getShiftDateTimes() falls back to
+  // the fixed defaults (04:30 night / 18:30 day) — no grace appended.
+  return autoLogoutAt;
 }
 
 /**
