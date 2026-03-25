@@ -5,7 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { format } from "date-fns";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
-import { tasksApi, usersApi, leadsApi, teamsApi } from "@/lib/api";
+import { tasksApi, usersApi, leadsApi } from "@/lib/api";
 import { getDepartments } from "@/lib/supabase-queries";
 import { cn } from "@/lib/utils";
 import {
@@ -84,10 +84,10 @@ export default function RemindersPage() {
     { revalidateOnFocus: false },
   );
 
-  // Manager (non-admin): see only their primary team's members
-  const { data: teamMembersData } = useSWR(
-    !canSeeAllFilters && isManager && user?.teamId ? ["team-members-reminder", user.teamId] : null,
-    () => teamsApi.getMembers(user!.teamId!),
+  // Manager/Admin: user list for lead ownership filters from backend role-aware stats
+  const { data: userStatsData } = useSWR(
+    isAdmin || isManager ? "leads-user-stats" : null,
+    () => leadsApi.getStatsByUser(),
     { revalidateOnFocus: false },
   );
 
@@ -95,14 +95,21 @@ export default function RemindersPage() {
   const userListForDropdown = useMemo(() => {
     if (canSeeAllFilters) return (usersData?.data || []) as any[];
     if (isManager) {
-      const members = (Array.isArray(teamMembersData) ? teamMembersData : []) as any[];
-      if (!searchUser) return members;
-      return members.filter((m: any) =>
+      const members = (userStatsData?.users || []) as any[];
+      const normalizedMembers = members.map((m: any) => ({
+        id: m.id,
+        fullName: m.fullName || m.full_name,
+        full_name: m.fullName || m.full_name,
+        avatarUrl: m.avatarUrl || m.avatar_url,
+        avatar_url: m.avatarUrl || m.avatar_url,
+      }));
+      if (!searchUser) return normalizedMembers;
+      return normalizedMembers.filter((m: any) =>
         (m.fullName || m.full_name || "").toLowerCase().includes(searchUser.toLowerCase()),
       );
     }
     return [];
-  }, [canSeeAllFilters, isManager, usersData, teamMembersData, searchUser]);
+  }, [canSeeAllFilters, isManager, usersData, userStatsData, searchUser]);
 
   const showUserFilter = canSeeAllFilters || isManager;
   const { data: departmentsData } = useSWR("departments", () => getDepartments(), {

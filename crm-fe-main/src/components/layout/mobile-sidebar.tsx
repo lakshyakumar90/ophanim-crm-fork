@@ -26,17 +26,22 @@ import {
   ListTodo,
   Users2,
   CalendarClock,
+  Briefcase,
+  ClipboardList,
+  UserCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { fetchPerformanceReminderCounts } from "@/lib/performance-api";
 
 interface NavItem {
   title: string;
   href: string;
   icon: React.ElementType;
   roles?: ("admin" | "manager" | "employee")[];
+  anyPermission?: string[];
 }
 
 const navItems: NavItem[] = [
@@ -95,6 +100,74 @@ const navItems: NavItem[] = [
     icon: BarChart3,
     roles: ["admin", "manager"],
   },
+  // HR Items
+  {
+    title: "HR Overview",
+    href: "/hr",
+    icon: LayoutDashboard,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "HR Employees",
+    href: "/hr/employees",
+    icon: Users,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "HR Leaves",
+    href: "/hr/leaves",
+    icon: ClipboardList,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "HR Recruitment",
+    href: "/hr/recruitment",
+    icon: Briefcase,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "HR Payroll",
+    href: "/hr/payroll",
+    icon: Receipt,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "My payslips",
+    href: "/hr/payroll/my-payslips",
+    icon: Wallet,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    title: "My review",
+    href: "/performance/my-review",
+    icon: ClipboardList,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    title: "Peer feedback",
+    href: "/performance/peer-feedback",
+    icon: Users,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    title: "My documents",
+    href: "/documents/my-documents",
+    icon: FileText,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    title: "HR Performance",
+    href: "/hr/performance",
+    icon: BarChart3,
+    roles: ["admin", "manager"],
+    anyPermission: ["performance:view", "performance:manage", "performance:review"],
+  },
+  {
+    title: "HR Onboarding",
+    href: "/hr/onboarding",
+    icon: UserCircle,
+    roles: ["admin", "manager"],
+  },
 ];
 
 export function MobileSidebar() {
@@ -118,11 +191,47 @@ export function MobileSidebar() {
   );
   const remindersCount = remindersData?.count || 0;
 
+  const { data: perfReminderData } = useSWR(
+    user ? "performance-reminder-counts" : null,
+    () => fetchPerformanceReminderCounts(),
+    { revalidateOnFocus: false, refreshInterval: 180000 },
+  );
+  const myReviewReminderCount = perfReminderData?.myReview || 0;
+  const peerFeedbackReminderCount = perfReminderData?.peerFeedback || 0;
+
   const filteredNav = navItems.filter((item) => {
-    if (!item.roles) return true;
-    if (item.roles.includes("admin") && isAdmin) return true;
-    if (item.roles.includes("manager") && isManager) return true;
-    return false;
+    if (
+      item.href === "/hr/onboarding" &&
+      !isAdmin &&
+      user?.departmentSlug !== "hr"
+    ) {
+      return false;
+    }
+
+    const p = user?.permissions ?? [];
+    const permGate = item.anyPermission ?? [];
+    const permOk =
+      permGate.length > 0 &&
+      (p.includes("crm:admin") || permGate.some((x) => p.includes(x)));
+
+    if (permGate.length && !item.roles?.length) {
+      return permOk;
+    }
+
+    let roleOk = true;
+    if (item.roles?.length) {
+      roleOk = false;
+      if (item.roles.includes("admin") && isAdmin) roleOk = true;
+      if (item.roles.includes("manager") && isManager) roleOk = true;
+      if (item.roles.includes("employee") && user?.role === "employee") roleOk = true;
+    } else if (!item.roles) {
+      roleOk = true;
+    }
+
+    if (permGate.length && item.roles?.length) {
+      return permOk || roleOk;
+    }
+    return roleOk;
   });
 
   const getInitials = (name: string) => {
@@ -156,6 +265,10 @@ export function MobileSidebar() {
               ? unreadCount
               : item.title === "Reminders"
                 ? remindersCount
+                : item.title === "My review"
+                  ? myReviewReminderCount
+                  : item.title === "Peer feedback"
+                    ? peerFeedbackReminderCount
                 : 0;
           const badgeBg =
             item.title === "Reminders" ? "bg-amber-500" : "bg-red-500";
@@ -181,7 +294,7 @@ export function MobileSidebar() {
                 {badgeCount > 0 && (
                   <span
                     className={cn(
-                      "absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full text-[10px] font-semibold text-white flex items-center justify-center",
+                      "absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full text-[10px] font-semibold text-white flex items-center justify-center",
                       badgeBg,
                     )}
                   >

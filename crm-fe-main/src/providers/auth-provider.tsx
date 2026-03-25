@@ -182,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user) return false;
 
       const permissions = user.permissions ?? [];
+      if (user.role === "admin") return true;
 
       // crm:admin is a global superuser
       if (permissions.includes("crm:admin")) return true;
@@ -193,7 +194,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // This keeps existing UI working before all roles are seeded
       if (permissions.length === 0) {
         const role = user.role;
-        if (role === "admin") return true; // admin has all permissions
         if (
           role === "manager" &&
           (perm.startsWith("analytics:view") ||

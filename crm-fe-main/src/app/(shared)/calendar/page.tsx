@@ -10,6 +10,7 @@ import {
   addMonths,
   subMonths,
   isSameDay,
+  isWeekend,
   parseISO,
   startOfMonth,
   endOfMonth,
@@ -21,13 +22,10 @@ import {
   CalendarDays,
   Filter,
   X,
-  Clock,
-  CheckSquare,
   Bell,
   UserIcon,
   Users,
   Building2,
-  Calendar,
   Loader2,
   GripVertical,
   Lock,
@@ -64,48 +62,17 @@ import {
   projectsApi,
 } from "@/lib/api";
 import { getDepartments } from "@/lib/supabase-queries";
+import {
+  type CalEvent,
+  type CalendarEventType,
+  dateToKey,
+  DayColumn,
+  EVENT_COLORS,
+  MONTH_NAMES,
+  TYPE_ICONS,
+} from "@/components/calendar/calendar-primitives";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-
-type EventType = "task" | "reminder" | "attendance" | "leave";
-
-interface CalEvent {
-  id: string;
-  title: string;
-  subtitle?: string;
-  type: EventType;
-  date: Date;
-  startTime?: string; // "HH:MM"
-  endTime?: string;
-  color: string;
-  userId?: string;
-  userName?: string;
-  userAvatar?: string;
-  raw: any;
-}
-
-// ─── Color helpers ──────────────────────────────────────────────────────────
-
-const EVENT_COLORS: Record<EventType, string> = {
-  task: "bg-blue-500/15 border-blue-500/40 text-blue-700 dark:text-blue-300",
-  reminder: "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300",
-  attendance: "bg-green-500/15 border-green-500/40 text-green-700 dark:text-green-300",
-  leave: "bg-rose-500/15 border-rose-500/40 text-rose-700 dark:text-rose-300",
-};
-
-const TYPE_ICONS: Record<EventType, React.ElementType> = {
-  task: CheckSquare,
-  reminder: Bell,
-  attendance: Clock,
-  leave: Calendar,
-};
-
-const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
-];
-
-// ─── Utility ────────────────────────────────────────────────────────────────
+type EventType = CalendarEventType;
 
 function getInitials(name: string) {
   return (name || "U")
@@ -114,116 +81,6 @@ function getInitials(name: string) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-}
-
-function dateToKey(d: Date) {
-  return format(d, "yyyy-MM-dd");
-}
-
-// ─── Event Card ─────────────────────────────────────────────────────────────
-
-function EventCard({
-  event,
-  onClick,
-}: {
-  event: CalEvent;
-  onClick: (event: CalEvent) => void;
-}) {
-  const Icon = TYPE_ICONS[event.type];
-  const isOverdue =
-    (event.type === "task" || event.type === "reminder") &&
-    event.date &&
-    event.date.getTime() < Date.now() &&
-    event.raw?.status !== "completed" &&
-    event.raw?.status !== "cancelled";
-
-  return (
-    <div
-      onClick={() => onClick(event)}
-      className={cn(
-        "group relative flex items-start gap-1.5 px-2 py-1.5 rounded-md border text-[11px] leading-tight select-none transition-all cursor-pointer hover:scale-[1.02] hover:shadow-md",
-        isOverdue ? "bg-red-500/15 border-red-500/40 text-red-700 dark:text-red-300" : EVENT_COLORS[event.type],
-      )}
-      title={event.title}
-    >
-      <Icon className="h-3 w-3 mt-0.5 shrink-0 opacity-70" />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{event.title}</div>
-        {(event.subtitle || event.userName) && (
-          <div className="text-[10px] opacity-60 truncate">
-            {event.subtitle || event.userName}
-          </div>
-        )}
-        {event.startTime && (
-          <div className="text-[10px] opacity-60">{event.startTime}</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Day Column ─────────────────────────────────────────────────────────────
-
-function DayColumn({
-  date,
-  events,
-  isToday,
-  onAddClick,
-  onEventClick,
-}: {
-  date: Date;
-  events: CalEvent[];
-  isToday: boolean;
-  onAddClick: (date: Date) => void;
-  onEventClick: (event: CalEvent) => void;
-}) {
-  return (
-    <div
-      className="relative flex flex-col min-h-[500px] border-r border-border/50 transition-colors"
-    >
-      {/* Day header */}
-      <div
-        className={cn(
-          "sticky top-0 z-10 flex flex-col items-center py-3 border-b border-border/50 bg-background/80 backdrop-blur-sm",
-          isToday && "bg-primary/5",
-        )}
-      >
-        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-          {format(date, "EEE")}
-        </span>
-        <div
-          className={cn(
-            "mt-1 w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold transition-colors",
-            isToday
-              ? "bg-primary text-primary-foreground"
-              : "text-foreground hover:bg-muted cursor-default",
-          )}
-        >
-          {format(date, "d")}
-        </div>
-      </div>
-
-      {/* Events */}
-      <div className="flex-1 p-2 space-y-1 overflow-y-auto">
-        {events.map((ev) => (
-          <EventCard
-            key={ev.id}
-            event={ev}
-            onClick={onEventClick}
-          />
-        ))}
-      </div>
-
-      {/* Add button */}
-      <button
-        onClick={() => onAddClick(date)}
-        className="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
-        title={`Add event on ${format(date, "MMM d")}`}
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
 }
 
 // ─── Create Event Modal ──────────────────────────────────────────────────────
@@ -577,14 +434,26 @@ export default function GlobalCalendarPage() {
     () => attendanceApi.list(attParams),
     { revalidateOnFocus: false },
   );
+  const { data: holidayData, mutate: mutateHoliday } = useSWR(
+    ["calendar-holidays", currentDate.getFullYear()],
+    () => attendanceApi.getHolidays(currentDate.getFullYear()),
+    { revalidateOnFocus: false },
+  );
+  const { data: leaveData, mutate: mutateLeaves } = useSWR(
+    ["calendar-leaves", fetchStart, fetchEnd],
+    () => attendanceApi.getApprovedLeaves(fetchStart, fetchEnd),
+    { revalidateOnFocus: false },
+  );
 
   const refreshCalendarData = useCallback(async () => {
     await Promise.all([
       mutateTasks(),
       mutateReminders(),
       mutateAtt(),
+      mutateHoliday(),
+      mutateLeaves(),
     ]);
-  }, [mutateTasks, mutateReminders, mutateAtt]);
+  }, [mutateTasks, mutateReminders, mutateAtt, mutateHoliday, mutateLeaves]);
 
   useHeaderRefresh({ onRefresh: refreshCalendarData, enabled: Boolean(user) });
 
@@ -675,9 +544,66 @@ export default function GlobalCalendarPage() {
         raw: a,
       });
     }
+    // Holidays
+    const holidays: any[] = Array.isArray(holidayData) ? holidayData : [];
+    for (const h of holidays) {
+      const d = h.holiday_date || h.date;
+      if (!d) continue;
+      events.push({
+        id: `holiday-${h.id}`,
+        title: h.name || "Holiday",
+        subtitle: "Company Holiday",
+        type: "holiday",
+        date: new Date(`${d}T00:00:00`),
+        raw: h,
+      });
+    }
+
+    // Weekends
+    for (const day of calDays) {
+      if (!isWeekend(day)) continue;
+      events.push({
+        id: `weekend-${dateToKey(day)}`,
+        title: "Weekend",
+        subtitle: "Weekly off",
+        type: "weekend",
+        date: day,
+        color: EVENT_COLORS.weekend,
+        raw: { date: dateToKey(day), kind: "weekend" },
+      });
+    }
+
+    // Approved leaves
+    const approvedLeaves: any[] = Array.isArray(leaveData) ? leaveData : [];
+    for (const l of approvedLeaves) {
+      const start = l.startDate || l.start_date;
+      const end = l.endDate || l.end_date;
+      if (!start || !end) continue;
+      const uid = l.userId || l.user_id;
+      if (!isAdminOrGlobal && !isManager && uid !== user?.id) continue;
+      if (!isAdminOrGlobal && isManager) {
+        const memberIds = myTeamMembers.map((m: any) => m.id);
+        if (uid && !memberIds.includes(uid) && uid !== user?.id) continue;
+      }
+      let d = new Date(`${start}T00:00:00`);
+      const endDate = new Date(`${end}T00:00:00`);
+      while (d <= endDate) {
+        events.push({
+          id: `leave-${l.id}-${dateToKey(d)}`,
+          title: `Leave: ${l.employeeName || l.employee_name || "User"}`,
+          subtitle: l.leaveTypeName || l.leave_type_name || "Approved leave",
+          type: "leave",
+          date: d,
+          color: EVENT_COLORS.leave,
+          userId: uid,
+          raw: l,
+        });
+        d = addDays(d, 1);
+      }
+    }
 
     return events;
-  }, [tasksData, remindersData, attData, isAdminOrGlobal, isManager, myTeamMembers, user?.id]);
+  }, [tasksData, remindersData, attData, holidayData, leaveData, isAdminOrGlobal, isManager, myTeamMembers, user?.id]);
 
   // Filter valid user IDs based on department/team filters
   const validUserIds = useMemo(() => {
@@ -697,7 +623,11 @@ export default function GlobalCalendarPage() {
     if (!showAttendance) evs = evs.filter((e) => e.type !== "attendance");
     if (filterType !== "all") evs = evs.filter((e) => e.type === filterType);
     if (filterDeptId !== "all" || filterTeamId !== "all") {
-      evs = evs.filter((e) => e.userId && validUserIds.has(e.userId));
+      evs = evs.filter(
+        (e) =>
+          e.type === "holiday" ||
+          (e.userId != null && validUserIds.has(e.userId)),
+      );
     }
     return evs;
   }, [allEvents, filterType, showAttendance, filterDeptId, filterTeamId, validUserIds]);
@@ -731,12 +661,14 @@ export default function GlobalCalendarPage() {
     setRangeStart("");
     setRangeEnd("");
     if (viewMode === "week") setCurrentDate((d) => addDays(d, -7));
+    else if (viewMode === "day") setCurrentDate((d) => addDays(d, -1));
     else setCurrentDate((d) => subMonths(d, 1));
   };
   const goForward = () => {
     setRangeStart("");
     setRangeEnd("");
     if (viewMode === "week") setCurrentDate((d) => addDays(d, 7));
+    else if (viewMode === "day") setCurrentDate((d) => addDays(d, 1));
     else setCurrentDate((d) => addMonths(d, 1));
   };
   const goToday = () => {
@@ -856,6 +788,8 @@ export default function GlobalCalendarPage() {
                 <SelectItem value="reminder">Reminders</SelectItem>
                 <SelectItem value="attendance">Attendance</SelectItem>
                 <SelectItem value="leave">Leaves</SelectItem>
+                <SelectItem value="holiday">Holidays</SelectItem>
+                <SelectItem value="weekend">Weekends</SelectItem>
               </SelectContent>
             </Select>
 
@@ -966,6 +900,7 @@ export default function GlobalCalendarPage() {
                   date={day}
                   events={eventMap[key] || []}
                   isToday={isSameDay(day, today)}
+                  isWeekend={isWeekend(day)}
                   onAddClick={(d) => {
                     setCreateDefaultDate(d);
                     setCreateModalOpen(true);

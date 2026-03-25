@@ -211,12 +211,11 @@ export default function LeadDetailPage() {
     return groups.some((g) => g.leads.some((l) => l.id === id));
   }, [duplicatesData, id]);
 
-  // Fetch users list for admin assignment - filter to sales department only
+  // Fetch users list for admin assignment - all active users
   const { data: usersData, isLoading: loadingUsers } = useSWR(
-    isAdmin ? "users-list-sales" : null,
+    isAdmin ? "users-list-for-reassign" : null,
     () =>
-      usersApi
-        .list({ limit: 100, departmentSlug: "sales" }),
+      usersApi.list({ limit: 500, isActive: true }),
   );
 
   const refreshLeadData = useCallback(async () => {
@@ -233,12 +232,12 @@ export default function LeadDetailPage() {
     enabled: Boolean(id),
   });
 
-  // Handle the nested data structure properly - filter to active sales employees
+  // Handle the nested data structure properly - include all active users for reassignment
   const allUsers = usersData?.data || [];
   const users = Array.isArray(allUsers)
     ? allUsers.filter(
         (u: any) =>
-          u.isActive && (u.departmentSlug === "sales" || u.role === "admin"),
+          u.isActive,
       )
     : [];
   const lead = leadData as Lead | undefined;

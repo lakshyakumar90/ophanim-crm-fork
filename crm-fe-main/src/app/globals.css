@@ -203,3 +203,13 @@
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Payroll payslip print: allow page to flow when printing from HR */
+@media print {
+  html,
+  body {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+}

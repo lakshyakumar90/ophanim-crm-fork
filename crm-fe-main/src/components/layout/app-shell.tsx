@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header />
-          <main className="flex-1 overflow-y-auto">{children}</main>
+          <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
         </div>
       </div>
     </HeaderRefreshProvider>

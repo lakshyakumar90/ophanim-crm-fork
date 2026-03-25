@@ -45,8 +45,11 @@ const DEPARTMENT_JOB_TITLES: Record<
     manager: [{ value: "sales_manager", label: "Sales Manager" }],
   },
   hr: {
-    employee: [],
-    manager: [{ value: "hr_manager", label: "HR Manager" }],
+    employee: [{ value: "hr_employee", label: "HR Employee" }],
+    manager: [
+      { value: "hr_manager", label: "HR Manager" },
+      { value: "hr_director", label: "HR Director" },
+    ],
   },
   finance: {
     employee: [{ value: "finance_employee", label: "Finance Employee" }],
@@ -105,6 +108,10 @@ const userSchema = z.object({
   departmentId: z.string().min(1, "Department is required"),
   jobTitle: z.string().min(1, "Job title is required"),
   shiftType: z.enum(["day_shift", "night_shift"]),
+  currentCtc: z.coerce.number().positive("CTC must be positive").nullish(),
+  basicPct: z.coerce.number().min(0).max(100).nullish(),
+  hraPct: z.coerce.number().min(0).max(100).nullish(),
+  allowancePct: z.coerce.number().min(0).max(100).nullish(),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -126,12 +133,16 @@ export default function NewUserPage() {
     watch,
     formState: { errors },
   } = useForm<UserFormData>({
-    resolver: zodResolver(userSchema),
+    resolver: zodResolver(userSchema) as any,
     defaultValues: {
       role: "employee",
       departmentId: "",
       jobTitle: "",
       shiftType: "day_shift",
+      currentCtc: undefined,
+      basicPct: undefined,
+      hraPct: undefined,
+      allowancePct: undefined,
     },
   });
 
@@ -215,6 +226,17 @@ export default function NewUserPage() {
         departmentId: data.departmentId,
         jobTitle: data.jobTitle,
         shiftType: data.shiftType,
+        currentCtc: data.currentCtc,
+        salaryComponents:
+          data.basicPct !== undefined ||
+          data.hraPct !== undefined ||
+          data.allowancePct !== undefined
+            ? {
+                basic_pct: data.basicPct,
+                hra_pct: data.hraPct,
+                allowance_pct: data.allowancePct,
+              }
+            : undefined,
         ...(selectedRbacRoleIds.length > 0 ? { rbacRoleIds: selectedRbacRoleIds } : {}),
       } as any);
 
@@ -505,6 +527,45 @@ export default function NewUserPage() {
               <p className="text-xs text-muted-foreground">
                 Select the work shift for this user
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="currentCtc">Annual CTC (INR)</Label>
+              <Input
+                id="currentCtc"
+                type="number"
+                min={0}
+                step="1000"
+                placeholder="e.g. 1200000"
+                {...register("currentCtc")}
+              />
+              {errors.currentCtc && (
+                <p className="text-sm text-red-500">{errors.currentCtc.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Optional: helps payroll generate correct package from day one.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="basicPct">Basic %</Label>
+                <Input id="basicPct" type="number" min={0} max={100} {...register("basicPct")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="hraPct">HRA %</Label>
+                <Input id="hraPct" type="number" min={0} max={100} {...register("hraPct")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="allowancePct">Allowance %</Label>
+                <Input
+                  id="allowancePct"
+                  type="number"
+                  min={0}
+                  max={100}
+                  {...register("allowancePct")}
+                />
+              </div>
             </div>
 
             {/* Info Alert */}

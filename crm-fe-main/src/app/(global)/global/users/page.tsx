@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import { usersApi } from "@/lib/api";
-import { useAuth, useIsAdmin } from "@/providers/auth-provider";
+import { usersApi, teamsApi } from "@/lib/api";
+import { useIsAdmin } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,11 +40,11 @@ import {
   Search,
   Shield,
   ShieldAlert,
-  User,
-  Filter,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { BulkEditTable, type EmployeeBulkUpdate } from "@/components/hr/employees/BulkEditTable";
+import { toast } from "sonner";
 
 // Job title options for filter - all job titles combined
 const JOB_TITLES = [
@@ -55,10 +55,13 @@ const JOB_TITLES = [
   { value: "content_writer", label: "Content Writer" },
   { value: "sales_employee", label: "Sales Employee" },
   { value: "finance_employee", label: "Finance Employee" },
+  { value: "hr_employee", label: "HR Employee" },
   // Manager job titles
   { value: "sales_manager", label: "Sales Manager" },
   { value: "finance_manager", label: "Finance Manager" },
   { value: "project_manager", label: "Project Manager" },
+  { value: "hr_manager", label: "HR Manager" },
+  { value: "hr_director", label: "HR Director" },
 ];
 
 // Helper to format job title for display
@@ -69,22 +72,24 @@ const formatJobTitle = (jobTitle: string | null | undefined): string => {
 
 export default function UsersPage() {
   const router = useRouter();
-  const { user: currentUser } = useAuth();
   const isAdmin = useIsAdmin();
   const { currentDepartment } = useDepartment();
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [jobTitleFilter, setJobTitleFilter] = useState<string>("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const bulkEditRef = useRef<HTMLDivElement | null>(null);
 
   const { data, isLoading, mutate } = useSWR(
     isAdmin
-      ? ["users", page, search, currentDepartment?.id, jobTitleFilter]
+      ? ["users", search, currentDepartment?.id, jobTitleFilter]
       : null,
     () =>
       usersApi
         .list({
-          page,
-          limit: 10,
+          page: 1,
+          limit: 5000,
           search: search || undefined,
           departmentId: currentDepartment?.id,
           jobTitle:
@@ -93,6 +98,8 @@ export default function UsersPage() {
               : undefined,
         })
   );
+
+  const { data: teamsData } = useSWR("users-page-teams", () => teamsApi.list());
 
   const refreshUsersData = useCallback(async () => {
     await mutate();
@@ -104,7 +111,80 @@ export default function UsersPage() {
   });
 
   const users = data?.data || [];
-  const meta = data?.meta || { total: 0, page: 1, totalPages: 1 };
+  const teams = Array.isArray(teamsData) ? teamsData : [];
+  const selectedUsers = useMemo(
+    () => users.filter((u: any) => selectedIds.includes(u.id)),
+    [users, selectedIds],
+  );
+
+  const managerOptions = useMemo(
+    () =>
+      users.filter(
+        (u: any) => u.role === "manager" || u.role === "admin",
+      ),
+    [users],
+  );
+
+  const departmentOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          users
+            .filter((u: any) => u.departmentId && u.departmentName)
+            .map((u: any) => [u.departmentId, u.departmentName]),
+        ).entries(),
+      ),
+    [users],
+  );
+
+  useEffect(() => {
+    if (bulkEditMode && bulkEditRef.current) {
+      bulkEditRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [bulkEditMode]);
+
+  const allChecked = users.length > 0 && users.every((u: any) => selectedIds.includes(u.id));
+
+  const toggleAll = () => {
+    if (allChecked) {
+      setSelectedIds((prev) => prev.filter((id) => !users.some((u: any) => u.id === id)));
+      return;
+    }
+    setSelectedIds((prev) => Array.from(new Set([...prev, ...users.map((u: any) => u.id)])));
+  };
+
+  const saveBulkUsers = async (updates: EmployeeBulkUpdate[]) => {
+    if (updates.length === 0) return;
+
+    setBulkSaving(true);
+    try {
+      const response = await usersApi.bulkUpdate(updates as Array<{ id: string; data: Record<string, unknown> }>);
+      const result = response?.data?.data;
+      const failed = Array.isArray(result?.failed) ? result.failed.length : 0;
+      const succeeded = Array.isArray(result?.succeeded)
+        ? result.succeeded.length
+        : updates.length - failed;
+
+      if (succeeded > 0) toast.success(`${succeeded} users updated`);
+      if (failed > 0) toast.error(`${failed} users failed to update`);
+
+      if (failed === 0) {
+        setBulkEditMode(false);
+        setSelectedIds([]);
+      }
+
+      await mutate();
+    } catch {
+      toast.error("Bulk update failed");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const scrollToBulkTable = () => {
+    if (!bulkEditRef.current) return;
+    bulkEditRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   if (!isAdmin) {
     return (
@@ -149,7 +229,11 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold tracking-tight">Users</h1>
           <p className="text-muted-foreground">Manage users and their roles</p>
         </div>
-        <Button onClick={() => router.push("/global/new")}>
+        <Button
+          onClick={() => router.push("/global/new")}
+          size="lg"
+          className="h-11 rounded-xl px-5 shadow-sm"
+        >
           <Plus className="mr-2 h-4 w-4" /> Add User
         </Button>
       </div>
@@ -168,10 +252,9 @@ export default function UsersPage() {
           value={jobTitleFilter}
           onValueChange={(v) => {
             setJobTitleFilter(v);
-            setPage(1);
           }}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-45">
             <SelectValue placeholder="Filter by job title" />
           </SelectTrigger>
           <SelectContent>
@@ -185,23 +268,86 @@ export default function UsersPage() {
         </Select>
       </div>
 
+      {selectedIds.length > 0 ? (
+        <div className="flex items-center justify-between rounded-md border bg-muted/20 px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            {bulkEditMode
+              ? `${selectedIds.length} selected. Bulk edit table is open below.`
+              : `${selectedIds.length} selected. Open bulk edit table to edit all selected users together.`}
+          </p>
+          <div className="flex items-center gap-3">
+            {bulkEditMode ? (
+              <>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="rounded-lg px-4"
+                  onClick={scrollToBulkTable}
+                >
+                  Go to bulk table
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-lg px-4"
+                  onClick={() => setBulkEditMode(false)}
+                >
+                  Exit bulk edit
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                className="rounded-lg px-4"
+                onClick={() => {
+                  setBulkEditMode(true);
+                  setTimeout(scrollToBulkTable, 80);
+                }}
+              >
+                Bulk Edit Table
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-lg px-4"
+              onClick={() => setSelectedIds([])}
+            >
+              Clear selection
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-md border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={toggleAll}
+                  aria-label="Select all users on page"
+                />
+              </TableHead>
               <TableHead>User</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Job Title</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Joined</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-12.5"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               [...Array(5)].map((_, i) => (
                 <TableRow key={i}>
+                  <TableCell>
+                    <Skeleton className="h-4 w-4" />
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Skeleton className="h-10 w-10 rounded-full" />
@@ -233,13 +379,27 @@ export default function UsersPage() {
               ))
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   No users found.
                 </TableCell>
               </TableRow>
             ) : (
               users.map((user: any) => (
                 <TableRow key={user.id}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(user.id)}
+                      onChange={() =>
+                        setSelectedIds((prev) =>
+                          prev.includes(user.id)
+                            ? prev.filter((id) => id !== user.id)
+                            : [...prev, user.id],
+                        )
+                      }
+                      aria-label={`Select ${user.fullName}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar>
@@ -307,29 +467,47 @@ export default function UsersPage() {
         </Table>
       </div>
 
-      {users.length > 0 && (
-        <div className="flex items-center justify-end space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
-            Previous
-          </Button>
-          <div className="text-sm text-muted-foreground">
-            Page {meta.page} of {meta.totalPages}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(meta.totalPages, p + 1))}
-            disabled={page >= meta.totalPages}
-          >
-            Next
-          </Button>
+      {bulkEditMode && selectedUsers.length > 0 ? (
+        <div ref={bulkEditRef}>
+          <BulkEditTable
+            title="Bulk Edit Users"
+            description="Google Sheets-style tabular editing for selected users. Drag the fill handle to copy values downward."
+            employees={selectedUsers}
+            departmentOptions={departmentOptions.map(([id, name]) => ({ id: String(id), name: String(name) }))}
+            teamOptions={(Array.isArray(teams) ? teams : []).map((team: any) => ({
+              id: team.id,
+              name: team.name,
+              departmentId: team.departmentId || null,
+            }))}
+            managerOptions={managerOptions.map((manager: any) => ({
+              id: manager.id,
+              fullName: manager.fullName,
+            }))}
+            roleOptions={[
+              { value: "admin", label: "Admin" },
+              { value: "manager", label: "Manager" },
+              { value: "employee", label: "Employee" },
+            ]}
+            shiftOptions={[
+              { value: "day_shift", label: "Day Shift" },
+              { value: "night_shift", label: "Night Shift" },
+            ]}
+            jobTitleOptions={JOB_TITLES}
+            saving={bulkSaving}
+            onSave={saveBulkUsers}
+            onExit={() => setBulkEditMode(false)}
+            onClearSelection={() => setSelectedIds([])}
+          />
         </div>
-      )}
+      ) : null}
+
+      {users.length > 0 ? (
+        <div className="flex items-center justify-end">
+          <p className="text-sm text-muted-foreground">
+            Showing all {users.length} users
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

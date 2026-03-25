@@ -231,10 +231,26 @@ CREATE POLICY "lead_reminders_select_policy" ON lead_reminders
     OR user_id = auth.uid()
     OR (
       public.is_manager_or_admin()
-      AND EXISTS (
-        SELECT 1 FROM public.users teammate
-        WHERE teammate.team_id = public.get_my_team_id()
-        AND teammate.id = lead_reminders.user_id
+      AND (
+        -- Manager can see reminders on leads assigned to their team members
+        EXISTS (
+          SELECT 1 FROM public.leads l
+          WHERE l.id = lead_reminders.lead_id
+          AND (
+            l.assigned_to = auth.uid()
+            OR EXISTS (
+              SELECT 1 FROM public.users teammate
+              WHERE teammate.id = l.assigned_to
+              AND teammate.team_id = public.get_my_team_id()
+            )
+          )
+        )
+        -- OR manager can see reminders for team members' own reminders
+        OR EXISTS (
+          SELECT 1 FROM public.users teammate
+          WHERE teammate.team_id = public.get_my_team_id()
+          AND teammate.id = lead_reminders.user_id
+        )
       )
     )
   );

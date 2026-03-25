@@ -30,13 +30,18 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useAuth } from "@/providers/auth-provider";
+import { canSeeFullCTC, formatCTC } from "@/lib/employeeHelpers";
 
 export default function UserDetailPage() {
   const params = useParams();
   const router = useRouter();
   const isAdmin = useIsAdmin();
   const isCurrentUserManager = useIsManager();
+  const { user: currentUser } = useAuth();
   const userId = params.id as string;
+  const permissions = currentUser?.permissions ?? [];
+  const canSeeCompensation = canSeeFullCTC(permissions);
 
   const { data, isLoading, error } = useSWR(
     userId ? ["user", userId] : null,
@@ -307,6 +312,24 @@ export default function UserDetailPage() {
                       : user.shiftType === "night_shift"
                         ? "Night Shift (7 PM – 4 AM)"
                         : "Not Set"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Briefcase className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Annual CTC</p>
+                  <p className="font-medium">
+                    {formatCTC((user as any).currentCtc, canSeeCompensation)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Tag className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Package split</p>
+                  <p className="font-medium">
+                    Basic {(user as any).salaryComponents?.basic_pct ?? 50}% · HRA {(user as any).salaryComponents?.hra_pct ?? 20}% · Allowance {(user as any).salaryComponents?.allowance_pct ?? 30}%
                   </p>
                 </div>
               </div>

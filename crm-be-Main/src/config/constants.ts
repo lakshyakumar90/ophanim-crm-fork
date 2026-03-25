@@ -191,7 +191,7 @@ export const DEPARTMENT_JOB_TITLES = {
   },
   hr: {
     employee: ["hr_employee"],
-    manager: ["hr_manager"],
+    manager: ["hr_manager", "hr_director"],
   },
   finance: {
     employee: ["finance_employee"],
@@ -209,6 +209,7 @@ export const ALL_JOB_TITLES = [
   "sales_manager",
   "hr_employee",
   "hr_manager",
+  "hr_director",
   "finance_employee",
   "finance_manager",
   "developer",
@@ -248,3 +249,192 @@ export const SHIFT_TYPES = {
 } as const;
 
 export type ShiftType = (typeof SHIFT_TYPES)[keyof typeof SHIFT_TYPES];
+
+// ============================================================
+// HR MODULE CONSTANTS
+// ============================================================
+
+// Candidate Pipeline Stages
+export const CANDIDATE_STAGES = {
+  APPLIED: "applied",
+  SCREENED: "screened",
+  INTERVIEW_R1: "interview_r1",
+  INTERVIEW_R2: "interview_r2",
+  HR_ROUND: "hr_round",
+  OFFER_SENT: "offer_sent",
+  HIRED: "hired",
+  REJECTED: "rejected",
+  ON_HOLD: "on_hold",
+} as const;
+
+export type CandidateStage = (typeof CANDIDATE_STAGES)[keyof typeof CANDIDATE_STAGES];
+
+export const CANDIDATE_STAGE_ORDER: CandidateStage[] = [
+  "applied", "screened", "interview_r1", "interview_r2",
+  "hr_round", "offer_sent", "hired",
+];
+
+// Candidate Sources
+export const CANDIDATE_SOURCES = {
+  REFERRAL: "referral",
+  JOB_BOARD: "job_board",
+  DIRECT: "direct",
+  AGENCY: "agency",
+} as const;
+
+export type CandidateSource = (typeof CANDIDATE_SOURCES)[keyof typeof CANDIDATE_SOURCES];
+
+// Interview Types
+export const INTERVIEW_TYPES = {
+  VIDEO: "video",
+  IN_PERSON: "in_person",
+  PHONE: "phone",
+} as const;
+
+export type InterviewType = (typeof INTERVIEW_TYPES)[keyof typeof INTERVIEW_TYPES];
+
+// Offer Response
+export const OFFER_RESPONSES = {
+  PENDING: "pending",
+  ACCEPTED: "accepted",
+  DECLINED: "declined",
+} as const;
+
+export type OfferResponse = (typeof OFFER_RESPONSES)[keyof typeof OFFER_RESPONSES];
+
+// Employment Types
+export const EMPLOYMENT_TYPES = {
+  FULL_TIME: "full_time",
+  PART_TIME: "part_time",
+  CONTRACT: "contract",
+  INTERN: "intern",
+} as const;
+
+export type EmploymentType = (typeof EMPLOYMENT_TYPES)[keyof typeof EMPLOYMENT_TYPES];
+
+// HR Employee Status
+export const HR_EMPLOYEE_STATUSES = {
+  ACTIVE: "active",
+  PROBATION: "probation",
+  ON_LEAVE: "on_leave",
+  ARCHIVED: "archived",
+} as const;
+
+export type HrEmployeeStatus = (typeof HR_EMPLOYEE_STATUSES)[keyof typeof HR_EMPLOYEE_STATUSES];
+
+// Payroll Run Statuses
+export const PAYROLL_STATUSES = {
+  DRAFT: "draft",
+  SUBMITTED: "submitted",
+  APPROVED: "approved",
+  DISBURSED: "disbursed",
+} as const;
+
+export type PayrollStatus = (typeof PAYROLL_STATUSES)[keyof typeof PAYROLL_STATUSES];
+
+// Job Posting Statuses
+export const JOB_POSTING_STATUSES = {
+  OPEN: "open",
+  PAUSED: "paused",
+  CLOSED: "closed",
+} as const;
+
+export type JobPostingStatus = (typeof JOB_POSTING_STATUSES)[keyof typeof JOB_POSTING_STATUSES];
+
+// Review Cycle Frequencies
+export const REVIEW_FREQUENCIES = {
+  QUARTERLY: "quarterly",
+  HALF_YEARLY: "half_yearly",
+  ANNUAL: "annual",
+} as const;
+
+export type ReviewFrequency = (typeof REVIEW_FREQUENCIES)[keyof typeof REVIEW_FREQUENCIES];
+
+// Performance Ratings
+export const PERFORMANCE_RATINGS = {
+  EXCEPTIONAL: "exceptional",
+  EXCEEDS: "exceeds",
+  MEETS: "meets",
+  BELOW: "below",
+  UNSATISFACTORY: "unsatisfactory",
+} as const;
+
+export type PerformanceRating = (typeof PERFORMANCE_RATINGS)[keyof typeof PERFORMANCE_RATINGS];
+
+// Review Statuses
+export const REVIEW_STATUSES = {
+  DRAFT: "draft",
+  SELF_SUBMITTED: "self_submitted",
+  MANAGER_SUBMITTED: "manager_submitted",
+  CALIBRATED: "calibrated",
+  DIRECTOR_APPROVED: "director_approved",
+  RELEASED: "released",
+} as const;
+
+export type ReviewStatus = (typeof REVIEW_STATUSES)[keyof typeof REVIEW_STATUSES];
+
+// Review Cycle Statuses
+export const REVIEW_CYCLE_STATUSES = {
+  DRAFT: "draft",
+  ACTIVE: "active",
+  COMPLETED: "completed",
+} as const;
+
+export type ReviewCycleStatus = (typeof REVIEW_CYCLE_STATUSES)[keyof typeof REVIEW_CYCLE_STATUSES];
+
+// Checklist Types
+export const CHECKLIST_TYPES = {
+  ONBOARDING: "onboarding",
+  OFFBOARDING: "offboarding",
+} as const;
+
+export type ChecklistType = (typeof CHECKLIST_TYPES)[keyof typeof CHECKLIST_TYPES];
+
+// Checklist Task Statuses
+export const CHECKLIST_TASK_STATUSES = {
+  PENDING: "pending",
+  DONE: "done",
+  OVERDUE: "overdue",
+} as const;
+
+export type ChecklistTaskStatus = (typeof CHECKLIST_TASK_STATUSES)[keyof typeof CHECKLIST_TASK_STATUSES];
+
+// Increment Proposal Statuses
+export const INCREMENT_STATUSES = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+} as const;
+
+export type IncrementStatus = (typeof INCREMENT_STATUSES)[keyof typeof INCREMENT_STATUSES];
+
+// Peer Feedback Dimensions
+export const PEER_FEEDBACK_DIMENSIONS = {
+  COLLABORATION: "collaboration",
+  COMMUNICATION: "communication",
+  DELIVERY: "delivery",
+  RELIABILITY: "reliability",
+} as const;
+
+export type PeerFeedbackDimension = (typeof PEER_FEEDBACK_DIMENSIONS)[keyof typeof PEER_FEEDBACK_DIMENSIONS];
+
+// Exit Types
+export const EXIT_TYPES = {
+  RESIGNATION: "resignation",
+  TERMINATION: "termination",
+  CONTRACT_END: "contract_end",
+} as const;
+
+export type ExitType = (typeof EXIT_TYPES)[keyof typeof EXIT_TYPES];
+
+// Exit Interview Reason Categories
+export const EXIT_REASONS = {
+  BETTER_OPPORTUNITY: "better_opportunity",
+  COMPENSATION: "compensation",
+  WORK_CULTURE: "work_culture",
+  PERSONAL: "personal",
+  RELOCATION: "relocation",
+  OTHER: "other",
+} as const;
+
+export type ExitReason = (typeof EXIT_REASONS)[keyof typeof EXIT_REASONS];

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { toast } from "sonner";
 import { attendanceApi, usersApi } from "@/lib/api";
-import { useIsAdmin, useIsManager } from "@/providers/auth-provider";
+import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -178,8 +178,10 @@ function listDates(start: string, end: string): string[] {
 export default function UserAttendancePage() {
   const { userId } = useParams();
   const router = useRouter();
+  const { can } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
+  const isHR = can("hr:view") || can("hr:manage");
   const [isRestoring, setIsRestoring] = useState(false);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<"month" | "custom">("month");
@@ -365,7 +367,7 @@ export default function UserAttendancePage() {
     }
   };
 
-  if (!isAdmin && !isManager) {
+  if (!isAdmin && !isManager && !isHR) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -405,6 +407,11 @@ export default function UserAttendancePage() {
                 <Badge variant="secondary" className="capitalize">
                   {userData.role}
                 </Badge>
+                {userData.jobTitle && (
+                  <Badge variant="outline" className="capitalize">
+                    {userData.jobTitle}
+                  </Badge>
+                )}
                 <span className="text-sm text-muted-foreground">{userData.email}</span>
               </div>
             </div>

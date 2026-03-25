@@ -3,6 +3,7 @@ import { authenticate } from "../middleware/auth.middleware.js";
 import {
   requireAdmin,
   requireManager,
+  requireManagerOrHRAccess,
   checkResourceAccess,
 } from "../middleware/authorization.middleware.js";
 import {
@@ -17,6 +18,7 @@ import {
   updateProfileSchema,
   userListQuerySchema,
   uuidParamSchema,
+  bulkUpdateUsersSchema,
   EMPLOYEE_JOB_TITLES,
   MANAGER_JOB_TITLES,
   JOB_TITLES,
@@ -159,11 +161,10 @@ router.get(
   requireManager as any,
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
-    if (!authReq.user.teamId) {
-      sendSuccess(res, []);
-      return;
-    }
-    const members = await usersService.getTeamMembers(authReq.user.teamId);
+    const members = await usersService.getTeamMembersForManager(
+      authReq.user.id,
+      authReq.user.teamId,
+    );
     sendSuccess(res, members);
   }),
 );
@@ -190,7 +191,7 @@ router.get(
       },
       hr: {
         employee: ["hr_employee"],
-        manager: ["hr_manager"],
+        manager: ["hr_manager", "hr_director"],
       },
       finance: {
         employee: ["finance_employee"],
@@ -294,12 +295,26 @@ router.get(
 );
 
 /**
+ * POST /users/bulk-update
+ * Bulk update users (admin only)
+ */
+router.post(
+  "/bulk-update",
+  requireAdmin as any,
+  validateBody(bulkUpdateUsersSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await usersService.bulkUpdateUsers(req.body);
+    sendSuccess(res, result);
+  }),
+);
+
+/**
  * GET /users/:id
  * Get user by ID
  */
 router.get(
   "/:id",
-  requireManager as any,
+  requireManagerOrHRAccess() as any,
   validateParams(uuidParamSchema),
   checkResourceAccess("user") as any,
   asyncHandler(async (req: Request, res: Response) => {

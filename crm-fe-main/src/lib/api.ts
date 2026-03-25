@@ -4,6 +4,7 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 import * as sq from "./supabase-queries";
+import { smartRead, type QueryStrategy } from "./smart-read";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -164,6 +165,14 @@ export const authApi = {
     departmentId?: string | null;
     jobTitle?: string | null;
     shiftType?: string;
+    currentCtc?: number;
+    salaryComponents?: {
+      basic_pct?: number;
+      hra_pct?: number;
+      allowance_pct?: number;
+    };
+    salaryBandId?: string | null;
+    rbacRoleIds?: string[];
   }) => api.post("/auth/register", data),
 
   logout: () => api.post("/auth/logout"),
@@ -219,6 +228,8 @@ export const usersApi = {
   },
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/users/${id}`, data),
+  bulkUpdate: (updates: Array<{ id: string; data: Record<string, unknown> }>) =>
+    api.post("/users/bulk-update", { updates }),
   activate: (id: string) => api.patch(`/users/${id}/activate`),
   deactivate: (id: string) => api.patch(`/users/${id}/deactivate`),
   resetPassword: (id: string, newPassword: string) =>
@@ -341,24 +352,35 @@ export const teamNotesApi = {
 // LEADS API (Supabase direct reads, backend for writes)
 // =====================================================
 
+const LEADS_READ_STRATEGY: Record<string, QueryStrategy> = {
+  list: "supabase-with-fallback",
+  get: "supabase-with-fallback",
+  getPipeline: "supabase-with-fallback",
+  getWonLeads: "supabase-with-fallback",
+  getActivities: "supabase-with-fallback",
+  getComments: "supabase-with-fallback",
+  getAllReminders: "backend-only",
+  getRemindersCount: "backend-only",
+  getReminders: "backend-only",
+  getStatsByUser: "backend-only",
+} as const;
+
 export const leadsApi = {
   list: async (params?: Record<string, unknown>) => {
-    try {
-      return await sq.getLeads(params as any);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase leads read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get("/leads", { params });
-      return unwrap(res);
-    }
+    return smartRead({
+      routeKey: "leads.list",
+      strategy: LEADS_READ_STRATEGY.list,
+      supabaseQuery: () => sq.getLeads(params as any),
+      backendQuery: async () => unwrap(await api.get("/leads", { params })),
+    });
   },
   get: async (id: string) => {
-    try {
-      return await sq.getLeadById(id);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase lead read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get(`/leads/${id}`);
-      return unwrap(res);
-    }
+    return smartRead({
+      routeKey: "leads.get",
+      strategy: LEADS_READ_STRATEGY.get,
+      supabaseQuery: () => sq.getLeadById(id),
+      backendQuery: async () => unwrap(await api.get(`/leads/${id}`)),
+    });
   },
   create: (data: Record<string, unknown>) => api.post("/leads", data),
   update: (id: string, data: Record<string, unknown>) =>
@@ -367,22 +389,20 @@ export const leadsApi = {
   assign: (id: string, assignTo: string, reason?: string) =>
     api.post(`/leads/${id}/assign`, { assignTo, reason }),
   getPipeline: async () => {
-    try {
-      return await sq.getLeadPipeline();
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase pipeline read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get("/leads/pipeline");
-      return unwrap(res);
-    }
+    return smartRead({
+      routeKey: "leads.getPipeline",
+      strategy: LEADS_READ_STRATEGY.getPipeline,
+      supabaseQuery: () => sq.getLeadPipeline(),
+      backendQuery: async () => unwrap(await api.get("/leads/pipeline")),
+    });
   },
   getWonLeads: async () => {
-    try {
-      return await sq.getWonLeads();
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase won leads read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get("/leads/won");
-      return unwrap(res);
-    }
+    return smartRead({
+      routeKey: "leads.getWonLeads",
+      strategy: LEADS_READ_STRATEGY.getWonLeads,
+      supabaseQuery: () => sq.getWonLeads(),
+      backendQuery: async () => unwrap(await api.get("/leads/won")),
+    });
   },
   bulkAssign: (ids: string[], assignTo: string) =>
     api.post("/leads/bulk-assign", { ids, assignTo }),
@@ -391,26 +411,24 @@ export const leadsApi = {
   bulkDelete: (leadIds: string[]) =>
     api.post("/leads/bulk-delete", { ids: leadIds }),
   getActivities: async (id: string) => {
-    try {
-      return await sq.getLeadActivities(id);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase lead activities read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get(`/leads/${id}/activities`);
-      return unwrap(res);
-    }
+    return smartRead({
+      routeKey: "leads.getActivities",
+      strategy: LEADS_READ_STRATEGY.getActivities,
+      supabaseQuery: () => sq.getLeadActivities(id),
+      backendQuery: async () => unwrap(await api.get(`/leads/${id}/activities`)),
+    });
   },
   addActivity: (id: string, data: Record<string, unknown>) =>
     api.post(`/leads/${id}/activities`, data),
   updateStatus: (id: string, status: string, reason?: string) =>
     api.patch(`/leads/${id}/status`, { status, reason }),
   getComments: async (id: string) => {
-    try {
-      return await sq.getLeadComments(id);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase lead comments read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get(`/leads/${id}/comments`);
-      return unwrap(res);
-    }
+    return smartRead({
+      routeKey: "leads.getComments",
+      strategy: LEADS_READ_STRATEGY.getComments,
+      supabaseQuery: () => sq.getLeadComments(id),
+      backendQuery: async () => unwrap(await api.get(`/leads/${id}/comments`)),
+    });
   },
   addComment: (id: string, content: string) =>
     api.post(`/leads/${id}/comments`, { content }),
@@ -427,11 +445,10 @@ export const leadsApi = {
     status?: "pending" | "sent" | "all";
     date?: string;
   }) => {
-    try {
-      return await sq.getAllReminders(params);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase all reminders read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      try {
+    return smartRead({
+      routeKey: "leads.getAllReminders",
+      strategy: LEADS_READ_STRATEGY.getAllReminders,
+      backendQuery: async () => {
         const res = await api.get("/leads/reminders/all", { params });
         const payload = unwrap(res);
         if (Array.isArray(payload)) {
@@ -452,39 +469,35 @@ export const leadsApi = {
         if (payload && Array.isArray(payload.data)) {
           return payload;
         }
-        return { data: [], meta: { total: 0, page: params?.page || 1, limit: params?.limit || 20, totalPages: 0 } };
-      } catch (backendError) {
-        console.error("Backend reminders fetch failed", backendError);
-        return { data: [], meta: { total: 0, page: params?.page || 1, limit: params?.limit || 20, totalPages: 0 } };
-      }
-    }
+        return {
+          data: [],
+          meta: {
+            total: 0,
+            page: params?.page || 1,
+            limit: params?.limit || 20,
+            totalPages: 0,
+          },
+        };
+      },
+    });
   },
   getRemindersCount: async (params?: {
     userId?: string;
     status?: "pending" | "sent" | "all";
     date?: string;
   }) => {
-    try {
-      return await sq.getRemindersCount(params);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase reminders count read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      try {
-        const res = await api.get("/leads/reminders/count", { params });
-        return unwrap(res);
-      } catch (backendError) {
-        console.error("Backend reminders count failed", backendError);
-        return { count: 0 };
-      }
-    }
+    return smartRead({
+      routeKey: "leads.getRemindersCount",
+      strategy: LEADS_READ_STRATEGY.getRemindersCount,
+      backendQuery: async () => unwrap(await api.get("/leads/reminders/count", { params })),
+    });
   },
   getReminders: async (id: string) => {
-    try {
-      const res = await api.get(`/leads/${id}/reminders`);
-      return unwrap(res);
-    } catch (error) {
-      console.error("Backend lead reminders fetch failed, falling back to Supabase", error);
-      return await sq.getLeadReminders(id);
-    }
+    return smartRead({
+      routeKey: "leads.getReminders",
+      strategy: LEADS_READ_STRATEGY.getReminders,
+      backendQuery: async () => unwrap(await api.get(`/leads/${id}/reminders`)),
+    });
   },
   createReminder: (id: string, reminderAt: string, note?: string) =>
     api.post(`/leads/${id}/reminders`, { reminderAt, note }),
@@ -493,9 +506,11 @@ export const leadsApi = {
   markReminderDone: (reminderId: string) =>
     api.patch(`/leads/reminders/${reminderId}/done`),
   getStatsByUser: async () => {
-    // Always use backend path: returns role/teamId/teamName/leadCount via supabaseAdmin
-    const res = await api.get("/leads/stats/by-user");
-    return unwrap(res);
+    return smartRead({
+      routeKey: "leads.getStatsByUser",
+      strategy: LEADS_READ_STRATEGY.getStatsByUser,
+      backendQuery: async () => unwrap(await api.get("/leads/stats/by-user")),
+    });
   },
   getActivityCountsByUser: async (): Promise<Record<string, number>> => {
     try {
@@ -698,6 +713,12 @@ export const attendanceApi = {
       });
       return unwrap(res);
     }
+  },
+  getApprovedLeaves: async (startDate?: string, endDate?: string) => {
+    const res = await api.get("/attendance/leaves", {
+      params: { startDate, endDate },
+    });
+    return unwrap(res);
   },
   getAnalytics: async (startDate?: string, endDate?: string, departmentId?: string) => {
     const res = await api.get("/attendance/analytics", {
@@ -1110,6 +1131,68 @@ export const rolesApi = {
   // Remove a role from a user (requires crm:admin)
   removeRole: (userId: string, roleId: string) =>
     api.delete(`/roles/users/${userId}/roles/${roleId}`),
+};
+
+// =====================================================
+// HR API - Phase 1 Analytics (Independent Card Endpoints)
+// =====================================================
+
+export const hrAnalyticsApi = {
+  /**
+   * Headcount stats: total, active, by department, by role
+   */
+  headcount: () =>
+    api.get("/hr/analytics/headcount").then((res) => unwrap(res)),
+
+  /**
+   * Leave analytics: on-leave today, breakdown, pending approvals
+   */
+  leaves: () =>
+    api.get("/hr/analytics/leaves").then((res) => unwrap(res)),
+
+  /**
+   * Recruitment analytics: open positions, pipeline, candidates
+   */
+  recruitment: () =>
+    api.get("/hr/analytics/recruitment").then((res) => unwrap(res)),
+
+  /**
+   * Payroll analytics: current month status, trend, pending approvals
+   */
+  payroll: () =>
+    api.get("/hr/analytics/payroll").then((res) => unwrap(res)),
+
+  /**
+   * Performance analytics: active cycles, reviews, deadlines
+   */
+  performance: () =>
+    api.get("/hr/analytics/performance").then((res) => unwrap(res)),
+
+  /**
+   * Compliance analytics: expiring docs, probation ending
+   */
+  compliance: () =>
+    api.get("/hr/analytics/compliance").then((res) => unwrap(res)),
+
+  /**
+   * Onboarding analytics: active onboardings, completion rate
+   */
+  onboarding: () =>
+    api.get("/hr/analytics/onboarding").then((res) => unwrap(res)),
+
+  /**
+   * System alerts: high-priority items requiring action
+   */
+  alerts: () =>
+    api.get("/hr/analytics/alerts").then((res) => unwrap(res)),
+
+  /**
+   * Activity feed: recent HR activities across all modules
+   */
+  activityFeed: (limit = 15) =>
+    api
+      .get("/hr/analytics/activity-feed", { params: { limit } })
+      .then((res) => unwrap(res)),
 };
 
 export default api;

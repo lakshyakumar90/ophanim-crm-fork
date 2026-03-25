@@ -36,6 +36,7 @@ export const MANAGER_JOB_TITLES = [
   "finance_manager",
   "project_manager",
   "hr_manager",
+  "hr_director",
 ] as const;
 
 export const JOB_TITLES = [
@@ -57,6 +58,15 @@ export const registerSchema = z.object({
   phone: z.string().optional().nullable(),
   jobTitle: z.enum(ALL_JOB_TITLES).optional().nullable(),
   shiftType: z.enum(["day_shift", "night_shift"]).default("day_shift").optional(),
+  currentCtc: z.number().positive("Current CTC must be positive").optional(),
+  salaryComponents: z
+    .object({
+      basic_pct: z.number().min(0).max(100).optional(),
+      hra_pct: z.number().min(0).max(100).optional(),
+      allowance_pct: z.number().min(0).max(100).optional(),
+    })
+    .optional(),
+  salaryBandId: z.string().uuid().optional().nullable(),
   // Optional RBAC role IDs to assign immediately after creation
   rbacRoleIds: z.array(z.string().uuid()).optional().nullable(),
 });

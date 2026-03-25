@@ -35,6 +35,33 @@ import type {
 } from "../types/api.types.js";
 import type { UserRole } from "../config/constants.js";
 
+let employeeProfilesHasSalaryBandColumn: boolean | null = null;
+
+async function hasEmployeeProfilesSalaryBandColumn(): Promise<boolean> {
+  if (employeeProfilesHasSalaryBandColumn !== null) {
+    return employeeProfilesHasSalaryBandColumn;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("employee_profiles")
+    .select("salary_band_id")
+    .limit(1);
+
+  if (!error) {
+    employeeProfilesHasSalaryBandColumn = true;
+    return true;
+  }
+
+  const msg = (error.message || "").toLowerCase();
+  if (msg.includes("salary_band_id") || msg.includes("schema cache")) {
+    employeeProfilesHasSalaryBandColumn = false;
+    return false;
+  }
+
+  employeeProfilesHasSalaryBandColumn = true;
+  return true;
+}
+
 type GlobalAuthVerifyClient = typeof globalThis & {
   __supabaseAuthVerifyClient?: SupabaseClient;
 };
@@ -344,6 +371,38 @@ export async function register(
       assigned_by: createdBy,
     }));
     await supabaseAdmin.from("user_roles").insert(roleInserts);
+  }
+
+  const hasSalaryBandColumn = await hasEmployeeProfilesSalaryBandColumn();
+
+  await supabaseAdmin.from("employee_profiles").upsert(
+    hasSalaryBandColumn
+      ? {
+          user_id: userId,
+          current_ctc: input.currentCtc ?? null,
+          salary_components: input.salaryComponents ?? null,
+          salary_band_id: input.salaryBandId ?? null,
+          hr_status: "active",
+        }
+      : {
+          user_id: userId,
+          current_ctc: input.currentCtc ?? null,
+          salary_components: input.salaryComponents ?? null,
+          hr_status: "active",
+        },
+    { onConflict: "user_id" },
+  );
+
+  if (input.currentCtc !== undefined) {
+    await supabaseAdmin.from("employee_compensation_history").insert({
+      employee_id: userId,
+      effective_date: new Date().toISOString().split("T")[0],
+      previous_ctc: null,
+      new_ctc: input.currentCtc,
+      change_percentage: null,
+      reason: "Initial compensation setup",
+      approved_by: createdBy,
+    });
   }
 
   // Generate tokens

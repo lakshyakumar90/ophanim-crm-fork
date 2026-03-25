@@ -485,6 +485,8 @@ type DerivedDayAttendance = {
   isHoliday: boolean;
   isLeave: boolean;
   isWorkingDay: boolean;
+  lateArrival: boolean;
+  earlyDeparture: boolean;
 };
 
 function toISTDate(dateStr: string): Date {
@@ -554,7 +556,15 @@ function isHolidayApplicableToUser(holiday: any, user: AttendanceUserContext): b
 function getDayStatusFromSessions(
   rows: AttendanceRow[],
   rules: any | null,
-): { status: string; totalHours: number; overtimeHours: number; clockInTime: string | null; clockOutTime: string | null } {
+): {
+  status: string;
+  totalHours: number;
+  overtimeHours: number;
+  clockInTime: string | null;
+  clockOutTime: string | null;
+  lateArrival: boolean;
+  earlyDeparture: boolean;
+} {
   const totalHours = calculateDayTotalHours(rows);
   const halfDayHours = Number(rules?.half_day_hours) || 4;
   const fullDayHours = Number(rules?.full_day_hours) || 8;
@@ -576,6 +586,13 @@ function getDayStatusFromSessions(
   }
 
   const overtimeHours = Math.max(0, Math.round((totalHours - fullDayHours) * 100) / 100);
+  const workStart = rules?.work_start_time || "09:30";
+  const workEnd = rules?.work_end_time || "18:30";
+  const datePart = rows[0]?.date || formatInTimeZone(new Date(), IST_TIMEZONE, "yyyy-MM-dd");
+  const shiftStart = earliestIn ? new Date(`${datePart}T${workStart}:00+05:30`) : null;
+  const shiftEnd = latestOut ? new Date(`${datePart}T${workEnd}:00+05:30`) : null;
+  const lateArrival = Boolean(earliestIn && shiftStart && new Date(earliestIn) > shiftStart);
+  const earlyDeparture = Boolean(latestOut && shiftEnd && new Date(latestOut) < shiftEnd);
 
   return {
     status,
@@ -583,6 +600,8 @@ function getDayStatusFromSessions(
     overtimeHours,
     clockInTime: earliestIn,
     clockOutTime: latestOut,
+    lateArrival,
+    earlyDeparture,
   };
 }
 
@@ -712,6 +731,8 @@ async function deriveAttendanceDaysForUsers(
           status: sessionDerived.status,
           totalHours: sessionDerived.totalHours,
           overtimeHours: sessionDerived.overtimeHours,
+          lateArrival: sessionDerived.lateArrival,
+          earlyDeparture: sessionDerived.earlyDeparture,
           hasSession: true,
           sessionCount: daySessions.length,
           clockInTime: sessionDerived.clockInTime,
@@ -730,6 +751,8 @@ async function deriveAttendanceDaysForUsers(
         status,
         totalHours: 0,
         overtimeHours: 0,
+        lateArrival: false,
+        earlyDeparture: false,
         hasSession: false,
         sessionCount: 0,
         clockInTime: null,
@@ -1810,7 +1833,7 @@ export async function getAllUsersAttendance(
   // Get all active users with their attendance for the date
   let usersQuery = supabaseAdmin
     .from("users")
-    .select("id, full_name, email, role, avatar_url, shift_type")
+    .select("id, full_name, email, role, avatar_url, shift_type, job_title")
     .eq("is_active", true)
     .order("full_name");
 
@@ -1946,6 +1969,7 @@ export async function getAllUsersAttendance(
         fullName: user.full_name,
         email: user.email,
         role: user.role,
+        designation: user.job_title || null,
         avatarUrl: user.avatar_url,
         shiftType: user.shift_type || null,
       },

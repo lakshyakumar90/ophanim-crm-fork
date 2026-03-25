@@ -822,6 +822,620 @@ export interface Database {
           joined_at?: string;
         };
       };
+
+      // ============================================================
+      // HR DEPARTMENT TABLES
+      // ============================================================
+
+      employee_profiles: {
+        Row: {
+          id: string;
+          user_id: string;
+          employee_id: string | null;
+          date_of_birth: string | null;
+          gender: string | null;
+          nationality: string | null;
+          personal_email: string | null;
+          permanent_address: Json | null;
+          current_address: Json | null;
+          emergency_contact: Json | null;
+          designation: string | null;
+          department: string | null;
+          employment_type: string | null;
+          date_of_joining: string | null;
+          probation_end_date: string | null;
+          work_location: string | null;
+          reporting_manager_id: string | null;
+          current_ctc: number | null;
+          salary_components: Json | null;
+          bank_details: Json | null;
+          tax_id: string | null;
+          skills: string[] | null;
+          bio: string | null;
+          linkedin_url: string | null;
+          hr_status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          employee_id?: string | null;
+          date_of_birth?: string | null;
+          gender?: string | null;
+          nationality?: string | null;
+          personal_email?: string | null;
+          permanent_address?: Json | null;
+          current_address?: Json | null;
+          emergency_contact?: Json | null;
+          designation?: string | null;
+          department?: string | null;
+          employment_type?: string | null;
+          date_of_joining?: string | null;
+          probation_end_date?: string | null;
+          work_location?: string | null;
+          reporting_manager_id?: string | null;
+          current_ctc?: number | null;
+          salary_components?: Json | null;
+          bank_details?: Json | null;
+          tax_id?: string | null;
+          skills?: string[] | null;
+          bio?: string | null;
+          linkedin_url?: string | null;
+          hr_status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          employee_id?: string | null;
+          date_of_birth?: string | null;
+          gender?: string | null;
+          nationality?: string | null;
+          personal_email?: string | null;
+          permanent_address?: Json | null;
+          current_address?: Json | null;
+          emergency_contact?: Json | null;
+          designation?: string | null;
+          department?: string | null;
+          employment_type?: string | null;
+          date_of_joining?: string | null;
+          probation_end_date?: string | null;
+          work_location?: string | null;
+          reporting_manager_id?: string | null;
+          current_ctc?: number | null;
+          salary_components?: Json | null;
+          bank_details?: Json | null;
+          tax_id?: string | null;
+          skills?: string[] | null;
+          bio?: string | null;
+          linkedin_url?: string | null;
+          hr_status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+
+      employee_compensation_history: {
+        Row: {
+          id: string;
+          employee_id: string;
+          effective_date: string;
+          previous_ctc: number | null;
+          new_ctc: number;
+          change_percentage: number | null;
+          reason: string | null;
+          approved_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          effective_date: string;
+          previous_ctc?: number | null;
+          new_ctc: number;
+          change_percentage?: number | null;
+          reason?: string | null;
+          approved_by?: string | null;
+          created_at?: string;
+        };
+        Update: Record<string, never>; // Immutable — no updates
+      };
+
+      job_postings: {
+        Row: {
+          id: string;
+          title: string;
+          department: string | null;
+          positions_open: number;
+          description: string | null;
+          required_skills: string[] | null;
+          salary_range_min: number | null;
+          salary_range_max: number | null;
+          application_deadline: string | null;
+          posted_by: string | null;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          department?: string | null;
+          positions_open?: number;
+          description?: string | null;
+          required_skills?: string[] | null;
+          salary_range_min?: number | null;
+          salary_range_max?: number | null;
+          application_deadline?: string | null;
+          posted_by?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          department?: string | null;
+          positions_open?: number;
+          description?: string | null;
+          required_skills?: string[] | null;
+          salary_range_min?: number | null;
+          salary_range_max?: number | null;
+          application_deadline?: string | null;
+          posted_by?: string | null;
+          status?: string;
+          updated_at?: string;
+        };
+      };
+
+      candidates: {
+        Row: {
+          id: string;
+          job_posting_id: string | null;
+          full_name: string;
+          email: string | null;
+          phone: string | null;
+          source: string | null;
+          resume_url: string | null;
+          applied_at: string;
+          stage: string;
+          stage_history: Json[] | null;
+          offer: Json | null;
+          converted_to_user_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          job_posting_id?: string | null;
+          full_name: string;
+          email?: string | null;
+          phone?: string | null;
+          source?: string | null;
+          resume_url?: string | null;
+          applied_at?: string;
+          stage?: string;
+          stage_history?: Json[] | null;
+          offer?: Json | null;
+          converted_to_user_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          job_posting_id?: string | null;
+          full_name?: string;
+          email?: string | null;
+          phone?: string | null;
+          source?: string | null;
+          resume_url?: string | null;
+          applied_at?: string;
+          stage?: string;
+          stage_history?: Json[] | null;
+          offer?: Json | null;
+          converted_to_user_id?: string | null;
+          updated_at?: string;
+        };
+      };
+
+      interviews: {
+        Row: {
+          id: string;
+          candidate_id: string;
+          round: number;
+          interviewer_id: string | null;
+          scheduled_at: string | null;
+          interview_type: string;
+          feedback: string | null;
+          rating: number | null;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          candidate_id: string;
+          round?: number;
+          interviewer_id?: string | null;
+          scheduled_at?: string | null;
+          interview_type?: string;
+          feedback?: string | null;
+          rating?: number | null;
+          status?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          candidate_id?: string;
+          round?: number;
+          interviewer_id?: string | null;
+          scheduled_at?: string | null;
+          interview_type?: string;
+          feedback?: string | null;
+          rating?: number | null;
+          status?: string;
+        };
+      };
+
+      salary_bands: {
+        Row: {
+          id: string;
+          designation: string;
+          department: string | null;
+          min_ctc: number;
+          max_ctc: number;
+          components_template: Json | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          designation: string;
+          department?: string | null;
+          min_ctc: number;
+          max_ctc: number;
+          components_template?: Json | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          designation?: string;
+          department?: string | null;
+          min_ctc?: number;
+          max_ctc?: number;
+          components_template?: Json | null;
+          updated_at?: string;
+        };
+      };
+
+      payroll_runs: {
+        Row: {
+          id: string;
+          month: string;
+          initiated_by: string;
+          approved_by: string | null;
+          status: string;
+          total_gross: number | null;
+          total_deductions: number | null;
+          total_net: number | null;
+          notes: string | null;
+          disbursed_at: string | null;
+          is_correction: boolean;
+          original_run_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          month: string;
+          initiated_by: string;
+          approved_by?: string | null;
+          status?: string;
+          total_gross?: number | null;
+          total_deductions?: number | null;
+          total_net?: number | null;
+          notes?: string | null;
+          disbursed_at?: string | null;
+          is_correction?: boolean;
+          original_run_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          month?: string;
+          approved_by?: string | null;
+          status?: string;
+          total_gross?: number | null;
+          total_deductions?: number | null;
+          total_net?: number | null;
+          notes?: string | null;
+          disbursed_at?: string | null;
+          updated_at?: string;
+        };
+      };
+
+      payroll_records: {
+        Row: {
+          id: string;
+          payroll_run_id: string;
+          employee_id: string;
+          month: string;
+          earnings: Json;
+          gross_pay: number;
+          deductions: Json;
+          total_deductions: number;
+          net_pay: number;
+          attendance_summary: Json | null;
+          edits: Json[] | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          payroll_run_id: string;
+          employee_id: string;
+          month: string;
+          earnings?: Json;
+          gross_pay?: number;
+          deductions?: Json;
+          total_deductions?: number;
+          net_pay?: number;
+          attendance_summary?: Json | null;
+          edits?: Json[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          earnings?: Json;
+          gross_pay?: number;
+          deductions?: Json;
+          total_deductions?: number;
+          net_pay?: number;
+          attendance_summary?: Json | null;
+          edits?: Json[] | null;
+          updated_at?: string;
+        };
+      };
+
+      review_cycles: {
+        Row: {
+          id: string;
+          name: string;
+          scope: string;
+          department_id: string | null;
+          frequency: string | null;
+          goal_setting_deadline: string | null;
+          mid_checkin_date: string | null;
+          self_assessment_deadline: string | null;
+          manager_review_deadline: string | null;
+          calibration_deadline: string | null;
+          results_release_date: string | null;
+          status: string;
+          created_by: string | null;
+          final_approved_by: string | null;
+          final_approved_at: string | null;
+          final_approval_note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          scope?: string;
+          department_id?: string | null;
+          frequency?: string | null;
+          goal_setting_deadline?: string | null;
+          mid_checkin_date?: string | null;
+          self_assessment_deadline?: string | null;
+          manager_review_deadline?: string | null;
+          calibration_deadline?: string | null;
+          results_release_date?: string | null;
+          status?: string;
+          created_by?: string | null;
+          final_approved_by?: string | null;
+          final_approved_at?: string | null;
+          final_approval_note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          scope?: string;
+          department_id?: string | null;
+          frequency?: string | null;
+          goal_setting_deadline?: string | null;
+          mid_checkin_date?: string | null;
+          self_assessment_deadline?: string | null;
+          manager_review_deadline?: string | null;
+          calibration_deadline?: string | null;
+          results_release_date?: string | null;
+          status?: string;
+          final_approved_by?: string | null;
+          final_approved_at?: string | null;
+          final_approval_note?: string | null;
+          updated_at?: string;
+        };
+      };
+
+      performance_reviews: {
+        Row: {
+          id: string;
+          cycle_id: string;
+          employee_id: string;
+          manager_id: string | null;
+          goals: Json[] | null;
+          self_assessment: Json | null;
+          manager_review: Json | null;
+          calibrated_rating: string | null;
+          peer_feedback: Json | null;
+          pip_triggered: boolean;
+          status: string;
+          acknowledged_at: string | null;
+          acknowledgement_note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          cycle_id: string;
+          employee_id: string;
+          manager_id?: string | null;
+          goals?: Json[] | null;
+          self_assessment?: Json | null;
+          manager_review?: Json | null;
+          calibrated_rating?: string | null;
+          peer_feedback?: Json | null;
+          pip_triggered?: boolean;
+          status?: string;
+          acknowledged_at?: string | null;
+          acknowledgement_note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          manager_id?: string | null;
+          goals?: Json[] | null;
+          self_assessment?: Json | null;
+          manager_review?: Json | null;
+          calibrated_rating?: string | null;
+          peer_feedback?: Json | null;
+          pip_triggered?: boolean;
+          status?: string;
+          acknowledged_at?: string | null;
+          acknowledgement_note?: string | null;
+          updated_at?: string;
+        };
+      };
+
+      peer_feedback_submissions: {
+        Row: {
+          id: string;
+          review_id: string;
+          submitter_id: string;
+          dimension: string;
+          score: number | null;
+          comment: string | null;
+          submitted_at: string;
+        };
+        Insert: {
+          id?: string;
+          review_id: string;
+          submitter_id: string;
+          dimension: string;
+          score?: number | null;
+          comment?: string | null;
+          submitted_at?: string;
+        };
+        Update: Record<string, never>; // Immutable
+      };
+
+      onboarding_templates: {
+        Row: {
+          id: string;
+          name: string;
+          department: string | null;
+          type: string;
+          tasks: Json[] | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          department?: string | null;
+          type?: string;
+          tasks?: Json[] | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          department?: string | null;
+          type?: string;
+          tasks?: Json[] | null;
+          updated_at?: string;
+        };
+      };
+
+      onboarding_checklists: {
+        Row: {
+          id: string;
+          employee_id: string;
+          template_id: string | null;
+          type: string;
+          joining_date: string | null;
+          tasks: Json[] | null;
+          exit_details: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          template_id?: string | null;
+          type?: string;
+          joining_date?: string | null;
+          tasks?: Json[] | null;
+          exit_details?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tasks?: Json[] | null;
+          exit_details?: Json | null;
+          updated_at?: string;
+        };
+      };
+
+      increment_proposals: {
+        Row: {
+          id: string;
+          employee_id: string;
+          proposed_by: string | null;
+          approved_by: string | null;
+          current_ctc: number | null;
+          proposed_ctc: number;
+          effective_date: string;
+          reason: string | null;
+          status: string;
+          payroll_run_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          proposed_by?: string | null;
+          approved_by?: string | null;
+          current_ctc?: number | null;
+          proposed_ctc: number;
+          effective_date: string;
+          reason?: string | null;
+          status?: string;
+          payroll_run_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          approved_by?: string | null;
+          status?: string;
+          payroll_run_id?: string | null;
+          updated_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -870,3 +1484,4 @@ export interface Database {
     CompositeTypes: Record<string, never>;
   };
 }
+

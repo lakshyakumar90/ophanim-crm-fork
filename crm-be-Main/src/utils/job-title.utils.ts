@@ -6,9 +6,9 @@
  * (hyphen → underscore, already lowercase)
  *
  * Seniority is computed from the slug:
- *   - "admin"           → highest (0)
- *   - ends with "manager" → high (1)
- *   - otherwise         → standard (2)
+ *   - "admin"              → highest (0)
+ *   - ends with "manager" or "director" (or those bare slugs) → high (1)
+ *   - otherwise            → standard (2)
  * Within the same tier, alphabetical ordering is used as a tiebreak.
  *
  * This means any custom role the admin creates (e.g. "content-strategist")
@@ -28,7 +28,13 @@ export function slugToJobTitle(slug: string): string {
  */
 export function slugSeniority(slug: string): number {
   if (slug === "admin") return 0;
-  if (slug.endsWith("-manager") || slug === "manager") return 1;
+  if (
+    slug.endsWith("-director") ||
+    slug === "director" ||
+    slug.endsWith("-manager") ||
+    slug === "manager"
+  )
+    return 1;
   return 2;
 }
 

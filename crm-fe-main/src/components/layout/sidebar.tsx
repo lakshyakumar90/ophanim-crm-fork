@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import useSWR, { mutate as globalMutate } from "swr";
 import { cn } from "@/lib/utils";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
@@ -53,14 +53,19 @@ import {
 import { Fragment, useEffect, useState } from "react";
 import type { Department } from "@/types";
 import { Badge } from "@/components/ui/badge";
+import { fetchPerformanceReminderCounts } from "@/lib/performance-api";
 
 interface NavItem {
   title: string;
   href: string;
   icon: React.ElementType;
   roles?: ("admin" | "manager" | "employee")[];
+  /** If set, item is visible when user has any of these permissions (or crm:admin) */
+  anyPermission?: string[];
   showBadge?: boolean; // For notification count
   showReminderBadge?: boolean; // For reminder count
+  showMyReviewBadge?: boolean;
+  showPeerFeedbackBadge?: boolean;
 }
 
 function NavLink({
@@ -102,7 +107,7 @@ function NavLink({
         {collapsed && badgeCount && badgeCount > 0 && (
           <span
             className={cn(
-              "absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-medium text-white rounded-full",
+              "absolute -top-1.5 -right-1.5 min-w-3.5 h-3.5 flex items-center justify-center px-0.5 text-[9px] font-medium text-white rounded-full",
               badgeBgClass,
             )}
           >
@@ -116,7 +121,7 @@ function NavLink({
           {badgeCount && badgeCount > 0 && (
             <Badge
               className={cn(
-                "h-5 min-w-[20px] flex items-center justify-center px-1.5 text-[10px] text-white",
+                "h-5 min-w-5 flex items-center justify-center px-1.5 text-[10px] text-white",
                 badgeBgClass,
                 `hover:${badgeBgClass}`,
               )}
@@ -293,6 +298,38 @@ const hrItems: NavItem[] = [
     roles: ["admin", "manager"],
   },
   {
+    title: "Documents",
+    href: "/hr/documents",
+    icon: FileText,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "Recruitment",
+    href: "/hr/recruitment",
+    icon: Briefcase,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "Payroll",
+    href: "/hr/payroll",
+    icon: Receipt,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "Performance",
+    href: "/hr/performance",
+    icon: Target,
+    roles: ["admin", "manager"],
+    anyPermission: ["performance:view", "performance:manage", "performance:review"],
+  },
+  {
+    title: "Onboarding",
+    href: "/hr/onboarding",
+    icon: UserCircle,
+    roles: ["admin", "manager"],
+    anyPermission: ["onboarding:view", "onboarding:manage"],
+  },
+  {
     title: "Holidays",
     href: "/hr/holidays",
     icon: CalendarClock,
@@ -319,16 +356,34 @@ function DepartmentDropdown({
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
-  const router = useRouter();
 
   const filterNav = (items: NavItem[]) =>
     items.filter((item) => {
-      if (!item.roles) return true;
-      if (item.roles.includes("admin") && isAdmin) return true;
-      if (item.roles.includes("manager") && isManager) return true;
-      if (item.roles.includes("employee") && user?.role === "employee")
-        return true;
-      return false;
+      const p = user?.permissions ?? [];
+      const permGate = item.anyPermission ?? [];
+      const permOk =
+        permGate.length > 0 &&
+        (p.includes("crm:admin") || permGate.some((x) => p.includes(x)));
+
+      if (permGate.length && !item.roles?.length) {
+        return permOk;
+      }
+
+      let roleOk = true;
+      if (item.roles?.length) {
+        roleOk = false;
+        if (item.roles.includes("admin") && isAdmin) roleOk = true;
+        if (item.roles.includes("manager") && isManager) roleOk = true;
+        if (item.roles.includes("employee") && user?.role === "employee")
+          roleOk = true;
+      } else if (!item.roles) {
+        roleOk = true;
+      }
+
+      if (permGate.length && item.roles?.length) {
+        return permOk || roleOk;
+      }
+      return roleOk;
     });
 
   const departmentItems = filterNav(getDepartmentNavItems(department.slug));
@@ -487,6 +542,32 @@ function GlobalSidebar({
       href: "/calendar",
       icon: CalendarDays,
     },
+    {
+      title: "My payslips",
+      href: "/hr/payroll/my-payslips",
+      icon: Wallet,
+      roles: ["admin", "manager", "employee"],
+    },
+    {
+      title: "My review",
+      href: "/performance/my-review",
+      icon: ClipboardCheck,
+      roles: ["admin", "manager", "employee"],
+      showMyReviewBadge: true,
+    },
+    {
+      title: "Peer feedback",
+      href: "/performance/peer-feedback",
+      icon: UsersRound,
+      roles: ["admin", "manager", "employee"],
+      showPeerFeedbackBadge: true,
+    },
+    {
+      title: "My documents",
+      href: "/documents/my-documents",
+      icon: FileText,
+      roles: ["admin", "manager", "employee"],
+    },
     { title: "Settings", href: "/settings", icon: Settings },
   ];
 
@@ -494,6 +575,14 @@ function GlobalSidebar({
 
   const filterNav = (items: NavItem[]) =>
     items.filter((item) => {
+      if (
+        item.href === "/hr/onboarding" &&
+        !isAdmin &&
+        user?.departmentSlug !== "hr"
+      ) {
+        return false;
+      }
+
       if (!item.roles) return true;
       if (item.roles.includes("admin") && isAdmin) return true;
       if (item.roles.includes("manager") && isManager) return true;
@@ -531,6 +620,20 @@ function GlobalSidebar({
     },
   );
   const remindersCount = remindersData?.count || 0;
+
+  const { data: perfReminderCounts } = useSWR(
+    user ? "performance-reminder-counts" : null,
+    () => fetchPerformanceReminderCounts(),
+    {
+      refreshInterval: isPollingLeader ? 180000 : 0,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+  const myReviewReminderCount = perfReminderCounts?.myReview || 0;
+  const peerFeedbackReminderCount = perfReminderCounts?.peerFeedback || 0;
 
   useEffect(() => {
     if (!user || !isPollingLeader) return;
@@ -682,6 +785,10 @@ function GlobalSidebar({
                   ? unreadCount
                   : item.showReminderBadge
                     ? remindersCount
+                    : item.showMyReviewBadge
+                      ? myReviewReminderCount
+                      : item.showPeerFeedbackBadge
+                        ? peerFeedbackReminderCount
                     : undefined
               }
               badgeColor={item.showReminderBadge ? "amber" : "red"}

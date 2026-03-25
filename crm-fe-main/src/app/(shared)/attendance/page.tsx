@@ -123,6 +123,7 @@ type UsersTodayItem = {
     fullName: string;
     avatarUrl?: string | null;
     role?: string | null;
+    designation?: string | null;
     shiftType?: string | null;
   };
   status: string;
@@ -136,8 +137,10 @@ type UsersTodayItem = {
 
 export default function AttendancePage() {
   const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated, can } = useAuth();
   const isAdmin = useIsAdmin();
+  const isHR = can("hr:view") || can("hr:manage");
+  const canManageTeamAttendance = isAdmin || isHR;
   const [isClockingIn, setIsClockingIn] = useState(false);
   const [isClockingOut, setIsClockingOut] = useState(false);
   const [workingTime, setWorkingTime] = useState<string>("");
@@ -299,7 +302,7 @@ export default function AttendancePage() {
   );
 
   const { data: analyticsData, isLoading: loadingAnalytics } = useSWR(
-    isAuthenticated && isAdmin
+    isAuthenticated && canManageTeamAttendance
       ? ["attendance-analytics", startDate, endDate, currentDepartment?.id]
       : null,
     () =>
@@ -325,7 +328,7 @@ export default function AttendancePage() {
   }, [holidaysData]);
 
   const { data: usersAttendanceData, isLoading: loadingUsers } = useSWR(
-    isAuthenticated && isAdmin
+    isAuthenticated && canManageTeamAttendance
       ? ["attendance-users", startDate, currentDepartment?.id]
       : null,
     () =>
@@ -344,7 +347,7 @@ export default function AttendancePage() {
       mutate((key) => Array.isArray(key) && key[0] === "holidays-current-year"),
     ];
 
-    if (isAdmin) {
+    if (canManageTeamAttendance) {
       refreshers.push(
         mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics"),
         mutate((key) => Array.isArray(key) && key[0] === "attendance-users"),
@@ -352,7 +355,7 @@ export default function AttendancePage() {
     }
 
     await Promise.all(refreshers);
-  }, [isAdmin]);
+  }, [canManageTeamAttendance]);
 
   useHeaderRefresh({
     onRefresh: refreshAttendanceData,
@@ -393,7 +396,7 @@ export default function AttendancePage() {
       // Invalidate all relevant cache keys
       mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
       mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
-      if (isAdmin) {
+      if (canManageTeamAttendance) {
         mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
         mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
       }
@@ -415,7 +418,7 @@ export default function AttendancePage() {
       // Invalidate all relevant cache keys
       mutate((key) => Array.isArray(key) && key[0] === "attendance-today");
       mutate((key) => Array.isArray(key) && key[0] === "attendance-summary");
-      if (isAdmin) {
+      if (canManageTeamAttendance) {
         mutate((key) => Array.isArray(key) && key[0] === "attendance-users");
         mutate((key) => Array.isArray(key) && key[0] === "attendance-analytics");
       }
@@ -583,7 +586,7 @@ export default function AttendancePage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Attendance</h1>
         <p className="text-muted-foreground">
-          {isAdmin
+          {canManageTeamAttendance
             ? "Monitor team attendance and track your own"
             : "Track your daily attendance and view your analytics"}
         </p>
@@ -897,7 +900,7 @@ export default function AttendancePage() {
             </CardTitle>
             <div className="flex items-center gap-2">
               {/* Admin User Selector */}
-              {isAdmin && (
+              {canManageTeamAttendance && (
                 <select
                   value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
@@ -1189,7 +1192,7 @@ export default function AttendancePage() {
       </Card>
 
       {/* Admin Section */}
-      {isAdmin && (
+      {canManageTeamAttendance && (
         <>
           {/* Period Filter */}
           <div className="flex flex-wrap items-center gap-3 pt-4 border-t">
@@ -1667,7 +1670,7 @@ export default function AttendancePage() {
                                       {item.user.fullName}
                                     </p>
                                     <p className="text-xs text-muted-foreground capitalize">
-                                      {item.user.role}
+                                      {item.user.designation || item.user.role || "Employee"}
                                     </p>
                                   </div>
                                 </div>

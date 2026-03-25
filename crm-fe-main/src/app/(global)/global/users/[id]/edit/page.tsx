@@ -45,6 +45,9 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import React, { useMemo } from "react";
 
+const formatTitleLabel = (value: string) =>
+  value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
 // Job titles categorized by role
 // Department-to-job-titles mapping
 const DEPARTMENT_JOB_TITLES: Record<
@@ -59,8 +62,11 @@ const DEPARTMENT_JOB_TITLES: Record<
     manager: [{ value: "sales_manager", label: "Sales Manager" }],
   },
   hr: {
-    employee: [],
-    manager: [{ value: "hr_manager", label: "HR Manager" }],
+    employee: [{ value: "hr_employee", label: "HR Employee" }],
+    manager: [
+      { value: "hr_manager", label: "HR Manager" },
+      { value: "hr_director", label: "HR Director" },
+    ],
   },
   finance: {
     employee: [{ value: "finance_employee", label: "Finance Employee" }],
@@ -86,6 +92,10 @@ const editUserSchema = z.object({
   isActive: z.boolean(),
   jobTitle: z.string().optional(),
   shiftType: z.enum(["day_shift", "night_shift"]).optional(),
+    currentCtc: z.coerce.number().positive("CTC must be positive").nullish(),
+    basicPct: z.coerce.number().min(0).max(100).nullish(),
+    hraPct: z.coerce.number().min(0).max(100).nullish(),
+    allowancePct: z.coerce.number().min(0).max(100).nullish(),
 });
 
 type EditUserFormData = z.infer<typeof editUserSchema>;
@@ -168,7 +178,7 @@ export default function EditUserPage() {
     watch,
     formState: { errors },
   } = useForm<EditUserFormData>({
-    resolver: zodResolver(editUserSchema),
+      resolver: zodResolver(editUserSchema) as any,
     values: userData
       ? {
           fullName: userData.fullName || "",
@@ -179,6 +189,10 @@ export default function EditUserPage() {
           isActive: userData.isActive ?? true,
           jobTitle: userData.jobTitle || "",
           shiftType: (userData.shiftType as "day_shift" | "night_shift") || "day_shift",
+          currentCtc: userData.currentCtc ?? undefined,
+            basicPct: userData.salaryComponents?.basic_pct ?? undefined,
+            hraPct: userData.salaryComponents?.hra_pct ?? undefined,
+            allowancePct: userData.salaryComponents?.allowance_pct ?? undefined,
         }
       : undefined,
   });
@@ -206,6 +220,21 @@ export default function EditUserPage() {
     const role = currentRole as "manager" | "employee";
     return role === "manager" ? deptConfig.manager : deptConfig.employee;
   }, [currentDepartmentSlug, currentRole]);
+
+  const jobTitleOptions = useMemo(() => {
+    if (!currentJobTitle || currentJobTitle === "none") return availableJobTitles;
+    const exists = availableJobTitles.some((t) => t.value === currentJobTitle);
+    if (exists) return availableJobTitles;
+    return [
+      { value: currentJobTitle, label: `${formatTitleLabel(currentJobTitle)} (Current)` },
+      ...availableJobTitles,
+    ];
+  }, [availableJobTitles, currentJobTitle]);
+
+  const unassignedRoles = useMemo(
+    () => allRoles.filter((r) => !userRoles.some((ur) => ur.roleId === r.id)),
+    [allRoles, userRoles],
+  );
 
   // Reset job title if it doesn't match available options
   useEffect(() => {
@@ -280,6 +309,17 @@ export default function EditUserPage() {
         jobTitle:
           data.jobTitle && data.jobTitle !== "none" ? data.jobTitle : null,
         shiftType: data.shiftType || "day_shift",
+        currentCtc: data.currentCtc,
+        salaryComponents:
+          data.basicPct !== undefined ||
+          data.hraPct !== undefined ||
+          data.allowancePct !== undefined
+            ? {
+                basic_pct: data.basicPct,
+                hra_pct: data.hraPct,
+                allowance_pct: data.allowancePct,
+              }
+            : undefined,
       });
       toast.success("User updated successfully");
       mutate();
@@ -536,7 +576,7 @@ export default function EditUserPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {availableJobTitles.map((jt) => (
+                    {jobTitleOptions.map((jt) => (
                       <SelectItem key={jt.value} value={jt.value}>
                         {jt.label}
                       </SelectItem>
@@ -544,7 +584,9 @@ export default function EditUserPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {!currentDepartmentSlug
+                  {currentJobTitle && currentJobTitle !== "none"
+                    ? `Current: ${formatTitleLabel(currentJobTitle)}`
+                    : !currentDepartmentSlug
                     ? "Please select a department to see available job titles"
                     : currentRole === "employee"
                       ? "Select a specialization for this employee"
@@ -573,6 +615,45 @@ export default function EditUserPage() {
               <p className="text-xs text-muted-foreground">
                 Select the work shift for this user
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="currentCtc">Annual CTC (INR)</Label>
+              <Input
+                id="currentCtc"
+                type="number"
+                min={0}
+                step="1000"
+                placeholder="e.g. 1200000"
+                {...register("currentCtc")}
+              />
+              {errors.currentCtc && (
+                <p className="text-sm text-red-500">{errors.currentCtc.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Used for payroll package and payslip calculations.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="basicPct">Basic %</Label>
+                <Input id="basicPct" type="number" min={0} max={100} {...register("basicPct")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="hraPct">HRA %</Label>
+                <Input id="hraPct" type="number" min={0} max={100} {...register("hraPct")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="allowancePct">Allowance %</Label>
+                <Input
+                  id="allowancePct"
+                  type="number"
+                  min={0}
+                  max={100}
+                  {...register("allowancePct")}
+                />
+              </div>
             </div>
 
             <div className="flex items-center justify-between rounded-lg border p-4">
@@ -713,20 +794,21 @@ export default function EditUserPage() {
           {/* Assign role */}
           <div>
             <p className="text-sm font-medium mb-2">Add Role</p>
-            <div className="flex gap-2">
-              <Select
-                value={selectedRoleId}
-                onValueChange={setSelectedRoleId}
-              >
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Search and select a role..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {allRoles
-                    .filter(
-                      (r) => !userRoles.some((ur) => ur.roleId === r.id),
-                    )
-                    .map((r) => (
+            {unassignedRoles.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                All available roles are already assigned.
+              </p>
+            ) : (
+              <div className="flex gap-2">
+                <Select
+                  value={selectedRoleId}
+                  onValueChange={setSelectedRoleId}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Search and select a role..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unassignedRoles.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
                         {r.name}
                         {r.departmentName && (
@@ -736,21 +818,22 @@ export default function EditUserPage() {
                         )}
                       </SelectItem>
                     ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                onClick={handleAssignRole}
-                disabled={!selectedRoleId || isAssigningRole}
-              >
-                {isAssigningRole ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-                <span className="ml-1">Assign</span>
-              </Button>
-            </div>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  onClick={handleAssignRole}
+                  disabled={!selectedRoleId || isAssigningRole}
+                >
+                  {isAssigningRole ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  <span className="ml-1">Assign</span>
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Permission summary */}

@@ -351,18 +351,36 @@ export async function getLeads(params?: {
   }
 
   // Team filter: get all users in the team and filter by their IDs
+  // If lookup fails, throw to trigger backend fallback (backend uses supabaseAdmin)
   if (params?.teamId) {
-    const { data: teamMembers } = await supabase
-      .from("users")
-      .select("id")
-      .eq("team_id", params.teamId)
-      .eq("is_active", true);
-    const memberIds = (teamMembers || []).map((u: any) => u.id);
-    if (memberIds.length > 0) {
-      query = query.in("assigned_to", memberIds);
-    } else {
-      // No team members = no results
-      query = query.eq("assigned_to", "00000000-0000-0000-0000-000000000000");
+    try {
+      const { data: teamMembers, error: teamError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("team_id", params.teamId)
+        .eq("is_active", true);
+      
+      if (teamError) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("Team member lookup failed via Supabase RLS:", teamError);
+        }
+        // Throw to trigger backend API fallback
+        throw teamError;
+      }
+      
+      const memberIds = (teamMembers || []).map((u: any) => u.id);
+      if (memberIds.length > 0) {
+        query = query.in("assigned_to", memberIds);
+      } else {
+        // No team members found (empty team or filtered out by RLS)
+        // Return empty result - this is correct behavior
+        query = query.eq("assigned_to", "00000000-0000-0000-0000-000000000000");
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("Team filter lookup failed, will trigger fallback to backend API:", (error as any)?.message);
+      }
+      throw error;
     }
   }
 
@@ -424,11 +442,15 @@ export async function getLeadById(id: string) {
     .from("leads")
     .select(`*, assignee:users!assigned_to(id, full_name, avatar_url, email)`)
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (error) {
     if (process.env.NODE_ENV !== "production") console.warn("Error fetching lead:", (error as any)?.message || (error as any)?.code || String(error));
     throw error;
+  }
+
+  if (!data) {
+    throw new Error("Lead not found or not accessible via Supabase");
   }
 
   const mapped = {

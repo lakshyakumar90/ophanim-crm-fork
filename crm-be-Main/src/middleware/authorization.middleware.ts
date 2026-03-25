@@ -41,6 +41,67 @@ export const requireAdmin = requireRole(USER_ROLES.ADMIN);
 export const requireManager = requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER);
 
 /**
+ * Require manager/admin or HR access.
+ * Useful for attendance and user-detail views that HR teams need.
+ */
+export function requireManagerOrHRAccess() {
+  return async (
+    req: AuthenticatedRequest,
+    _res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new ApiError(ERROR_CODES.AUTH_TOKEN_MISSING);
+      }
+
+      if (req.user.role === USER_ROLES.ADMIN || req.user.role === USER_ROLES.MANAGER) {
+        return next();
+      }
+
+      if (
+        req.user.permissions.includes("crm:admin") ||
+        req.user.permissions.includes("hr:manage") ||
+        req.user.permissions.includes("hr:view")
+      ) {
+        return next();
+      }
+
+      // Legacy fallback for HR members when explicit permissions are not seeded.
+      const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("team_id")
+        .eq("id", req.user.id)
+        .single();
+
+      if (userData?.team_id) {
+        const { data: teamData } = await supabaseAdmin
+          .from("teams")
+          .select("department_id")
+          .eq("id", userData.team_id)
+          .single();
+
+        if (teamData?.department_id) {
+          const { data: deptData } = await supabaseAdmin
+            .from("departments")
+            .select("slug")
+            .eq("id", teamData.department_id)
+            .single();
+
+          if (deptData?.slug === "hr") {
+            return next();
+          }
+        }
+      }
+
+      throw new ApiError(ERROR_CODES.FORBIDDEN, "Access denied");
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
  * Require any authenticated user
  */
 export const requireAuth = requireRole(
@@ -71,8 +132,8 @@ export function requirePermission(perm: string) {
 
     const { permissions } = req.user;
 
-    // crm:admin is a global superuser — always passes
-    if (permissions.includes("crm:admin")) {
+    // Admin role or crm:admin permission is global superuser — always passes
+    if (req.user.role === USER_ROLES.ADMIN || permissions.includes("crm:admin")) {
       return next();
     }
 
@@ -105,7 +166,7 @@ export function requirePermissions(perms: string[]) {
 
     const { permissions } = req.user;
 
-    if (permissions.includes("crm:admin")) {
+    if (req.user.role === USER_ROLES.ADMIN || permissions.includes("crm:admin")) {
       return next();
     }
 
@@ -136,7 +197,7 @@ export function requireAnyPermission(perms: string[]) {
 
     const { permissions } = req.user;
 
-    if (permissions.includes("crm:admin")) {
+    if (req.user.role === USER_ROLES.ADMIN || permissions.includes("crm:admin")) {
       return next();
     }
 
@@ -235,6 +296,16 @@ export function checkResourceAccess(
         }
 
         case "user": {
+          // HR can view user records for HR workflows.
+          if (
+            req.user.permissions.includes("crm:admin") ||
+            req.user.permissions.includes("hr:view") ||
+            req.user.permissions.includes("hr:manage")
+          ) {
+            hasAccess = true;
+            break;
+          }
+
           if (req.user.role === USER_ROLES.MANAGER) {
             const { data: targetUser } = await supabaseAdmin
               .from("users")

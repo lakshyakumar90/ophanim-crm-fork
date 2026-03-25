@@ -20,8 +20,13 @@ import {
 import { Loader2, Camera, Upload } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-// Schema for regular users (phone only)
+// Schema for regular users (they can edit full name + phone)
 const userProfileSchema = z.object({
+  fullName: z
+    .string()
+    .min(2, "Name must be at least 2 characters")
+    .max(100)
+    .optional(),
   phone: z.string().optional(),
 });
 
@@ -47,7 +52,7 @@ export function ProfileForm() {
     handleSubmit,
     setValue,
     formState: { errors },
-  } = useForm<AdminProfileFormData>({
+  } = useForm<ProfileFormData>({
     resolver: zodResolver(
       isAdmin ? adminProfileSchema : userProfileSchema,
     ) as any,
@@ -55,9 +60,7 @@ export function ProfileForm() {
 
   useEffect(() => {
     if (user) {
-      if (isAdmin) {
-        setValue("fullName", user.fullName);
-      }
+      setValue("fullName", user.fullName);
       setValue("phone", user.phone || "");
     }
   }, [user, setValue, isAdmin]);
@@ -73,7 +76,10 @@ export function ProfileForm() {
           phone: data.phone || null,
         });
       } else {
-        await usersApi.updateProfile({ phone: data.phone });
+        await usersApi.updateProfile({
+          fullName: (data as UserProfileFormData).fullName,
+          phone: data.phone || null,
+        });
       }
       await refreshUser();
       toast.success("Profile updated successfully");
@@ -192,13 +198,15 @@ export function ProfileForm() {
               ) : (
                 <>
                   <Input
-                    value={user?.fullName}
-                    disabled
+                    id="fullName"
+                    {...register("fullName")}
                     className="bg-slate-50"
                   />
-                  <p className="text-xs text-slate-500">
-                    Contact admin to change your name
-                  </p>
+                  {errors.fullName && (
+                    <p className="text-sm text-red-500">
+                      {errors.fullName.message}
+                    </p>
+                  )}
                 </>
               )}
             </div>

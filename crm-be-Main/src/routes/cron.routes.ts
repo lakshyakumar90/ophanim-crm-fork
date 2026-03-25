@@ -5,8 +5,10 @@ import {
   processLeadReminders,
   processTaskReminders,
 } from "../services/reminder.service.js";
+import { processPerformanceDeadlineReminders } from "../services/performance.service.js";
 import { bulkAutoLogoutDueSessions } from "../services/attendance.service.js";
 import { logger } from "../utils/logger.js";
+import { runComplianceChecks } from "../services/hr-analytics.service.js";
 
 const router: Router = Router();
 
@@ -50,7 +52,11 @@ router.get("/reminders", async (req, res) => {
     logger.info("[Cron] Starting reminder processing...");
 
     // Process all reminder types
-    await Promise.all([processTaskReminders(), processLeadReminders()]);
+    await Promise.all([
+      processTaskReminders(),
+      processLeadReminders(),
+      processPerformanceDeadlineReminders(),
+    ]);
 
     logger.info("[Cron] Reminder processing completed");
 
@@ -174,6 +180,31 @@ router.get("/auto-logout/status", async (req, res) => {
     data,
     now: new Date().toISOString(),
   });
+});
+
+/**
+ * POST /api/v1/cron/compliance-checks
+ * Runs daily HR compliance checks (document expiry, probation ending)
+ */
+router.post("/compliance-checks", async (req, res) => {
+  if (!verifyCronAuth(req, res)) return;
+
+  try {
+    logger.info("[Cron] Starting HR compliance checks...");
+    const result = await runComplianceChecks();
+    logger.info(
+      { notificationsSent: result.notificationsSent },
+      "[Cron] HR compliance checks completed"
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    logger.error({ error }, "[Cron] Error processing HR compliance checks");
+    return res.status(500).json({
+      success: false,
+      error: "Failed to process compliance checks"
+    });
+  }
 });
 
 export default router;

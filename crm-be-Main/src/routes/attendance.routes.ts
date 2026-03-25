@@ -4,6 +4,7 @@ import {
   requireAdmin,
   requireManager,
   requireHRAccess,
+  requireManagerOrHRAccess,
 } from "../middleware/authorization.middleware.js";
 import {
   validateBody,
@@ -17,11 +18,20 @@ import {
   manualAttendanceSchema,
   updateAttendanceSchema,
   attendanceListQuerySchema,
+  attendanceSummaryQuerySchema,
+  attendanceAnalyticsQuerySchema,
+  attendanceUsersTodayQuerySchema,
+  attendanceUserHistoryParamsSchema,
+  attendanceUserHistoryQuerySchema,
+  attendanceHolidaysQuerySchema,
+  attendanceLeavesQuerySchema,
+  attendanceWeeklyHoursQuerySchema,
   attendanceRulesSchema,
   createHolidaySchema,
 } from "../validators/attendance.validator.js";
 import { uuidParamSchema } from "../validators/users.validator.js";
 import * as attendanceService from "../services/attendance.service.js";
+import * as leaveService from "../services/leave.service.js";
 import {
   sendSuccess,
   sendCreated,
@@ -144,10 +154,11 @@ router.get(
  */
 router.get(
   "/summary",
+  validateQuery(attendanceSummaryQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
-    const month = parseInt(req.query["month"] as string) || getMonthIST();
-    const year = parseInt(req.query["year"] as string) || getYearIST();
+    const month = (req.query["month"] as number | undefined) || getMonthIST();
+    const year = (req.query["year"] as number | undefined) || getYearIST();
     const summary = await attendanceService.getAttendanceSummary(
       authReq.user.id,
       month,
@@ -163,7 +174,8 @@ router.get(
  */
 router.get(
   "/analytics",
-  requireManager as any,
+  requireManagerOrHRAccess() as any,
+  validateQuery(attendanceAnalyticsQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
     const startDate = (req.query["startDate"] as string) || getTodayIST();
@@ -190,7 +202,8 @@ router.get(
  */
 router.get(
   "/users-today",
-  requireAdmin as any,
+  requireManagerOrHRAccess() as any,
+  validateQuery(attendanceUsersTodayQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const date = (req.query["date"] as string) || getTodayIST();
     const departmentId = req.query["departmentId"] as string | undefined;
@@ -210,7 +223,9 @@ router.get(
  */
 router.get(
   "/user/:userId/history",
-  requireManager as any,
+  requireManagerOrHRAccess() as any,
+  validateParams(attendanceUserHistoryParamsSchema),
+  validateQuery(attendanceUserHistoryQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
     const userId = req.params["userId"] as string;
@@ -336,12 +351,31 @@ router.put(
  */
 router.get(
   "/holidays",
+  validateQuery(attendanceHolidaysQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const year = req.query["year"]
-      ? parseInt(req.query["year"] as string)
-      : undefined;
+    const year = req.query["year"] as number | undefined;
     const holidays = await attendanceService.getHolidays(year);
     sendSuccess(res, holidays);
+  }),
+);
+
+/**
+ * GET /attendance/leaves
+ * Get approved leaves for calendar with role-based visibility
+ */
+router.get(
+  "/leaves",
+  validateQuery(attendanceLeavesQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const leaves = await leaveService.getApprovedLeavesForCalendar(
+      {
+        startDate: req.query["startDate"] as string | undefined,
+        endDate: req.query["endDate"] as string | undefined,
+      },
+      authReq.user,
+    );
+    sendSuccess(res, leaves);
   }),
 );
 
@@ -398,6 +432,7 @@ router.post(
  */
 router.get(
   "/weekly-hours",
+  validateQuery(attendanceWeeklyHoursQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
     const isAdmin = authReq.user.role === "admin";

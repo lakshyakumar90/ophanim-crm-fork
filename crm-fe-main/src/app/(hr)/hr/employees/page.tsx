@@ -1,475 +1,484 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { Input } from "@/components/ui/input";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/providers/auth-provider";
+import { usePermission } from "@/hooks/use-permission";
+import { useEmployees } from "@/hooks/useEmployees";
+import { useBulkDeactivate, activateOne, deactivateOne } from "@/hooks/useBulkEmployeeActions";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+  buildEmployeeCSV,
+  canFetchCompensationHistory,
+  canSeeFullCTC,
+  employeeMatchesKpiPreset,
+  type KPIFilterPreset,
+} from "@/lib/employeeHelpers";
+import type { HREmployee } from "@/types/hr.types";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Search, Users, Filter, X } from "lucide-react";
-import { EmployeeDetailModal } from "@/components/hr/employee-detail-modal";
-import { format } from "date-fns";
+  fetchEmployeeCompensationHistory,
+  fetchHrEmployeeById,
+  updateHrEmployee,
+} from "@/lib/hr-employee-api";
+import type { CompensationHistory } from "@/types/hr.types";
+import { toastHrError } from "@/lib/hr-error-toast";
+import { toast } from "sonner";
 
-interface HREmployee {
-  id: string;
-  fullName: string;
-  email: string;
-  role: string;
-  departmentId: string | null;
-  departmentName: string | null;
-  teamId: string | null;
-  teamName: string | null;
-  jobTitle: string | null;
-  avatarUrl: string | null;
-  isActive: boolean;
-  createdAt: string;
-  shiftType: string | null;
-}
+import { EmployeeKPICards } from "@/components/hr/employees/EmployeeKPICards";
+import {
+  EmployeeSearchFilters,
+  filterEmployeesList,
+  type EmployeeTableFilters,
+} from "@/components/hr/employees/EmployeeSearchFilters";
+import { EmployeeTable } from "@/components/hr/employees/EmployeeTable";
+import { BulkEditTable } from "@/components/hr/employees/BulkEditTable";
+import { BulkActionsBar } from "@/components/hr/employees/BulkActionsBar";
+import {
+  ActivateConfirmDialog,
+  DeactivateConfirmDialog,
+} from "@/components/hr/employees/DeactivateConfirmDialog";
+import { AddEmployeeModal } from "@/components/hr/employees/AddEmployeeModal";
+import { EmployeeDetailDrawer } from "@/components/hr/employees/detail/EmployeeDetailDrawer";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
-
-// Helper to format job title for display
-const formatJobTitle = (jobTitle: string | null | undefined): string => {
-  if (!jobTitle) return "Other";
-  return jobTitle.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const defaultFilters: EmployeeTableFilters = {
+  search: "",
+  department: "all",
+  team: "all",
+  role: "all",
+  status: "all",
+  shift: "all",
 };
 
 export default function HREmployeesPage() {
-  const [employees, setEmployees] = useState<HREmployee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const { user } = useAuth();
+  const perms = user?.permissions ?? [];
+  const pEmpView = usePermission("hr:employees_view");
+  const pHrView = usePermission("hr:view");
+  const pManage = usePermission("hr:manage");
+  const pEmpEdit = usePermission("hr:employees_edit");
+  const canView = pEmpView || pHrView || pManage;
+  const canEdit = pEmpEdit || pManage;
+  const canSeeCTC = canSeeFullCTC(perms);
+  const canComp = canFetchCompensationHistory(perms);
 
-  // Filter states
-  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
-  const [teamFilter, setTeamFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [shiftFilter, setShiftFilter] = useState<string>("all");
+  const { employees, setEmployees, loading, error, load, patchEmployee } = useEmployees();
+  const { progress, run: bulkDeactivateRun } = useBulkDeactivate();
 
-  // Selected employee for detail modal
-  const [selectedEmployee, setSelectedEmployee] = useState<HREmployee | null>(
-    null,
-  );
-  const [modalOpen, setModalOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [filters, setFilters] = useState<EmployeeTableFilters>(defaultFilters);
+  const [kpiPreset, setKpiPreset] = useState<KPIFilterPreset>("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [historyByEmployee, setHistoryByEmployee] = useState<Record<string, CompensationHistory[]>>({});
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerEmployee, setDrawerEmployee] = useState<HREmployee | null>(null);
+  const [drawerEdit, setDrawerEdit] = useState(false);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [deactOpen, setDeactOpen] = useState(false);
+  const [deactTarget, setDeactTarget] = useState<HREmployee | null>(null);
+  const [bulkDeactOpen, setBulkDeactOpen] = useState(false);
+  const [actOpen, setActOpen] = useState(false);
+  const [actTarget, setActTarget] = useState<HREmployee | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        const res = await fetch(`${API_URL}/hr/employees`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("crm_access_token")}`,
-          },
-        });
+    const id = setTimeout(() => setFilters((f) => ({ ...f, search: searchInput })), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
 
-        if (res.ok) {
-          const data = await res.json();
-          setEmployees(data.data || []);
-        }
-      } catch (error) {
-        console.error("Failed to fetch employees:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  useEffect(() => {
+    if (canView) void load();
+  }, [canView, load]);
 
-    fetchEmployees();
+  const mergedList = useMemo(() => {
+    let list = filterEmployeesList(employees, filters);
+    if (kpiPreset !== "all") {
+      list = list.filter((e) => employeeMatchesKpiPreset(e, kpiPreset));
+    }
+    return list;
+  }, [employees, filters, kpiPreset]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   }, []);
 
-  // Get unique values for filters
-  const filterOptions = useMemo(() => {
-    const departments = new Set<string>();
-    const teams = new Set<string>();
-    const roles = new Set<string>();
+  const allChecked = mergedList.length > 0 && mergedList.every((e) => selectedIds.includes(e.id));
 
-    employees.forEach((emp) => {
-      if (emp.departmentName) departments.add(emp.departmentName);
-      if (emp.teamName) teams.add(emp.teamName);
-      if (emp.role) roles.add(emp.role);
+  const toggleAll = useCallback(() => {
+    if (allChecked) {
+      setSelectedIds((prev) => prev.filter((id) => !mergedList.some((e) => e.id === id)));
+      return;
+    }
+    setSelectedIds((prev) => Array.from(new Set([...prev, ...mergedList.map((e) => e.id)])));
+  }, [allChecked, mergedList]);
+
+  const toggleExpand = useCallback(
+    async (id: string) => {
+      const open = expandedId === id;
+      setExpandedId(open ? null : id);
+      if (open || !canComp || historyByEmployee[id]) return;
+      setHistoryLoading((m) => ({ ...m, [id]: true }));
+      try {
+        const rows = await fetchEmployeeCompensationHistory(id);
+        setHistoryByEmployee((m) => ({ ...m, [id]: rows }));
+      } catch {
+        toastHrError(new Error("history"), "Failed to load compensation history");
+      } finally {
+        setHistoryLoading((m) => ({ ...m, [id]: false }));
+      }
+    },
+    [expandedId, canComp, historyByEmployee],
+  );
+
+  const openDrawer = (e: HREmployee, edit = false) => {
+    setDrawerEmployee(e);
+    setDrawerEdit(edit);
+    setDrawerOpen(true);
+  };
+
+  const exportFiltered = () => {
+    const blob = new Blob([buildEmployeeCSV(mergedList, canSeeCTC)], {
+      type: "text/csv;charset=utf-8;",
     });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "employees-export.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-    return {
-      departments: Array.from(departments).sort(),
-      teams: Array.from(teams).sort(),
-      roles: Array.from(roles).sort(),
-    };
-  }, [employees]);
-
-  // Filter employees
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((emp) => {
-      // Search filter
-      const searchLower = search.toLowerCase();
-      const matchesSearch =
-        search === "" ||
-        emp.fullName.toLowerCase().includes(searchLower) ||
-        emp.email.toLowerCase().includes(searchLower) ||
-        emp.departmentName?.toLowerCase().includes(searchLower) ||
-        emp.teamName?.toLowerCase().includes(searchLower) ||
-        emp.jobTitle?.toLowerCase().includes(searchLower);
-
-      // Department filter
-      const matchesDepartment =
-        departmentFilter === "all" ||
-        (departmentFilter === "unassigned" && !emp.departmentName) ||
-        emp.departmentName === departmentFilter;
-
-      // Team filter
-      const matchesTeam =
-        teamFilter === "all" ||
-        (teamFilter === "unassigned" && !emp.teamName) ||
-        emp.teamName === teamFilter;
-
-      // Status filter
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active" && emp.isActive) ||
-        (statusFilter === "inactive" && !emp.isActive);
-
-      // Role filter
-      const matchesRole = roleFilter === "all" || emp.role === roleFilter;
-
-      // Shift filter
-      const matchesShift =
-        shiftFilter === "all" ||
-        (shiftFilter === "unassigned" && !emp.shiftType) ||
-        emp.shiftType === shiftFilter;
-
-      return (
-        matchesSearch &&
-        matchesDepartment &&
-        matchesTeam &&
-        matchesStatus &&
-        matchesRole &&
-        matchesShift
-      );
-    });
-  }, [
-    employees,
-    search,
-    departmentFilter,
-    teamFilter,
-    statusFilter,
-    roleFilter,
-    shiftFilter,
-  ]);
-
-  // Check if any filters are active
-  const hasActiveFilters =
-    departmentFilter !== "all" ||
-    teamFilter !== "all" ||
-    statusFilter !== "all" ||
-    roleFilter !== "all" ||
-    shiftFilter !== "all";
+  const exportSelected = () => {
+    const rows = mergedList.filter((e) => selectedIds.includes(e.id));
+    const blob = new Blob([buildEmployeeCSV(rows, canSeeCTC)], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "employees-selected.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const clearFilters = () => {
-    setDepartmentFilter("all");
-    setTeamFilter("all");
-    setStatusFilter("all");
-    setRoleFilter("all");
-    setShiftFilter("all");
+    setSearchInput("");
+    setFilters(defaultFilters);
+    setKpiPreset("all");
   };
 
-  const getInitials = (name: string) =>
-    name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
+  const hasFilters =
+    filters.department !== "all" ||
+    filters.team !== "all" ||
+    filters.role !== "all" ||
+    filters.status !== "all" ||
+    filters.shift !== "all" ||
+    !!filters.search.trim() ||
+    kpiPreset !== "all";
 
-  // Role badge with colors matching admin users page
-  const getRoleBadge = (emp: HREmployee) => {
-    const role = emp.role;
-    const deptName = emp.departmentName;
-
-    if (role === "admin") {
-      return <Badge variant="destructive">Admin</Badge>;
-    }
-
-    const roleLabel = role === "manager" ? "Manager" : "Employee";
-
-    if (role === "manager") {
-      return (
-        <Badge variant="default" className="bg-blue-500">
-          {roleLabel}
-        </Badge>
+  const confirmBulkDeactivate = async () => {
+    setBusy(true);
+    const { ok, failed } = await bulkDeactivateRun(selectedIds, employees);
+    for (const id of ok) patchEmployee(id, { isActive: false });
+    setSelectedIds([]);
+    setBulkDeactOpen(false);
+    setBusy(false);
+    if (failed.length === 0) {
+      toast.success(`${ok.length} employees deactivated`);
+    } else {
+      toast.error(
+        `${ok.length} deactivated, ${failed.length} failed: ${failed.map((f) => f.name).join(", ")}`,
       );
     }
-
-    return <Badge variant="secondary">{roleLabel}</Badge>;
+    void load();
   };
 
-  const handleRowClick = (employee: HREmployee) => {
-    setSelectedEmployee(employee);
-    setModalOpen(true);
+  const onCreated = async (newId: string) => {
+    await load();
+    try {
+      const row = await fetchHrEmployeeById(newId);
+      openDrawer(row, false);
+    } catch {
+      toast.message("Employee created. Refresh the list if they don’t appear yet.");
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
+  const selectedEmployees = useMemo(
+    () => mergedList.filter((e) => selectedIds.includes(e.id)),
+    [mergedList, selectedIds],
+  );
+
+  const departmentOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          employees
+            .filter((e) => e.departmentId && e.departmentName)
+            .map((e) => [e.departmentId as string, e.departmentName as string]),
+        ).entries(),
+      ).map(([id, name]) => ({ id, name })),
+    [employees],
+  );
+
+  const teamOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          employees
+            .filter((e) => e.teamId && e.teamName)
+            .map((e) => [e.teamId as string, { id: e.teamId as string, name: e.teamName as string, departmentId: e.departmentId || null }]),
+        ).entries(),
+      ).map(([, v]) => v),
+    [employees],
+  );
+
+  const managerOptions = useMemo(
+    () =>
+      employees
+        .filter((e) => e.role === "manager" || e.role === "admin" || e.role === "hr")
+        .map((e) => ({ id: e.id, fullName: e.fullName })),
+    [employees],
+  );
+
+  const saveBulkEmployees = async (
+    updates: Array<{
+      id: string;
+      data: {
+        email?: string;
+        fullName?: string;
+        phone?: string | null;
+        role?: "admin" | "manager" | "employee" | "hr";
+        departmentId?: string | null;
+        teamId?: string | null;
+        managerId?: string | null;
+        jobTitle?: string | null;
+        shiftType?: string | null;
+        currentCtc?: number | null;
+        salaryComponents?: {
+          basic_pct?: number;
+          hra_pct?: number;
+          allowance_pct?: number;
+        };
+        isActive?: boolean;
+      };
+    }>,
+  ) => {
+    setBulkSaving(true);
+    const results = await Promise.allSettled(
+      updates.map((u) => updateHrEmployee(u.id, u.data)),
     );
+
+    let success = 0;
+    let failed = 0;
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        success += 1;
+        const updated = result.value;
+        patchEmployee(updated.id, {
+          email: updated.email,
+          fullName: updated.fullName,
+          phone: updated.phone,
+          role: updated.role,
+          departmentId: updated.departmentId,
+          departmentName: updated.departmentName,
+          teamId: updated.teamId,
+          teamName: updated.teamName,
+          managerId: updated.managerId,
+          jobTitle: updated.jobTitle,
+          shiftType: updated.shiftType,
+          currentCtc: updated.currentCtc,
+          salaryComponents: updated.salaryComponents,
+          isActive: updated.isActive,
+        });
+      } else {
+        failed += 1;
+      }
+    }
+
+    setBulkSaving(false);
+    if (success > 0) toast.success(`${success} employees updated`);
+    if (failed > 0) toast.error(`${failed} employees failed to update`);
+    if (failed === 0) {
+      setBulkEditMode(false);
+    }
+    void load();
+  };
+
+  if (!canView) {
+    return <div className="p-6 text-muted-foreground">You do not have permission to view employees.</div>;
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Employee Directory
-          </h1>
-          <p className="text-muted-foreground">
-            View and manage all employees in the organization.
+    <div className="flex flex-col gap-6 p-6 max-w-400 mx-auto w-full">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Employees</h1>
+        <p className="text-muted-foreground">{employees.length} total employees</p>
+      </div>
+
+      {error ? (
+        <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 rounded-md p-3">{error}</div>
+      ) : null}
+
+      <EmployeeKPICards
+        employees={employees}
+        loading={loading}
+        activePreset={kpiPreset}
+        onPresetChange={setKpiPreset}
+      />
+
+      <EmployeeSearchFilters
+        employees={employees}
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        filters={filters}
+        onFiltersChange={setFilters}
+        onExport={exportFiltered}
+        onAddClick={() => setAddOpen(true)}
+        showAdd={canEdit}
+      />
+
+      <BulkActionsBar
+        count={selectedIds.length}
+        onExportSelected={exportSelected}
+        onDeactivateSelected={() => setBulkDeactOpen(true)}
+        onClear={() => setSelectedIds([])}
+        canDeactivate={canEdit}
+      />
+
+      {selectedIds.length > 0 && canEdit ? (
+        <div className="flex items-center justify-between rounded-md border bg-muted/20 px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            {selectedIds.length} selected. Switch to bulk edit for spreadsheet-style updates.
           </p>
-        </div>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="space-y-4">
-        {/* Search Bar */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, email, department, team, or job title..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        {/* Filter Row */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Filter className="h-4 w-4" />
-            <span>Filters:</span>
-          </div>
-
-          {/* Department Filter */}
-          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-              {filterOptions.departments.map((dept) => (
-                <SelectItem key={dept} value={dept}>
-                  {dept}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Team Filter */}
-          <Select value={teamFilter} onValueChange={setTeamFilter}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Team" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Teams</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-              {filterOptions.teams.map((team) => (
-                <SelectItem key={team} value={team}>
-                  {team}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Role Filter */}
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue placeholder="Role" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Roles</SelectItem>
-              {filterOptions.roles.map((role) => (
-                <SelectItem key={role} value={role} className="capitalize">
-                  {role.charAt(0).toUpperCase() + role.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Status Filter */}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Shift Filter */}
-          <Select value={shiftFilter} onValueChange={setShiftFilter}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Shift" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Shifts</SelectItem>
-              <SelectItem value="day_shift">Day Shift</SelectItem>
-              <SelectItem value="night_shift">Night Shift</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Clear Filters */}
-          {hasActiveFilters && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearFilters}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4 mr-1" />
-              Clear
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Employees Table */}
-      <div className="rounded-md border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Employee</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Shift</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Team</TableHead>
-              <TableHead>Job Title</TableHead>
-              <TableHead>Joined</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredEmployees.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <Users className="h-8 w-8" />
-                    <p>No employees found</p>
-                    {hasActiveFilters && (
-                      <Button
-                        variant="link"
-                        size="sm"
-                        onClick={clearFilters}
-                        className="text-primary"
-                      >
-                        Clear all filters
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredEmployees.map((emp) => (
-                <TableRow
-                  key={emp.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => handleRowClick(emp)}
+          <div className="flex items-center gap-2">
+            {bulkEditMode ? (
+              <>
+                <button
+                  type="button"
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => setBulkEditMode(false)}
                 >
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={emp.avatarUrl || undefined} />
-                        <AvatarFallback className="text-xs">
-                          {getInitials(emp.fullName)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium">{emp.fullName}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {emp.email}
-                        </div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{getRoleBadge(emp)}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={
-                        emp.shiftType === "night_shift"
-                          ? "border-purple-500 text-purple-700"
-                          : emp.shiftType === "day_shift"
-                            ? "border-blue-500 text-blue-700"
-                            : "border-gray-300 text-gray-500"
-                      }
-                    >
-                      {emp.shiftType === "day_shift"
-                        ? "Day"
-                        : emp.shiftType === "night_shift"
-                          ? "Night"
-                          : "N/A"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground">
-                      {emp.departmentName || "-"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground">
-                      {emp.teamName || "-"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground">
-                      {formatJobTitle(emp.jobTitle)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {format(new Date(emp.createdAt), "MMM d, yyyy")}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={emp.isActive ? "default" : "secondary"}
-                      className={
-                        emp.isActive
-                          ? "bg-green-500 hover:bg-green-600"
-                          : "bg-gray-400"
-                      }
-                    >
-                      {emp.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))
+                  Exit bulk edit
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="text-sm font-medium text-primary hover:underline"
+                onClick={() => setBulkEditMode(true)}
+              >
+                Bulk Edit Table
+              </button>
             )}
-          </TableBody>
-        </Table>
-      </div>
+          </div>
+        </div>
+      ) : null}
 
-      <div className="text-sm text-muted-foreground">
-        Showing {filteredEmployees.length} of {employees.length} employees
-      </div>
+      {bulkEditMode && selectedEmployees.length > 0 && canEdit ? (
+        <BulkEditTable
+          employees={selectedEmployees}
+          departmentOptions={departmentOptions}
+          teamOptions={teamOptions}
+          managerOptions={managerOptions}
+          saving={bulkSaving}
+          onSave={saveBulkEmployees}
+        />
+      ) : null}
 
-      {/* Employee Detail Modal */}
-      <EmployeeDetailModal
-        employee={selectedEmployee}
-        open={modalOpen}
-        onOpenChange={setModalOpen}
+      <EmployeeTable
+        rows={mergedList}
+        loading={loading}
+        expandedId={expandedId}
+        onToggleExpand={toggleExpand}
+        historyByEmployee={historyByEmployee}
+        historyLoading={historyLoading}
+        selectedIds={selectedIds}
+        onToggleSelect={toggleSelect}
+        allChecked={allChecked}
+        onToggleAll={toggleAll}
+        canFetchCompHistory={canComp}
+        canSeeCTC={canSeeCTC}
+        canEdit={canEdit}
+        onView={(e) => openDrawer(e, false)}
+        onEdit={(e) => openDrawer(e, true)}
+        onDeactivate={(e) => {
+          setDeactTarget(e);
+          setDeactOpen(true);
+        }}
+        onActivate={(e) => {
+          setActTarget(e);
+          setActOpen(true);
+        }}
+        onClearFilters={clearFilters}
+        hasFilters={hasFilters}
+      />
+
+      {progress ? (
+        <p className="text-sm text-muted-foreground">
+          Deactivating {progress.current} of {progress.total}…
+        </p>
+      ) : null}
+
+      <EmployeeDetailDrawer
+        employee={drawerEmployee}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        allEmployees={employees}
+        initialEditMode={drawerEdit}
+        onUpdated={() => void load()}
+      />
+
+      {canEdit ? (
+        <AddEmployeeModal open={addOpen} onOpenChange={setAddOpen} onCreated={(id) => void onCreated(id)} />
+      ) : null}
+
+      <DeactivateConfirmDialog
+        open={deactOpen}
+        onOpenChange={setDeactOpen}
+        mode="single"
+        name={deactTarget?.fullName}
+        onConfirm={async () => {
+          if (!deactTarget) return;
+          setBusy(true);
+          try {
+            await deactivateOne(deactTarget.id);
+            patchEmployee(deactTarget.id, { isActive: false });
+            setDeactOpen(false);
+            void load();
+          } finally {
+            setBusy(false);
+          }
+        }}
+        busy={busy}
+      />
+
+      <DeactivateConfirmDialog
+        open={bulkDeactOpen}
+        onOpenChange={setBulkDeactOpen}
+        mode="bulk"
+        count={selectedIds.length}
+        onConfirm={() => void confirmBulkDeactivate()}
+        busy={busy}
+      />
+
+      <ActivateConfirmDialog
+        open={actOpen}
+        onOpenChange={setActOpen}
+        name={actTarget?.fullName || ""}
+        onConfirm={async () => {
+          if (!actTarget) return;
+          setBusy(true);
+          try {
+            await activateOne(actTarget.id);
+            patchEmployee(actTarget.id, { isActive: true });
+            setActOpen(false);
+            void load();
+          } finally {
+            setBusy(false);
+          }
+        }}
+        busy={busy}
       />
     </div>
   );

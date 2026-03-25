@@ -56,6 +56,51 @@ export const PERMISSIONS = {
     keys: {
       "hr:view": "View HR records",
       "hr:manage": "Manage HR (leaves, attendance, holidays)",
+      "hr:dashboard_view": "View HR overview dashboard and alert feeds",
+      "hr:employees_view": "View employee directory and profiles",
+      "hr:employees_edit": "Edit employee personal and employment records",
+      "hr:compensation_view": "View employee compensation details",
+      "hr:compensation_edit": "Edit employee compensation details",
+      "hr:leave_view": "View leave requests and balances",
+      "hr:leave_manage": "Create and manage leave requests",
+      "hr:leave_approve": "Approve or reject leave requests",
+      "hr:attendance_view": "View attendance records and summaries",
+      "hr:attendance_manage": "Manage attendance corrections and imports",
+      "hr:documents_view": "View employee HR documents",
+      "hr:documents_manage": "Upload and verify employee HR documents",
+      "hr:documents_delete": "Delete employee HR documents",
+      "hr:analytics_view": "View HR analytics and reports",
+      "hr:analytics_export": "Export HR analytics reports",
+    } as const,
+  },
+  recruitment: {
+    label: "Recruitment",
+    keys: {
+      "recruitment:view": "View recruitment pipeline and job postings",
+      "recruitment:manage": "Manage candidates, job postings, interviews, and offers",
+    } as const,
+  },
+  payroll: {
+    label: "Payroll",
+    keys: {
+      "payroll:view": "View payroll runs and salary data",
+      "payroll:manage": "Manage payroll runs, salary bands, and increments",
+      "payroll:approve": "Approve and disburse payroll runs (Director only)",
+    } as const,
+  },
+  performance: {
+    label: "Performance",
+    keys: {
+      "performance:view": "View performance reviews and cycles",
+      "performance:manage": "Manage review cycles, goals, and calibration",
+      "performance:review": "Write performance reviews as a manager",
+    } as const,
+  },
+  onboarding: {
+    label: "Onboarding",
+    keys: {
+      "onboarding:view": "View onboarding and offboarding checklists",
+      "onboarding:manage": "Manage onboarding/offboarding workflows and templates",
     } as const,
   },
   admin: {

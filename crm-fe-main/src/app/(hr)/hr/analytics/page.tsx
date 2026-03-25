@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BarChart3,
   Users,
@@ -35,6 +36,7 @@ import {
   Line,
   Legend,
 } from "recharts";
+import { toast } from "sonner";
 
 interface HRAnalytics {
   totalEmployees: number;
@@ -80,20 +82,28 @@ const ROLE_COLORS: Record<string, string> = {
 export default function HRAnalyticsPage() {
   const [analytics, setAnalytics] = useState<HRAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [month, setMonth] = useState("all");
 
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("crm_access_token");
-      const res = await fetch(`${API_URL}/hr/analytics`, {
+      const qs = new URLSearchParams();
+      qs.set("year", year);
+      if (month !== "all") qs.set("month", month);
+      const res = await fetch(`${API_URL}/hr/analytics?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
         setAnalytics(data.data);
+      } else {
+        throw new Error("Failed to fetch HR analytics");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch HR analytics:", error);
+      toast.error(error?.message || "Failed to load analytics");
     } finally {
       setLoading(false);
     }
@@ -101,7 +111,7 @@ export default function HRAnalyticsPage() {
 
   useEffect(() => {
     fetchAnalytics();
-  }, []);
+  }, [year, month]);
 
   if (loading) {
     return (
@@ -189,6 +199,26 @@ export default function HRAnalyticsPage() {
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
+        <div className="flex items-center gap-2">
+          <Select value={year} onValueChange={setYear}>
+            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[0, 1, 2, 3].map((n) => {
+                const y = String(new Date().getFullYear() - n);
+                return <SelectItem key={y} value={y}>{y}</SelectItem>;
+              })}
+            </SelectContent>
+          </Select>
+          <Select value={month} onValueChange={setMonth}>
+            <SelectTrigger className="w-[120px]"><SelectValue placeholder="Month" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All months</SelectItem>
+              {Array.from({ length: 12 }).map((_, idx) => (
+                <SelectItem key={idx + 1} value={String(idx + 1)}>{idx + 1}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Summary Stats */}

@@ -10,6 +10,7 @@ export function SWRProvider({ children }: { children: ReactNode }) {
       value={{
         revalidateOnFocus: false, // Huge CPU saver
         revalidateOnReconnect: false, // User requested no auto-polling
+        dedupingInterval: 3000, // Reduce duplicate in-flight fetches across views
         refreshWhenHidden: false,
         refreshWhenOffline: false,
         refreshInterval: 0, // Disable polling by default

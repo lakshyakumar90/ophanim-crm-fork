@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+const dateStringSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format");
+
 // Clock in
 export const clockInSchema = z.object({
   userId: z.string().uuid("Invalid user ID").optional(),
@@ -47,6 +51,45 @@ export const attendanceListQuerySchema = z.object({
   departmentId: z.string().uuid().optional(),
 });
 
+export const attendanceSummaryQuerySchema = z.object({
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+
+export const attendanceAnalyticsQuerySchema = z.object({
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
+  departmentId: z.string().uuid().optional(),
+});
+
+export const attendanceUsersTodayQuerySchema = z.object({
+  date: dateStringSchema.optional(),
+  departmentId: z.string().uuid().optional(),
+});
+
+export const attendanceUserHistoryParamsSchema = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+});
+
+export const attendanceUserHistoryQuerySchema = z.object({
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
+});
+
+export const attendanceHolidaysQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+
+export const attendanceLeavesQuerySchema = z.object({
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
+});
+
+export const attendanceWeeklyHoursQuerySchema = z.object({
+  userId: z.string().uuid().optional(),
+  weekStart: dateStringSchema.optional(),
+});
+
 // Attendance rules
 export const attendanceRulesSchema = z.object({
   shiftType: z.enum(["day_shift", "night_shift"]).optional(),
@@ -84,6 +127,16 @@ export type ClockOutInput = z.infer<typeof clockOutSchema>;
 export type ManualAttendanceInput = z.infer<typeof manualAttendanceSchema>;
 export type UpdateAttendanceInput = z.infer<typeof updateAttendanceSchema>;
 export type AttendanceListQuery = z.infer<typeof attendanceListQuerySchema>;
+export type AttendanceSummaryQuery = z.infer<typeof attendanceSummaryQuerySchema>;
+export type AttendanceAnalyticsQuery = z.infer<
+  typeof attendanceAnalyticsQuerySchema
+>;
+export type AttendanceUsersTodayQuery = z.infer<
+  typeof attendanceUsersTodayQuerySchema
+>;
+export type AttendanceUserHistoryQuery = z.infer<
+  typeof attendanceUserHistoryQuerySchema
+>;
 export type AttendanceRulesInput = z.infer<typeof attendanceRulesSchema>;
 export type CreateHolidayInput = z.infer<typeof createHolidaySchema>;
 // Admin clock in/out use same schemas as regular clock in/out
