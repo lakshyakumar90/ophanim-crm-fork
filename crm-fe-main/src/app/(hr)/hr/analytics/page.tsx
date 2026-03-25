@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -36,7 +36,11 @@ import {
   Line,
   Legend,
 } from "recharts";
-import { toast } from "sonner";
+import useSWR from "swr";
+import { useAuth } from "@/providers/auth-provider";
+import { attendanceApi, usersApi } from "@/lib/api";
+import { getHRScopeProfile, isAdminOrDirector } from "@/lib/hr-scope";
+import { Badge } from "@/components/ui/badge";
 
 interface HRAnalytics {
   totalEmployees: number;
@@ -80,12 +84,22 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function HRAnalyticsPage() {
+  const { user } = useAuth();
+  const scopeProfile = getHRScopeProfile(user);
+  const isFullView = isAdminOrDirector(user);
+  const isManagerView = scopeProfile === "manager";
+  const isEmployeeView = scopeProfile === "employee";
+
   const [analytics, setAnalytics] = useState<HRAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [month, setMonth] = useState("all");
 
   const fetchAnalytics = async () => {
+    if (!isFullView) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const token = localStorage.getItem("crm_access_token");
@@ -103,15 +117,156 @@ export default function HRAnalyticsPage() {
       }
     } catch (error: any) {
       console.error("Failed to fetch HR analytics:", error);
-      toast.error(error?.message || "Failed to load analytics");
+      setAnalytics(null);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    if (!isFullView) return;
     fetchAnalytics();
-  }, [year, month]);
+  }, [year, month, isFullView]);
+
+  const { data: teamUsersRaw } = useSWR(
+    isManagerView && user?.teamId ? ["/users/team-members", user.teamId] : null,
+    () => usersApi.list({ teamId: user?.teamId, limit: 200 }),
+  );
+  const { data: teamTodayRaw } = useSWR(
+    isManagerView ? ["/attendance/users-today/team", user?.departmentId || ""] : null,
+    () => attendanceApi.getUsersToday(undefined, user?.departmentId || undefined),
+  );
+  const { data: teamWeeklyRaw } = useSWR(
+    isManagerView ? ["/attendance/analytics/team", user?.departmentId || ""] : null,
+    () => attendanceApi.getAnalytics(undefined, undefined, user?.departmentId || undefined),
+  );
+
+  const { data: selfTodayRaw } = useSWR(
+    isEmployeeView ? ["/attendance/today/self"] : null,
+    () => attendanceApi.getToday(),
+  );
+  const { data: selfWeeklyRaw } = useSWR(
+    isEmployeeView && user?.id ? ["/attendance/weekly-hours/self", user.id] : null,
+    () => attendanceApi.getWeeklyHours(user?.id),
+  );
+
+  const teamUsers = useMemo(() => {
+    const payload = teamUsersRaw as any;
+    if (!payload) return [] as any[];
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload?.data?.data)) return payload.data.data;
+    return [] as any[];
+  }, [teamUsersRaw]);
+
+  const teamToday = useMemo(() => {
+    const payload = teamTodayRaw as any;
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    return [] as any[];
+  }, [teamTodayRaw]);
+
+  const teamMemberIds = useMemo(
+    () => new Set(teamUsers.map((member: any) => member.id)),
+    [teamUsers],
+  );
+
+  const teamTodayCount = useMemo(() => {
+    if (!teamToday.length || !teamMemberIds.size) return 0;
+    return teamToday.filter((row: any) => teamMemberIds.has(row.userId || row.user_id)).length;
+  }, [teamToday, teamMemberIds]);
+
+  const selfWeeklyHours = useMemo(() => {
+    if (!Array.isArray(selfWeeklyRaw)) return 0;
+    return selfWeeklyRaw.reduce((sum: number, day: any) => sum + Number(day?.hours || 0), 0);
+  }, [selfWeeklyRaw]);
+
+  if (isManagerView) {
+    return (
+      <div className="flex flex-col gap-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">HR Team Analytics</h1>
+            <p className="text-muted-foreground">Analytics for your team and team members.</p>
+          </div>
+          <Badge variant="outline">Team Scope</Badge>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Team Members</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{teamUsers.length}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Tracked Today</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{teamTodayCount}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Department Presence</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{(teamWeeklyRaw as any)?.presentToday ?? 0}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Department Leave Today</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{(teamWeeklyRaw as any)?.onLeaveToday ?? 0}</div></CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Team Members</CardTitle>
+            <CardDescription>Quick visibility into your direct team list.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {teamUsers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No team users available.</p>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2">
+                {teamUsers.slice(0, 12).map((member: any) => (
+                  <div key={member.id} className="rounded border p-3 text-sm flex items-center justify-between">
+                    <span className="font-medium">{member.fullName || member.full_name || "Unknown"}</span>
+                    <Badge variant="secondary">{member.role || "employee"}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isEmployeeView) {
+    return (
+      <div className="flex flex-col gap-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">My HR Analytics</h1>
+            <p className="text-muted-foreground">Personal HR work and attendance analytics.</p>
+          </div>
+          <Badge variant="outline">Self Scope</Badge>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Current Status</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold capitalize">{String((selfTodayRaw as any)?.status || "not_marked").replace(/_/g, " ")}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Today Hours</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{(selfTodayRaw as any)?.totalHours ?? 0}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Weekly Hours</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{selfWeeklyHours.toFixed(1)}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Team</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{user?.teamId ? "Assigned" : "-"}</div></CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -201,7 +356,7 @@ export default function HRAnalyticsPage() {
         </Button>
         <div className="flex items-center gap-2">
           <Select value={year} onValueChange={setYear}>
-            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-30"><SelectValue /></SelectTrigger>
             <SelectContent>
               {[0, 1, 2, 3].map((n) => {
                 const y = String(new Date().getFullYear() - n);
@@ -210,7 +365,7 @@ export default function HRAnalyticsPage() {
             </SelectContent>
           </Select>
           <Select value={month} onValueChange={setMonth}>
-            <SelectTrigger className="w-[120px]"><SelectValue placeholder="Month" /></SelectTrigger>
+            <SelectTrigger className="w-30"><SelectValue placeholder="Month" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All months</SelectItem>
               {Array.from({ length: 12 }).map((_, idx) => (

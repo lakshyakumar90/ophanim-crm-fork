@@ -339,7 +339,7 @@ const hrItems: NavItem[] = [
     title: "Analytics",
     href: "/hr/analytics",
     icon: BarChart3,
-    roles: ["admin", "manager"],
+    roles: ["admin", "manager", "employee"],
   },
 ];
 

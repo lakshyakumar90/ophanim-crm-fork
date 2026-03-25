@@ -3,6 +3,7 @@
 import { useAuth, useIsAdmin } from "@/providers/auth-provider";
 import { AppShell } from "@/components/layout/app-shell";
 import { StartupAlertsDialog } from "@/components/notifications/startup-alerts-dialog";
+import { canAccessHRDashboard } from "@/lib/hr-scope";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
@@ -61,7 +62,7 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     // Self-service pages should be accessible even without payroll:* permissions.
     if (isMyPayslipsPath) return true;
-    if (isAdmin || user.departmentSlug === "hr") return true;
+    if (isAdmin || canAccessHRDashboard(user)) return true;
     if (payrollRoute && hasPayrollAccess(user)) return true;
     if (isOnboardingAdminPath && hasOnboardingModuleAccess(user)) return true;
     if (isPerformanceHrPath && hasPerformanceHrAccess(user)) return true;
