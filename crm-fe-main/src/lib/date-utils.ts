@@ -10,7 +10,10 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { enUS } from "date-fns/locale";
 
 // IST timezone identifier
-const IST_TIMEZONE = "Asia/Kolkata";
+export const IST_TIMEZONE = "Asia/Kolkata";
+const NIGHT_SHIFT_PREVIOUS_DAY_CUTOFF_HOUR = 6;
+
+type AppShiftType = "day_shift" | "night_shift" | null | undefined;
 
 /**
  * Get current date/time in IST (returned as JS Date object, but theoretically represents IST)
@@ -163,4 +166,62 @@ export function formatHoursToReadable(
  */
 export function toIST(date: Date | string | number): Date {
   return toZonedTime(new Date(date), IST_TIMEZONE);
+}
+
+export function getShiftAwareDateKeyIST(
+  date: Date | string | number,
+  shiftType: AppShiftType,
+): string {
+  const inputDate = new Date(date);
+  if (shiftType !== "night_shift") {
+    return formatInTimeZone(inputDate, IST_TIMEZONE, "yyyy-MM-dd");
+  }
+
+  const hourIST = Number(formatInTimeZone(inputDate, IST_TIMEZONE, "H"));
+  if (hourIST >= NIGHT_SHIFT_PREVIOUS_DAY_CUTOFF_HOUR) {
+    return formatInTimeZone(inputDate, IST_TIMEZONE, "yyyy-MM-dd");
+  }
+
+  const shiftedDate = new Date(inputDate);
+  shiftedDate.setDate(shiftedDate.getDate() - 1);
+  return formatInTimeZone(shiftedDate, IST_TIMEZONE, "yyyy-MM-dd");
+}
+
+export function getShiftAwareTodayKeyIST(
+  shiftType: AppShiftType,
+  currentTime: Date | string | number = new Date(),
+): string {
+  return getShiftAwareDateKeyIST(currentTime, shiftType);
+}
+
+export function getShiftAwareYesterdayKeyIST(
+  shiftType: AppShiftType,
+  currentTime: Date | string | number = new Date(),
+): string {
+  const todayKey = getShiftAwareTodayKeyIST(shiftType, currentTime);
+  const todayDate = new Date(`${todayKey}T00:00:00+05:30`);
+  todayDate.setDate(todayDate.getDate() - 1);
+  return formatInTimeZone(todayDate, IST_TIMEZONE, "yyyy-MM-dd");
+}
+
+export function getShiftAwareDayBoundsISO(
+  dayKey: string,
+  shiftType: AppShiftType,
+): { startDate: string; endDate: string } {
+  if (shiftType !== "night_shift") {
+    return {
+      startDate: new Date(`${dayKey}T00:00:00+05:30`).toISOString(),
+      endDate: new Date(`${dayKey}T23:59:59.999+05:30`).toISOString(),
+    };
+  }
+
+  const dayDate = new Date(`${dayKey}T00:00:00+05:30`);
+  const nextDay = new Date(dayDate);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const nextDayKey = formatInTimeZone(nextDay, IST_TIMEZONE, "yyyy-MM-dd");
+
+  return {
+    startDate: new Date(`${dayKey}T06:00:00+05:30`).toISOString(),
+    endDate: new Date(`${nextDayKey}T05:59:59.999+05:30`).toISOString(),
+  };
 }

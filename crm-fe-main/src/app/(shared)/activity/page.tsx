@@ -51,12 +51,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
 import { activitiesApi, teamsApi, usersApi } from "@/lib/api";
-import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
+import {
+  formatDistanceToNowIST,
+  formatIST,
+  getShiftAwareDateKeyIST,
+  getShiftAwareDayBoundsISO,
+  getShiftAwareTodayKeyIST,
+  getShiftAwareYesterdayKeyIST,
+  IST_TIMEZONE,
+} from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import { useDepartment } from "@/providers/department-context";
 import { useAuth } from "@/providers/auth-provider";
 
-const IST_TIMEZONE = "Asia/Kolkata";
 const DEFAULT_RESOURCE_OPEN: string[] = [];
 const SYSTEM_ACTIVITY_TYPES = new Set(["login", "logout", "clock_in", "clock_out"]);
 
@@ -374,12 +381,15 @@ const getEntityGroupId = (activity: ActivityLog, resourceKey: ResourceGroupKey) 
   (resourceKey === "attendance" ? activity.user_id : null) ||
   `${resourceKey}-${activity.id}`;
 
-const getTimeBucket = (createdAt: string): TimeBucketKey => {
+const getTimeBucket = (
+  createdAt: string,
+  shiftType: "day_shift" | "night_shift" | null | undefined,
+): TimeBucketKey => {
   const now = new Date();
-  const today = formatInTimeZone(now, IST_TIMEZONE, "yyyy-MM-dd");
-  const activityDay = formatInTimeZone(new Date(createdAt), IST_TIMEZONE, "yyyy-MM-dd");
+  const today = getShiftAwareTodayKeyIST(shiftType, now);
+  const activityDay = getShiftAwareDateKeyIST(createdAt, shiftType);
   if (activityDay === today) return "today";
-  const yesterday = formatInTimeZone(subDays(now, 1), IST_TIMEZONE, "yyyy-MM-dd");
+  const yesterday = getShiftAwareYesterdayKeyIST(shiftType, now);
   return activityDay === yesterday ? "yesterday" : "earlier";
 };
 
@@ -389,22 +399,28 @@ const isDateAccordionRange = (preset: TimePreset) =>
 const getDateLabel = (createdAt: string) =>
   formatInTimeZone(new Date(createdAt), IST_TIMEZONE, "EEE, MMM d");
 
-const getDateKey = (createdAt: string) =>
-  formatInTimeZone(new Date(createdAt), IST_TIMEZONE, "yyyy-MM-dd");
+const getDateKey = (
+  createdAt: string,
+  shiftType: "day_shift" | "night_shift" | null | undefined,
+) => getShiftAwareDateKeyIST(createdAt, shiftType);
 
-const buildTimeSections = (activities: ActivityLog[]): TimeSection[] => {
+const buildTimeSections = (
+  activities: ActivityLog[],
+  shiftType: "day_shift" | "night_shift" | null | undefined,
+): TimeSection[] => {
   const dateMap = new Map<string, TimeSection>();
+  const now = new Date();
+  const today = getShiftAwareTodayKeyIST(shiftType, now);
+  const yesterday = getShiftAwareYesterdayKeyIST(shiftType, now);
 
   activities.forEach((activity) => {
-    const key = getDateKey(activity.created_at);
+    const key = getDateKey(activity.created_at, shiftType);
     const existing = dateMap.get(key);
     if (existing) {
       existing.activities.push(activity);
       return;
     }
 
-    const today = formatInTimeZone(new Date(), IST_TIMEZONE, "yyyy-MM-dd");
-    const yesterday = formatInTimeZone(subDays(new Date(), 1), IST_TIMEZONE, "yyyy-MM-dd");
     let label = getDateLabel(activity.created_at);
     if (key === today) label = "Today";
     else if (key === yesterday) label = "Yesterday";
@@ -434,15 +450,19 @@ interface DateDetailedSection {
   resources: DateResourceGroup[];
 }
 
-const buildDetailedSections = (activities: ActivityLog[]): DateDetailedSection[] => {
+const buildDetailedSections = (
+  activities: ActivityLog[],
+  shiftType: "day_shift" | "night_shift" | null | undefined,
+): DateDetailedSection[] => {
   const dateMap = new Map<string, DateDetailedSection>();
+  const now = new Date();
+  const today = getShiftAwareTodayKeyIST(shiftType, now);
+  const yesterday = getShiftAwareYesterdayKeyIST(shiftType, now);
   
   activities.forEach(activity => {
-    const dateKey = getDateKey(activity.created_at);
+    const dateKey = getDateKey(activity.created_at, shiftType);
     let section = dateMap.get(dateKey);
     if (!section) {
-      const today = formatInTimeZone(new Date(), IST_TIMEZONE, "yyyy-MM-dd");
-      const yesterday = formatInTimeZone(subDays(new Date(), 1), IST_TIMEZONE, "yyyy-MM-dd");
       let dLabel = getDateLabel(activity.created_at);
       if (dateKey === today) dLabel = "Today";
       else if (dateKey === yesterday) dLabel = "Yesterday";
@@ -503,60 +523,73 @@ const getDateRange = (
   preset: TimePreset,
   customStartDate: string,
   customEndDate: string,
+  shiftType: "day_shift" | "night_shift" | null | undefined,
 ) => {
+  const now = new Date();
+  const todayKey = getShiftAwareTodayKeyIST(shiftType, now);
+
   if (preset === "custom") {
+    if (customStartDate && customEndDate) {
+      const startBounds = getShiftAwareDayBoundsISO(customStartDate, shiftType);
+      const endBounds = getShiftAwareDayBoundsISO(customEndDate, shiftType);
+      return {
+        startDate: startBounds.startDate,
+        endDate: endBounds.endDate,
+      };
+    }
+
     return {
       startDate: customStartDate
-        ? new Date(`${customStartDate}T00:00:00+05:30`).toISOString()
+        ? getShiftAwareDayBoundsISO(customStartDate, shiftType).startDate
         : undefined,
       endDate: customEndDate
-        ? new Date(`${customEndDate}T23:59:59.999+05:30`).toISOString()
+        ? getShiftAwareDayBoundsISO(customEndDate, shiftType).endDate
         : undefined,
     };
   }
 
-  const now = new Date();
-  const today = formatInTimeZone(now, IST_TIMEZONE, "yyyy-MM-dd");
-
   if (preset === "today") {
-    return {
-      startDate: new Date(`${today}T00:00:00+05:30`).toISOString(),
-      endDate: new Date(`${today}T23:59:59.999+05:30`).toISOString(),
-    };
+    return getShiftAwareDayBoundsISO(todayKey, shiftType);
   }
 
   if (preset === "yesterday") {
-    const yesterday = formatInTimeZone(subDays(now, 1), IST_TIMEZONE, "yyyy-MM-dd");
-    return {
-      startDate: new Date(`${yesterday}T00:00:00+05:30`).toISOString(),
-      endDate: new Date(`${yesterday}T23:59:59.999+05:30`).toISOString(),
-    };
+    const yesterdayKey = getShiftAwareYesterdayKeyIST(shiftType, now);
+    return getShiftAwareDayBoundsISO(yesterdayKey, shiftType);
   }
+
+  const todayDate = new Date(`${todayKey}T00:00:00+05:30`);
 
   if (preset === "this-month") {
-    const monthStart = formatInTimeZone(startOfMonth(now), IST_TIMEZONE, "yyyy-MM-dd");
+    const monthStart = formatInTimeZone(startOfMonth(todayDate), IST_TIMEZONE, "yyyy-MM-dd");
+    const monthStartBounds = getShiftAwareDayBoundsISO(monthStart, shiftType);
+    const todayBounds = getShiftAwareDayBoundsISO(todayKey, shiftType);
     return {
-      startDate: new Date(`${monthStart}T00:00:00+05:30`).toISOString(),
-      endDate: new Date(`${today}T23:59:59.999+05:30`).toISOString(),
+      startDate: monthStartBounds.startDate,
+      endDate: todayBounds.endDate,
     };
   }
 
-  const isoDay = Number(formatInTimeZone(now, IST_TIMEZONE, "i"));
+  const isoDay = Number(formatInTimeZone(todayDate, IST_TIMEZONE, "i"));
   const startOfWeek = formatInTimeZone(
-    subDays(now, isoDay - 1),
+    subDays(todayDate, isoDay - 1),
     IST_TIMEZONE,
     "yyyy-MM-dd",
   );
+  const weekStartBounds = getShiftAwareDayBoundsISO(startOfWeek, shiftType);
+  const todayBounds = getShiftAwareDayBoundsISO(todayKey, shiftType);
 
   return {
-    startDate: new Date(`${startOfWeek}T00:00:00+05:30`).toISOString(),
-    endDate: new Date(`${today}T23:59:59.999+05:30`).toISOString(),
+    startDate: weekStartBounds.startDate,
+    endDate: todayBounds.endDate,
   };
 };
 
-const getSummaryItems = (activities: ActivityLog[]): QuickSummaryItem[] => {
+const getSummaryItems = (
+  activities: ActivityLog[],
+  shiftType: "day_shift" | "night_shift" | null | undefined,
+): QuickSummaryItem[] => {
   const todayActivities = activities.filter(
-    (activity) => getTimeBucket(activity.created_at) === "today",
+    (activity) => getTimeBucket(activity.created_at, shiftType) === "today",
   );
 
   return [
@@ -966,7 +999,12 @@ export default function ActivityPage() {
     filterUserId,
   ]);
 
-  const { startDate, endDate } = getDateRange(timePreset, customStartDate, customEndDate);
+  const { startDate, endDate } = getDateRange(
+    timePreset,
+    customStartDate,
+    customEndDate,
+    user?.shiftType,
+  );
 
   const effectiveScope: ActivityScope = filterUserId
     ? "member"
@@ -1086,7 +1124,10 @@ export default function ActivityPage() {
   const activities: ActivityLog[] = data?.data || [];
   const meta = data?.meta || { total: 0 };
   const allActivities = useMemo(() => [...activities, ...extraActivities], [activities, extraActivities]);
-  const summaryItems = useMemo(() => getSummaryItems(allActivities), [allActivities]);
+  const summaryItems = useMemo(
+    () => getSummaryItems(allActivities, user?.shiftType),
+    [allActivities, user?.shiftType],
+  );
   const baseVisibleActivities = useMemo(
     () => allActivities.filter((activity) => matchesQuickFilter(activity, quickFilter)),
     [allActivities, quickFilter],
@@ -1107,7 +1148,10 @@ export default function ActivityPage() {
     }
     return evs;
   }, [baseVisibleActivities, showSystemEvents, searchQuery]);
-  const detailedSections = useMemo(() => buildDetailedSections(visibleActivities), [visibleActivities]);
+  const detailedSections = useMemo(
+    () => buildDetailedSections(visibleActivities, user?.shiftType),
+    [visibleActivities, user?.shiftType],
+  );
   const hiddenSystemCount = useMemo(
     () =>
       baseVisibleActivities.filter((activity) =>
@@ -1394,7 +1438,7 @@ export default function ActivityPage() {
         <CardContent className="p-0 sm:p-2">
           {viewMode === "timeline" && canQueryActivities && !isLoading && !error && visibleActivities.length > 0 && (
              <div className="space-y-8 max-w-4xl pt-4 pb-12 w-full">
-               {buildTimeSections(visibleActivities).map(section => (
+               {buildTimeSections(visibleActivities, user?.shiftType).map(section => (
                   <div key={section.key} className="relative">
                     <div className="bg-background/95 backdrop-blur-sm py-2 px-1 mb-4 my-2 flex items-center gap-3">
                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">{section.label}</h3>
