@@ -21,7 +21,6 @@ import {
   Activity,
   Mail,
   PieChart,
-  Building,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -43,7 +42,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
 import {
   Collapsible,
   CollapsibleContent,
@@ -338,7 +336,14 @@ function DepartmentDropdown({
   isActive: boolean;
   currentPath: string;
 }) {
-  const [isOpen, setIsOpen] = useState(isActive);
+  const [isOpen, setIsOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return isActive;
+    }
+    const storageKey = `sidebar:department:${department.slug}:open`;
+    const stored = window.localStorage.getItem(storageKey);
+    return stored !== null ? stored === "1" : isActive;
+  });
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
@@ -374,8 +379,18 @@ function DepartmentDropdown({
 
   const departmentItems = filterNav(getDepartmentNavItems(department.slug));
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    const storageKey = `sidebar:department:${department.slug}:open`;
+    window.localStorage.setItem(storageKey, open ? "1" : "0");
+  };
+
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-1">
+    <Collapsible
+      open={isOpen || isActive}
+      onOpenChange={handleOpenChange}
+      className="space-y-1"
+    >
       <CollapsibleTrigger asChild>
         <Button
           variant="ghost"
@@ -429,21 +444,24 @@ function DepartmentDropdown({
 function GlobalSidebar({
   collapsed,
   setCollapsed,
+  mobile = false,
 }: {
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
+  mobile?: boolean;
 }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
-  const { departments, isGlobalContext, switchDepartment, currentDepartment } =
-    useDepartment();
-  const [isDepartmentsOpen, setIsDepartmentsOpen] = useState(false);
-  const [isFinanceOpen, setIsFinanceOpen] = useState(false);
-  const [isDeliveryOpen, setIsDeliveryOpen] = useState(false);
-  const [isDepartmentItemsOpen, setIsDepartmentItemsOpen] = useState(false);
-  const [isHROpen, setIsHROpen] = useState(false);
+  const { departments } = useDepartment();
+  const [isDepartmentsOpen, setIsDepartmentsOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    const stored = window.localStorage.getItem("sidebar:departments:open");
+    return stored !== null ? stored === "1" : false;
+  });
   const { isLeader: isPollingLeader, publish } = usePollingCoordinator(
     (payload) => {
       if (typeof payload.unreadCount === "number") {
@@ -468,15 +486,6 @@ function GlobalSidebar({
     !user?.departmentSlug &&
     !isAdmin &&
     (isManager || user?.role === "employee");
-
-  // Check if user is in Sales or Finance department (should not see Projects section)
-  const isRestrictedDeptUser =
-    user?.departmentSlug === "sales" ||
-    user?.departmentSlug === "finance" ||
-    user?.departmentSlug === "hr";
-
-  // Check if user has access to HR section (Admin or HR department)
-  const isHRAccessible = isAdmin || user?.departmentSlug === "hr";
 
   // Global items - for project-only users, show only common items
   const globalItems: NavItem[] = [
@@ -579,6 +588,15 @@ function GlobalSidebar({
 
   const filteredGlobal = filterNav(globalItems);
 
+  const isDepartmentRoute = pathname.startsWith("/projects")
+    ? departments.some((dept) => dept.slug === "project-management")
+    : departments.some((dept) => pathname.startsWith(`/${dept.slug}`));
+  const departmentsOpen = isDepartmentsOpen || isDepartmentRoute;
+  const handleDepartmentsOpenChange = (open: boolean) => {
+    setIsDepartmentsOpen(open);
+    window.localStorage.setItem("sidebar:departments:open", open ? "1" : "0");
+  };
+
   // Fetch unread notification count for badge - use same key as header for shared cache
   const { data: unreadData } = useSWR(
     user ? "notifications-unread-count" : null,
@@ -645,8 +663,8 @@ function GlobalSidebar({
 
   const departmentsSection = showDepartmentsSection ? (
     <Collapsible
-      open={isDepartmentsOpen}
-      onOpenChange={setIsDepartmentsOpen}
+      open={departmentsOpen}
+      onOpenChange={handleDepartmentsOpenChange}
       className="space-y-1 pt-2"
     >
       <CollapsibleTrigger asChild>
@@ -659,12 +677,12 @@ function GlobalSidebar({
             <Briefcase className="w-4 h-4" />
             <span>Departments</span>
           </div>
-          <ChevronDown
-            className={cn(
-              "h-3 w-3 transition-transform duration-200",
-              isDepartmentsOpen ? "rotate-180" : "",
-            )}
-          />
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 transition-transform duration-200",
+                  departmentsOpen ? "rotate-180" : "",
+                )}
+              />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-1 px-2">
@@ -712,7 +730,7 @@ function GlobalSidebar({
     <div
       className={cn(
         "relative flex flex-col h-full bg-background border-r border-border transition-all duration-300",
-        collapsed ? "w-20" : "w-52",
+        collapsed ? "w-20" : mobile ? "w-full" : "w-52",
       )}
     >
       <div className="h-16 flex items-center px-4 border-b border-border justify-between overflow-hidden">
@@ -738,23 +756,25 @@ function GlobalSidebar({
       </div>
 
       {/* Chevron Toggle — centered on the right border */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className={cn(
-          "absolute top-1/2 -translate-y-1/2 -right-3 z-10",
-          "w-6 h-6 rounded-full border border-border bg-background shadow-sm",
-          "flex items-center justify-center",
-          "text-muted-foreground hover:text-foreground hover:border-primary hover:shadow-md",
-          "transition-all duration-200",
-        )}
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed ? (
-          <ChevronRight className="h-3 w-3" />
-        ) : (
-          <ChevronLeft className="h-3 w-3" />
-        )}
-      </button>
+      {!mobile && (
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className={cn(
+            "absolute top-1/2 -translate-y-1/2 -right-3 z-10",
+            "w-6 h-6 rounded-full border border-border bg-background shadow-sm",
+            "flex items-center justify-center",
+            "text-muted-foreground hover:text-foreground hover:border-primary hover:shadow-md",
+            "transition-all duration-200",
+          )}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3 w-3" />
+          ) : (
+            <ChevronLeft className="h-3 w-3" />
+          )}
+        </button>
+      )}
 
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1 overflow-x-hidden">
         {filteredGlobal.map((item) => (
@@ -840,14 +860,21 @@ function GlobalSidebar({
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const [globalCollapsed, setGlobalCollapsed] = useState(false);
+  const collapsed = mobile ? false : globalCollapsed;
 
   return (
-    <aside className="relative flex h-screen shadow-sm transition-all duration-300">
+    <aside
+      className={cn(
+        "relative flex shadow-sm transition-all duration-300",
+        mobile ? "h-full w-full" : "h-screen",
+      )}
+    >
       <GlobalSidebar
-        collapsed={globalCollapsed}
+        collapsed={collapsed}
         setCollapsed={setGlobalCollapsed}
+        mobile={mobile}
       />
     </aside>
   );
