@@ -10,7 +10,7 @@ import type { LeaveStatsDto, OnLeaveTodayEntryDto } from "@/types/hr-leaves";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-type TabKey = "overview" | "pending" | "all" | "balances" | "settings" | "calendar";
+type TabKey = "overview" | "pending" | "all" | "calendar";
 
 export function LeaveKPICards({
   stats,
