@@ -835,6 +835,8 @@ export async function getLeadCountsByUser(authUser: AuthUser): Promise<{
     teamId: string | null;
     teamName: string | null;
     leadCount: number;
+    activityCount: number;
+    activityCountCapped: boolean;
   }>;
   unassignedCount: number;
 }> {
@@ -920,6 +922,36 @@ export async function getLeadCountsByUser(authUser: AuthUser): Promise<{
     }
   }
 
+  // Get activity counts user-wise using exact count queries (avoids row-limit skew).
+  const activityCounts: Record<string, number> = {};
+  const activityCountCapped: Record<string, boolean> = {};
+  if (userIds.length > 0) {
+    const activityCountResults = await Promise.all(
+      userIds.map(async (userId) => {
+        const { count, error } = await supabaseAdmin
+          .from("all_activities" as any)
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId);
+
+        if (error) {
+          throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+        }
+
+        const safeCount = count || 0;
+        return {
+          userId,
+          count: safeCount,
+          capped: safeCount >= 1000,
+        };
+      }),
+    );
+
+    for (const result of activityCountResults) {
+      activityCounts[result.userId] = result.count;
+      activityCountCapped[result.userId] = result.capped;
+    }
+  }
+
   // Get unassigned count (admin only)
   let unassignedCount = 0;
   if (authUser.role === USER_ROLES.ADMIN) {
@@ -931,7 +963,7 @@ export async function getLeadCountsByUser(authUser: AuthUser): Promise<{
     unassignedCount = count || 0;
   }
 
-  // Map users with their lead counts
+  // Map users with their lead counts and activity counts
   const users = (usersData || []).map((u: any) => ({
     id: u.id,
     fullName: u.full_name,
@@ -939,10 +971,17 @@ export async function getLeadCountsByUser(authUser: AuthUser): Promise<{
     teamId: u.team_id,
     teamName: (u.team_id ? teamMap[u.team_id] : null) || null,
     leadCount: leadCounts[u.id] || 0,
+    activityCount: activityCounts[u.id] || 0,
+    activityCountCapped: activityCountCapped[u.id] || false,
   }));
 
-  // Sort by lead count descending
-  users.sort((a, b) => b.leadCount - a.leadCount);
+  // Sort by activity count first, then by lead count
+  users.sort((a, b) => {
+    if (b.activityCount !== a.activityCount) {
+      return b.activityCount - a.activityCount;
+    }
+    return b.leadCount - a.leadCount;
+  });
 
   return { users, unassignedCount };
 }

@@ -367,7 +367,7 @@ export async function getManagerDashboard(authUser: AuthUser) {
   // Build all queries upfront
   const teamLeadsQuery = supabaseAdmin
     .from("leads")
-    .select("id, status")
+    .select("id, status, lead_value")
     .eq("is_deleted", false)
     .in("assigned_to", memberIds);
 
@@ -412,10 +412,35 @@ export async function getManagerDashboard(authUser: AuthUser) {
   ]);
 
   const leadPipeline: Record<string, number> = {};
+  let totalRevenue = 0;
   for (const lead of teamLeads || []) {
-    const status = (lead as { status: string }).status;
-    leadPipeline[status] = (leadPipeline[status] || 0) + 1;
+    const l = lead as { status: string; lead_value?: number | null };
+    leadPipeline[l.status] = (leadPipeline[l.status] || 0) + 1;
+    if (l.status === 'won' && l.lead_value) {
+      totalRevenue += l.lead_value;
+    }
   }
+
+  // Get new leads this month
+  const startOfMonth = getStartOfMonthIST(getYearIST(), getMonthIST());
+  const { count: newLeadsThisMonth } = await supabaseAdmin
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("is_deleted", false)
+    .in("assigned_to", memberIds)
+    .gte("created_at", startOfMonth);
+
+  // Get tasks due today
+  const startOfDay = getStartOfTodayIST();
+  const endOfDay = getEndOfTodayIST();
+  const { count: dueToday } = await supabaseAdmin
+    .from("tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("is_deleted", false)
+    .in("assigned_to", memberIds)
+    .gte("due_date", startOfDay)
+    .lte("due_date", endOfDay)
+    .neq("status", "completed");
 
   return {
     team: {
@@ -423,18 +448,21 @@ export async function getManagerDashboard(authUser: AuthUser) {
     },
     leads: {
       total: teamLeads?.length || 0,
+      newThisMonth: newLeadsThisMonth || 0,
       pipeline: leadPipeline,
     },
     tasks: {
+      total: (pendingTasks || 0) + (overdueTasks || 0),
       pending: pendingTasks || 0,
       overdue: overdueTasks || 0,
+      dueToday: dueToday || 0,
     },
     attendance: {
       presentToday: presentToday || 0,
       totalMembers: memberIds.length,
     },
     revenue: {
-      total: invoiceStats.total_revenue,
+      total: totalRevenue,
     },
     invoices: {
       overdueCount: invoiceStats.overdue_count,
@@ -461,7 +489,7 @@ export async function getEmployeeDashboard(userId: string) {
   // Build all queries upfront
   const myLeadsQuery = supabaseAdmin
     .from("leads")
-    .select("id, status")
+    .select("id, status, lead_value")
     .eq("is_deleted", false)
     .eq("assigned_to", userId);
 
@@ -529,10 +557,23 @@ export async function getEmployeeDashboard(userId: string) {
   ]);
 
   const leadPipeline: Record<string, number> = {};
+  let totalRevenue = 0;
+  let newLeadsCount = 0;
   for (const lead of myLeads || []) {
-    const status = (lead as { status: string }).status;
-    leadPipeline[status] = (leadPipeline[status] || 0) + 1;
+    const l = lead as { status: string; lead_value?: number | null };
+    leadPipeline[l.status] = (leadPipeline[l.status] || 0) + 1;
+    if (l.status === 'won' && l.lead_value) {
+      totalRevenue += l.lead_value;
+    }
   }
+
+  // Count new leads this month
+  const { count: newLeadsThisMonth } = await supabaseAdmin
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("is_deleted", false)
+    .eq("assigned_to", userId)
+    .gte("created_at", startOfMonth);
 
   const myTotalExpenses = (myExpenses || []).reduce(
     (sum, e: any) => sum + (Number(e.amount) || 0),
@@ -545,9 +586,11 @@ export async function getEmployeeDashboard(userId: string) {
   return {
     leads: {
       total: myLeads?.length || 0,
+      newThisMonth: newLeadsThisMonth || 0,
       pipeline: leadPipeline,
     },
     tasks: {
+      total: (pendingTasks || 0) + (overdueTasks || 0),
       pending: pendingTasks || 0,
       overdue: overdueTasks || 0,
       dueToday: dueToday || 0,
@@ -555,6 +598,9 @@ export async function getEmployeeDashboard(userId: string) {
     attendance: {
       daysThisMonth: daysPresent || 0,
       today: todayAttendance || null,
+    },
+    revenue: {
+      total: totalRevenue,
     },
     expenses: {
       myTotal: myTotalExpenses,
@@ -777,6 +823,7 @@ export async function getUserWiseAnalytics(
     leadsWorked: number;
     conversions: number;
     activitiesLogged: number;
+    activityCountCapped: boolean;
     statusChanges: number;
     comments: number;
     winRate: number;
@@ -841,7 +888,7 @@ export async function getUserWiseAnalytics(
     {},
   );
 
-  const [assignedRows, workedRows, convertedRows, activityRows, commentsRows] = await Promise.all([
+  const [assignedRows, workedRows, convertedRows, commentsRows] = await Promise.all([
     supabaseAdmin
       .from("lead_assignments_history")
       .select("to_user_id")
@@ -862,12 +909,6 @@ export async function getUserWiseAnalytics(
       .gte("converted_at", filters.startDate)
       .lte("converted_at", filters.endDate),
     supabaseAdmin
-      .from("lead_activities")
-      .select("user_id, activity_type")
-      .in("user_id", scopedUserIds)
-      .gte("created_at", filters.startDate)
-      .lte("created_at", filters.endDate),
-    supabaseAdmin
       .from("comments")
       .select("user_id")
       .eq("entity_type", "lead")
@@ -880,14 +921,12 @@ export async function getUserWiseAnalytics(
   const assignedError = assignedRows.error;
   const workedError = workedRows.error;
   const convertedError = convertedRows.error;
-  const activityError = activityRows.error;
   const commentsError = commentsRows.error;
-  if (assignedError || workedError || convertedError || activityError || commentsError) {
+  if (assignedError || workedError || convertedError || commentsError) {
     const msg =
       assignedError?.message ||
       workedError?.message ||
       convertedError?.message ||
-      activityError?.message ||
       commentsError?.message ||
       "Failed to compute user-wise analytics";
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, msg);
@@ -916,16 +955,54 @@ export async function getUserWiseAnalytics(
     conversionsByUser[userId] = (conversionsByUser[userId] || 0) + 1;
   }
 
+  // Count activities per user independently to avoid row-limit skew.
   const activitiesByUser: Record<string, number> = {};
+  const activityCountCappedByUser: Record<string, boolean> = {};
   const statusChangesByUser: Record<string, number> = {};
   const commentsByUser: Record<string, number> = {};
-  for (const row of activityRows.data || []) {
-    const r = row as { user_id: string; activity_type: string };
-    activitiesByUser[r.user_id] = (activitiesByUser[r.user_id] || 0) + 1;
-    if (r.activity_type === "status_change") {
-      statusChangesByUser[r.user_id] = (statusChangesByUser[r.user_id] || 0) + 1;
-    }
+
+  const activityCountResults = await Promise.all(
+    scopedUserIds.map(async (userId) => {
+      const [allActivities, statusChanges] = await Promise.all([
+        supabaseAdmin
+          .from("lead_activities")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .gte("created_at", filters.startDate)
+          .lte("created_at", filters.endDate),
+        supabaseAdmin
+          .from("lead_activities")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("activity_type", "status_change")
+          .gte("created_at", filters.startDate)
+          .lte("created_at", filters.endDate),
+      ]);
+
+      if (allActivities.error || statusChanges.error) {
+        throw new ApiError(
+          ERROR_CODES.DATABASE_ERROR,
+          allActivities.error?.message ||
+            statusChanges.error?.message ||
+            "Failed to compute user activity counts",
+        );
+      }
+
+      const totalCount = allActivities.count || 0;
+      return {
+        userId,
+        totalCount,
+        statusChangeCount: statusChanges.count || 0,
+      };
+    }),
+  );
+
+  for (const row of activityCountResults) {
+    activitiesByUser[row.userId] = row.totalCount;
+    statusChangesByUser[row.userId] = row.statusChangeCount;
+    activityCountCappedByUser[row.userId] = row.totalCount >= 1000;
   }
+
   for (const row of commentsRows.data || []) {
     const userId = (row as { user_id: string | null }).user_id;
     if (!userId) continue;
@@ -952,6 +1029,7 @@ export async function getUserWiseAnalytics(
         leadsWorked,
         conversions,
         activitiesLogged,
+        activityCountCapped: activityCountCappedByUser[u.id] || false,
         statusChanges,
         comments,
         winRate,
