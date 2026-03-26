@@ -3,10 +3,11 @@
 import type { Dispatch, ElementType, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { formatInTimeZone } from "date-fns-tz";
-import { startOfMonth, subDays } from "date-fns";
+import { format, startOfMonth, subDays } from "date-fns";
 import {
   Activity,
   Briefcase,
+  CalendarIcon,
   CheckCircle,
   CheckSquare,
   ChevronDown,
@@ -34,12 +35,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -623,6 +630,16 @@ const getSummaryItems = (
     },
   ];
 };
+
+const parseDateOnly = (value: string): Date | undefined => {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day);
+};
+
+const toDateOnlyString = (date: Date): string =>
+  formatInTimeZone(date, IST_TIMEZONE, "yyyy-MM-dd");
 
 // Extant code removed to save lines. Group structures replaced by buildDetailedSections
 
@@ -1266,6 +1283,90 @@ export default function ActivityPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {timePreset === "custom" && (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                    Start Date
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "h-10 w-[180px] justify-start text-left font-normal bg-white",
+                          !customStartDate && "text-muted-foreground",
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {customStartDate
+                          ? format(parseDateOnly(customStartDate) ?? new Date(), "LLL dd, y")
+                          : "Pick start date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        initialFocus
+                        mode="single"
+                        selected={parseDateOnly(customStartDate)}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          const nextStart = toDateOnlyString(date);
+                          setCustomStartDate(nextStart);
+                          if (customEndDate && nextStart > customEndDate) {
+                            setCustomEndDate(nextStart);
+                          }
+                        }}
+                        disabled={(date) =>
+                          Boolean(customEndDate && toDateOnlyString(date) > customEndDate)
+                        }
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                    End Date
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "h-10 w-[180px] justify-start text-left font-normal bg-white",
+                          !customEndDate && "text-muted-foreground",
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {customEndDate
+                          ? format(parseDateOnly(customEndDate) ?? new Date(), "LLL dd, y")
+                          : "Pick end date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        initialFocus
+                        mode="single"
+                        selected={parseDateOnly(customEndDate)}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          const nextEnd = toDateOnlyString(date);
+                          setCustomEndDate(nextEnd);
+                          if (customStartDate && nextEnd < customStartDate) {
+                            setCustomStartDate(nextEnd);
+                          }
+                        }}
+                        disabled={(date) =>
+                          Boolean(customStartDate && toDateOnlyString(date) < customStartDate)
+                        }
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Activity Type</label>
