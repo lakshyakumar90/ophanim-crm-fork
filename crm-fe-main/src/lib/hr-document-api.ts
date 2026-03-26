@@ -104,7 +104,6 @@ export async function updateDocument(
   body: {
     documentName?: string;
     documentType?: string;
-    expiryDate?: string | null;
     notes?: string | null;
   },
 ): Promise<EmployeeDocumentDto> {

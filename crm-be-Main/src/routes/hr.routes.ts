@@ -455,7 +455,7 @@ router.patch(
 
 /**
  * POST /hr/documents/upload
- * Multipart: field "file" + userId, documentType, documentName, optional expiryDate, notes
+ * Multipart: field "file" + userId, documentType, documentName, optional notes
  */
 router.post(
   "/documents/upload",
@@ -480,7 +480,6 @@ router.post(
         fileBuffer: req.file.buffer,
         mimeType: req.file.mimetype || "application/octet-stream",
         fileSize: req.file.size,
-        expiryDate: parsed.data.expiryDate,
         notes: parsed.data.notes,
       },
       authReq.user.id,
@@ -517,7 +516,6 @@ router.post(
         fileBuffer: req.file.buffer,
         mimeType: req.file.mimetype || "application/octet-stream",
         fileSize: req.file.size,
-        expiryDate: parsed.data.expiryDate,
         notes: parsed.data.notes,
       },
       authReq.user.id,

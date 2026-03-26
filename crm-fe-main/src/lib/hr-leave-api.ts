@@ -13,6 +13,41 @@ import type {
 
 type Envelope<T> = { data: T };
 
+type SupabaseLeaveRow = Partial<LeaveRequestDto> & {
+  user?: {
+    id?: string;
+    fullName?: string;
+    full_name?: string;
+    email?: string;
+  } | null;
+  leaveType?: {
+    id?: string;
+    name?: string;
+  } | null;
+  leave_type?: {
+    id?: string;
+    name?: string;
+  } | null;
+};
+
+function normalizeLeaveRequest(row: SupabaseLeaveRow): LeaveRequestDto {
+  const user = row.user;
+  const leaveType = row.leaveType ?? row.leave_type;
+
+  return {
+    ...(row as LeaveRequestDto),
+    userId: row.userId ?? user?.id ?? "",
+    leaveTypeId: row.leaveTypeId ?? leaveType?.id ?? "",
+    employeeName:
+      row.employeeName ??
+      user?.fullName ??
+      user?.full_name ??
+      "Employee",
+    employeeEmail: row.employeeEmail ?? user?.email ?? undefined,
+    leaveTypeName: row.leaveTypeName ?? leaveType?.name ?? "Leave",
+  };
+}
+
 function unwrap<T>(res: { data: Envelope<T> }): T {
   return res.data.data;
 }
@@ -93,11 +128,13 @@ export async function fetchLeaveRequests(params?: {
   return smartRead({
     routeKey: "hr.leave.fetchLeaveRequests",
     strategy: HR_LEAVE_READ_STRATEGY.fetchLeaveRequests,
-    supabaseQuery: () =>
-      sq.getLeaveRequests({
+    supabaseQuery: async () => {
+      const rows = (await sq.getLeaveRequests({
         userId: params?.userId,
         status: params?.status,
-      }) as Promise<LeaveRequestDto[]>,
+      })) as SupabaseLeaveRow[];
+      return rows.map(normalizeLeaveRequest);
+    },
     backendQuery: async () => unwrap(await api.get<Envelope<LeaveRequestDto[]>>("/hr/leaves", { params })),
   });
 }

@@ -12,15 +12,6 @@ export function formatDocDate(iso: string | null | undefined): string {
   }
 }
 
-/** Urgency styling for expiry column. */
-export function getExpiryTone(expiry: string | null | undefined): "muted" | "ok" | "soon" | "past" {
-  if (!expiry) return "muted";
-  const days = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (days < 0) return "past";
-  if (days <= 30) return "soon";
-  return "ok";
-}
-
 export function slugToLabel(slug: string) {
   return slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

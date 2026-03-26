@@ -48,7 +48,7 @@ export function LeaveDetailDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-md overflow-y-auto px-4">
         <SheetHeader>
           <SheetTitle>Leave request</SheetTitle>
         </SheetHeader>

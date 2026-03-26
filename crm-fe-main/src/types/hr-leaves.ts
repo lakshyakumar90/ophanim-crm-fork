@@ -78,5 +78,7 @@ export interface HrEmployeeDirectoryRow {
   job_title?: string | null;
   teamId?: string | null;
   team_id?: string | null;
+  teamName?: string | null;
+  team_name?: string | null;
   role?: string;
 }

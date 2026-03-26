@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { DEFAULT_REQUIRED_DOCUMENT_SLUGS } from "@/components/hr/documents/document-utils";
 import { usePermission } from "@/hooks/use-permission";
-import { format } from "date-fns";
 import { openDocumentUrl } from "@/lib/documentService";
 
 function unwrapDocs(raw: unknown): EmployeeDocumentDto[] {
@@ -125,11 +124,6 @@ export function EmployeeDocumentsTab({
               ) : (
                 <Badge variant="secondary">Unverified</Badge>
               )}
-              {d.expiryDate ? (
-                <span className="text-xs text-muted-foreground">
-                  Expires {format(new Date(d.expiryDate), "dd MMM yyyy")}
-                </span>
-              ) : null}
             </li>
           ))}
         </ul>

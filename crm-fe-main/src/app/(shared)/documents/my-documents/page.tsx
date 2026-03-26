@@ -55,7 +55,6 @@ export default function MyDocumentsPage() {
   const [progress, setProgress] = useState(0);
   const [documentType, setDocumentType] = useState("");
   const [documentName, setDocumentName] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
@@ -91,7 +90,6 @@ export default function MyDocumentsPage() {
   const resetUpload = () => {
     setDocumentType("");
     setDocumentName("");
-    setExpiryDate("");
     setNotes("");
     setFile(null);
     setProgress(0);
@@ -106,7 +104,6 @@ export default function MyDocumentsPage() {
     const form = new FormData();
     form.append("documentType", documentType);
     form.append("documentName", documentName.trim());
-    if (expiryDate) form.append("expiryDate", expiryDate);
     if (notes.trim()) form.append("notes", notes.trim());
     form.append("file", file);
 
@@ -158,7 +155,6 @@ export default function MyDocumentsPage() {
                     <TableHead>Type</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Uploaded</TableHead>
-                    <TableHead>Expiry</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead className="text-right">File</TableHead>
@@ -170,7 +166,6 @@ export default function MyDocumentsPage() {
                       <TableCell>{typeLabelMap.get(doc.documentType) || doc.documentType}</TableCell>
                       <TableCell>{doc.documentName}</TableCell>
                       <TableCell>{formatDate(doc.createdAt)}</TableCell>
-                      <TableCell>{formatDate(doc.expiryDate)}</TableCell>
                       <TableCell>
                         {doc.isVerified ? (
                           <Badge className="bg-emerald-600">Approved</Badge>
@@ -249,11 +244,6 @@ export default function MyDocumentsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Expiry date (optional)</Label>
-              <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
-            </div>
-
-            <div className="space-y-2">
               <Label>Notes (optional)</Label>
               <Textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
@@ -281,4 +271,3 @@ export default function MyDocumentsPage() {
     </div>
   );
 }
-

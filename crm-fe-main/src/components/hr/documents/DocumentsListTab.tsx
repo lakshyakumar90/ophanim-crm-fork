@@ -36,7 +36,7 @@ import { verifyDocument, rejectDocument } from "@/lib/hr-document-api";
 import { toastHrError } from "@/lib/hr-error-toast";
 import { toast } from "sonner";
 import { DocumentRow } from "./DocumentRow";
-import { getExpiryTone, slugToLabel } from "./document-utils";
+import { slugToLabel } from "./document-utils";
 
 function empName(e: HrEmployeeDirectoryRow) {
   return e.fullName ?? e.full_name ?? "";
@@ -250,15 +250,13 @@ export function DocumentsListTab({
               <TableHead>Total documents</TableHead>
               <TableHead>Verified</TableHead>
               <TableHead>Pending</TableHead>
-              <TableHead>Expired</TableHead>
-              <TableHead>Expiring soon</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && employees.length === 0 ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 7 }).map((__, j) => (
+                  {Array.from({ length: 6 }).map((__, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -267,7 +265,7 @@ export function DocumentsListTab({
               ))
             ) : filteredEmployees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="p-12 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="p-12 text-center text-muted-foreground">
                   No employees found for the selected filters.
                 </TableCell>
               </TableRow>
@@ -276,8 +274,6 @@ export function DocumentsListTab({
                 const empDocs = documentsByUser.get(emp.id) || [];
                 const verifiedCount = empDocs.filter((d) => d.isVerified).length;
                 const pendingCount = empDocs.length - verifiedCount;
-                const expiredCount = empDocs.filter((d) => getExpiryTone(d.expiryDate) === "past").length;
-                const expiringSoonCount = empDocs.filter((d) => getExpiryTone(d.expiryDate) === "soon").length;
                 const expanded = !!openEmployeeIds[emp.id];
 
                 return (
@@ -300,13 +296,11 @@ export function DocumentsListTab({
                       <TableCell>{empDocs.length}</TableCell>
                       <TableCell>{verifiedCount}</TableCell>
                       <TableCell>{pendingCount}</TableCell>
-                      <TableCell>{expiredCount}</TableCell>
-                      <TableCell>{expiringSoonCount}</TableCell>
                     </TableRow>
 
                     {expanded ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="bg-muted/20 p-4">
+                        <TableCell colSpan={6} className="bg-muted/20 p-4">
                           {empDocs.length === 0 ? (
                             <div className="flex items-center justify-between gap-3 rounded-md border bg-background p-4">
                               <p className="text-sm text-muted-foreground">No documents uploaded for this user.</p>
@@ -327,7 +321,6 @@ export function DocumentsListTab({
                                     <TableHead>Type</TableHead>
                                     <TableHead>File</TableHead>
                                     <TableHead>Uploaded</TableHead>
-                                    <TableHead>Expiry</TableHead>
                                     <TableHead>Verified</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                   </TableRow>

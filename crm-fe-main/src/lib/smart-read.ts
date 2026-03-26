@@ -13,7 +13,7 @@ export interface SmartReadOptions<TSource, TNormalized = TSource> {
   timeoutMs?: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 8000;
+const DEFAULT_TIMEOUT_MS = 11000;
 
 function isDev() {
   return process.env.NODE_ENV !== "production";

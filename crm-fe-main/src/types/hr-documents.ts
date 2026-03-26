@@ -25,7 +25,6 @@ export interface EmployeeDocumentDto {
   verifiedBy: string | null;
   verifiedByName?: string;
   verifiedAt: string | null;
-  expiryDate: string | null;
   notes: string | null;
   uploadedBy: string | null;
   uploadedByName?: string;
