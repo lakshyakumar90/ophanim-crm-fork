@@ -9,14 +9,11 @@ import {
   fetchHrEmployees,
   fetchLeaveRequests,
   fetchLeaveTypes,
-  fetchLeaveTypesAdmin,
   fetchPendingLeaves,
 } from "@/lib/hr-leave-api";
 import type { HrEmployeeDirectoryRow, LeaveRequestDto, LeaveTypeDto } from "@/types/hr-leaves";
 import { PendingApprovalsTab } from "@/components/hr/leaves/PendingApprovalsTab";
 import { AllRequestsTab } from "@/components/hr/leaves/AllRequestsTab";
-import { LeaveBalancesTab } from "@/components/hr/leaves/LeaveBalancesTab";
-import { LeaveSettingsTab } from "@/components/hr/leaves/LeaveSettingsTab";
 import { LeaveKPICards } from "@/components/hr/leaves/LeaveKPICards";
 import { CreateLeaveModal } from "@/components/hr/leaves/CreateLeaveModal";
 import { HRTeamLeaveCalendar } from "@/components/hr/hr-team-leave-calendar";
@@ -29,11 +26,9 @@ import {
   LayoutDashboard,
   ListChecks,
   Plus,
-  Settings,
-  Users,
 } from "lucide-react";
 
-type TabKey = "overview" | "pending" | "all" | "balances" | "settings" | "calendar";
+type TabKey = "overview" | "pending" | "all" | "calendar";
 
 export default function HrLeavesPage() {
   const leaveView = usePermission("hr:leave_view");
@@ -53,7 +48,6 @@ export default function HrLeavesPage() {
   const [allLeaves, setAllLeaves] = useState<LeaveRequestDto[]>([]);
   const [calendarLeaves, setCalendarLeaves] = useState<LeaveRequestDto[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDto[]>([]);
-  const [adminTypes, setAdminTypes] = useState<LeaveTypeDto[]>([]);
   const [employees, setEmployees] = useState<HrEmployeeDirectoryRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -79,18 +73,14 @@ export default function HrLeavesPage() {
   }, []);
 
   const refreshAdminTypes = useCallback(async () => {
-    if (!canManage) return;
-    try {
-      const t = await fetchLeaveTypesAdmin();
-      setAdminTypes(t);
-    } catch {
-      setAdminTypes([]);
-    }
-  }, [canManage]);
+    return; // Removed - no longer managing leave types
+  }, []);
+
+  // Removed refreshAdminTypes from refreshAll
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([loadStats(), refreshCore(), refreshAdminTypes()]);
-  }, [loadStats, refreshCore, refreshAdminTypes]);
+    await Promise.all([loadStats(), refreshCore()]);
+  }, [loadStats, refreshCore]);
 
   useEffect(() => {
     if (!canView) return;
@@ -176,32 +166,7 @@ export default function HrLeavesPage() {
               <FileText className="h-4 w-4 shrink-0" />
               {!sidebarCollapsed ? <span>All requests</span> : null}
             </button>
-            <button
-              type="button"
-              onClick={() => setTab("balances")}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                tab === "balances" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted",
-              )}
-              title="Balances"
-            >
-              <Users className="h-4 w-4 shrink-0" />
-              {!sidebarCollapsed ? <span>Balances</span> : null}
-            </button>
-            {canManage ? (
-              <button
-                type="button"
-                onClick={() => setTab("settings")}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  tab === "settings" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted",
-                )}
-                title="Leave settings"
-              >
-                <Settings className="h-4 w-4 shrink-0" />
-                {!sidebarCollapsed ? <span>Leave settings</span> : null}
-              </button>
-            ) : null}
+
           </nav>
           <Button
             type="button"
@@ -222,7 +187,7 @@ export default function HrLeavesPage() {
               <div>
                 <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Leave management</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Approvals, balances, and leave configuration.
+                  View leave requests and manage approvals.
                 </p>
               </div>
               {canManage ? (
@@ -282,21 +247,7 @@ export default function HrLeavesPage() {
             </div>
           ) : null}
 
-          {tab === "balances" ? (
-            <div className="space-y-4 overflow-y-auto">
-              <LeaveBalancesTab employees={employees} leaveTypes={leaveTypes} canExport={canManage} />
-            </div>
-          ) : null}
 
-          {canManage && tab === "settings" ? (
-            <div className="space-y-4 overflow-y-auto">
-              <LeaveSettingsTab
-                types={adminTypes}
-                loading={listLoading}
-                onRefresh={refreshAdminTypes}
-              />
-            </div>
-          ) : null}
 
           {tab === "calendar" ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

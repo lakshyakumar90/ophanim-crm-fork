@@ -29,15 +29,6 @@ import { cn } from "@/lib/utils";
 import { Upload, FileUp } from "lucide-react";
 import { UPLOAD_MAX_BYTES, UPLOAD_ACCEPT, isAllowedUploadFile } from "./document-utils";
 
-const EXPIRY_HINT_SLUGS = new Set([
-  "passport",
-  "visa",
-  "driving_license",
-  "aadhar",
-  "pan",
-  "work_permit",
-]);
-
 export function UploadDocumentModal({
   open,
   onOpenChange,
@@ -54,7 +45,6 @@ export function UploadDocumentModal({
   const [userId, setUserId] = useState("");
   const [documentType, setDocumentType] = useState("");
   const [documentName, setDocumentName] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -66,7 +56,6 @@ export function UploadDocumentModal({
       setUserId("");
       setDocumentType("");
       setDocumentName("");
-      setExpiryDate("");
       setNotes("");
       setFile(null);
       setProgress(0);
@@ -83,9 +72,6 @@ export function UploadDocumentModal({
   }));
 
   const activeTypes = types.filter((t) => t.isActive);
-
-  const showExpiryHint =
-    documentType && (EXPIRY_HINT_SLUGS.has(documentType) || documentType.includes("visa"));
 
   const pickFile = useCallback((f: File | null) => {
     if (!f) {
@@ -125,7 +111,6 @@ export function UploadDocumentModal({
     fd.append("userId", userId);
     fd.append("documentType", documentType);
     fd.append("documentName", documentName.trim());
-    if (expiryDate) fd.append("expiryDate", expiryDate);
     if (notes.trim()) fd.append("notes", notes.trim());
 
     setUploading(true);
@@ -220,21 +205,6 @@ export function UploadDocumentModal({
                 />
               </div>
             ) : null}
-          </div>
-          <div className="space-y-2">
-            <Label>
-              Expiry date
-              {showExpiryHint ? (
-                <span className="text-muted-foreground font-normal ml-1">
-                  (recommended for IDs & visas)
-                </span>
-              ) : null}
-            </Label>
-            <Input
-              type="date"
-              value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-            />
           </div>
           <div className="space-y-2">
             <Label>Notes (optional)</Label>

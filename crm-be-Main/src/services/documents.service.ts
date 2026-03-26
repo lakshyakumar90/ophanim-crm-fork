@@ -53,7 +53,6 @@ function mapRowToEmployeeDocument(doc: any): EmployeeDocument {
     verifiedBy: doc.verified_by,
     verifiedByName: doc.verifier?.full_name,
     verifiedAt: doc.verified_at,
-    expiryDate: doc.expiry_date,
     notes: doc.notes,
     uploadedBy: doc.uploaded_by,
     uploadedByName: doc.uploader?.full_name,
@@ -92,7 +91,6 @@ export interface EmployeeDocument {
   verifiedBy: string | null;
   verifiedByName?: string;
   verifiedAt: string | null;
-  expiryDate: string | null;
   notes: string | null;
   uploadedBy: string | null;
   uploadedByName?: string;
@@ -287,7 +285,6 @@ export async function createDocument(
     fileUrl: string;
     fileSize?: number;
     mimeType?: string;
-    expiryDate?: string;
     notes?: string;
   },
   uploadedBy: string,
@@ -304,7 +301,6 @@ export async function createDocument(
       file_url: input.fileUrl,
       file_size: input.fileSize,
       mime_type: input.mimeType,
-      expiry_date: input.expiryDate,
       notes: input.notes,
       uploaded_by: uploadedBy,
       is_verified: false,
@@ -332,7 +328,6 @@ export async function createDocumentWithUploadedFile(
     fileBuffer: Buffer;
     mimeType: string;
     fileSize: number;
-    expiryDate?: string;
     notes?: string;
   },
   uploadedBy: string,
@@ -367,7 +362,6 @@ export async function createDocumentWithUploadedFile(
       file_url: storagePath,
       file_size: input.fileSize,
       mime_type: input.mimeType,
-      expiry_date: input.expiryDate,
       notes: input.notes,
       uploaded_by: uploadedBy,
       is_verified: false,
@@ -395,7 +389,6 @@ export async function updateDocument(
   input: {
     documentName?: string;
     documentType?: DocumentType;
-    expiryDate?: string | null;
     notes?: string | null;
   },
 ): Promise<EmployeeDocument> {
@@ -408,7 +401,6 @@ export async function updateDocument(
     updateData.document_name = input.documentName;
   if (input.documentType !== undefined)
     updateData.document_type = input.documentType;
-  if (input.expiryDate !== undefined) updateData.expiry_date = input.expiryDate;
   if (input.notes !== undefined) updateData.notes = input.notes;
 
   const { error } = await supabaseAdmin

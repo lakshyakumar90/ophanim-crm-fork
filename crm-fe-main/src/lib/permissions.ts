@@ -73,13 +73,6 @@ export const PERMISSIONS = {
       "hr:analytics_export": "Export HR analytics reports",
     } as const,
   },
-  recruitment: {
-    label: "Recruitment",
-    keys: {
-      "recruitment:view": "View recruitment pipeline and job postings",
-      "recruitment:manage": "Manage candidates, job postings, interviews, and offers",
-    } as const,
-  },
   payroll: {
     label: "Payroll",
     keys: {
@@ -94,13 +87,6 @@ export const PERMISSIONS = {
       "performance:view": "View performance reviews and cycles",
       "performance:manage": "Manage review cycles, goals, and calibration",
       "performance:review": "Write performance reviews as a manager",
-    } as const,
-  },
-  onboarding: {
-    label: "Onboarding",
-    keys: {
-      "onboarding:view": "View onboarding and offboarding checklists",
-      "onboarding:manage": "Manage onboarding/offboarding workflows and templates",
     } as const,
   },
   admin: {

@@ -384,7 +384,6 @@ export type ReviewCycleStatus = (typeof REVIEW_CYCLE_STATUSES)[keyof typeof REVI
 
 // Checklist Types
 export const CHECKLIST_TYPES = {
-  ONBOARDING: "onboarding",
   OFFBOARDING: "offboarding",
 } as const;
 

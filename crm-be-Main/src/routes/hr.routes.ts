@@ -806,19 +806,6 @@ router.get(
 );
 
 /**
- * GET /hr/analytics/onboarding
- * Onboarding analytics: active onboardings, completion rate
- */
-router.get(
-  "/analytics/onboarding",
-  requireAnyPermission(["hr:dashboard_view", "hr:analytics_view", "hr:view", "hr:manage"]) as any,
-  asyncHandler(async (req: Request, res: Response) => {
-    const analytics = await hrAnalyticsService.getOnboardingAnalytics();
-    sendSuccess(res, analytics);
-  }),
-);
-
-/**
  * GET /hr/analytics/alerts
  * System alerts: high-priority items requiring action
  */

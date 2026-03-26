@@ -13,8 +13,7 @@ import {
 import { MoreVertical } from "lucide-react";
 import type { EmployeeDocumentDto } from "@/types/hr-documents";
 import { openDocumentUrl } from "@/lib/documentService";
-import { formatDocDate, getExpiryTone, slugToLabel } from "./document-utils";
-import { cn } from "@/lib/utils";
+import { formatDocDate, slugToLabel } from "./document-utils";
 
 export function DocumentRow({
   doc,
@@ -39,16 +38,6 @@ export function DocumentRow({
   onEdit: (doc: EmployeeDocumentDto) => void;
   onDelete: (doc: EmployeeDocumentDto) => void;
 }) {
-  const tone = getExpiryTone(doc.expiryDate);
-  const expiryClass =
-    tone === "past"
-      ? "text-red-600 font-medium"
-      : tone === "soon"
-        ? "text-amber-600 font-medium"
-        : tone === "ok"
-          ? "text-emerald-600"
-          : "text-muted-foreground";
-
   const fileHref = doc.fileUrl?.trim();
   const openFile = () => {
     if (!fileHref) return;
@@ -80,9 +69,6 @@ export function DocumentRow({
       </TableCell>
       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
         {formatDocDate(doc.createdAt)}
-      </TableCell>
-      <TableCell className={cn("text-sm whitespace-nowrap", expiryClass)}>
-        {doc.expiryDate ? formatDocDate(doc.expiryDate) : "—"}
       </TableCell>
       <TableCell>
         {doc.isVerified ? (

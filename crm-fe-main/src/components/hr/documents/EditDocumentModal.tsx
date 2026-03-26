@@ -28,13 +28,11 @@ export function EditDocumentModal({
   onOpenChange: (v: boolean) => void;
   onSaved: (row: EmployeeDocumentDto) => void;
 }) {
-  const [expiryDate, setExpiryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (doc && open) {
-      setExpiryDate(doc.expiryDate ? doc.expiryDate.slice(0, 10) : "");
       setNotes(doc.notes ?? "");
     }
   }, [doc, open]);
@@ -44,7 +42,6 @@ export function EditDocumentModal({
     setSaving(true);
     try {
       const row = await updateDocument(doc.id, {
-        expiryDate: expiryDate ? expiryDate : null,
         notes: notes.trim() ? notes.trim() : null,
       });
       toast.success("Document updated");
@@ -68,19 +65,6 @@ export function EditDocumentModal({
             <p className="text-sm text-muted-foreground">
               {doc.fileName || doc.documentName} — employee and file cannot be changed here.
             </p>
-            <div className="space-y-2">
-              <Label>Expiry date</Label>
-              <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-xs h-7 px-0"
-                onClick={() => setExpiryDate("")}
-              >
-                Clear expiry
-              </Button>
-            </div>
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />

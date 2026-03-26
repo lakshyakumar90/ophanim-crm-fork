@@ -18,16 +18,6 @@ export function DocumentKPICards({
   employees: HrEmployeeDirectoryRow[];
   loading: boolean;
 }) {
-  const expiringSoon = useMemo(() => {
-    const now = Date.now();
-    return documents.filter((d) => {
-      if (!d.expiryDate) return false;
-      const t = new Date(d.expiryDate).getTime();
-      const days = Math.ceil((t - now) / (1000 * 60 * 60 * 24));
-      return days >= 0 && days <= 30;
-    }).length;
-  }, [documents]);
-
   const missingRequiredEmployees = useMemo(() => {
     const required = new Set(DEFAULT_REQUIRED_DOCUMENT_SLUGS);
     let n = 0;
@@ -80,34 +70,6 @@ export function DocumentKPICards({
             Pending verification
           </p>
           <p className="text-2xl font-bold text-amber-950 dark:text-amber-50">{unverified}</p>
-        </CardContent>
-      </Card>
-      <Card
-        className={
-          expiringSoon > 0
-            ? "border-red-200 bg-red-50/70 dark:bg-red-950/25"
-            : undefined
-        }
-      >
-        <CardContent className="p-4">
-          <p
-            className={
-              expiringSoon > 0
-                ? "text-xs font-medium text-red-900 dark:text-red-100"
-                : "text-xs font-medium text-muted-foreground"
-            }
-          >
-            Expiring in 30 days
-          </p>
-          <p
-            className={
-              expiringSoon > 0
-                ? "text-2xl font-bold text-red-800 dark:text-red-200"
-                : "text-2xl font-bold"
-            }
-          >
-            {expiringSoon}
-          </p>
         </CardContent>
       </Card>
       <Card className="border-amber-200 bg-amber-50/60 dark:bg-amber-950/15">

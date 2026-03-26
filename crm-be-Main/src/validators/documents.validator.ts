@@ -19,7 +19,6 @@ export const createDocumentSchema = z.object({
   fileUrl: z.string().url("Invalid file URL"),
   fileSize: z.number().int().positive().optional(),
   mimeType: z.string().optional(),
-  expiryDate: z.string().optional(),
   notes: z.string().max(1000).optional(),
 });
 
@@ -28,7 +27,6 @@ export const updateDocumentSchema = z
   .object({
     documentName: z.string().min(1).max(200).optional(),
     documentType: documentTypeSlugSchema.optional(),
-    expiryDate: z.string().nullable().optional(),
     notes: z.string().max(1000).nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
@@ -87,7 +85,6 @@ export const rejectDocumentSchema = z.object({
 const uploadDocumentBaseFieldsSchema = z.object({
   documentType: documentTypeSlugSchema,
   documentName: z.string().min(1, "Document name is required").max(200),
-  expiryDate: z.string().optional(),
   notes: z.string().max(1000).optional(),
 });
 

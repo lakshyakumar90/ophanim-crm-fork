@@ -57,10 +57,6 @@ vi.mock("../../src/services/documents.service.js", () => ({
   })),
 }));
 
-vi.mock("../../src/services/recruitment.service.js", () => ({
-  getJobPostings: vi.fn(async () => []),
-}));
-
 vi.mock("../../src/services/payroll.service.js", () => ({
   getPayrollRuns: vi.fn(async () => []),
   disbursePayroll: vi.fn(async () => ({
@@ -127,16 +123,14 @@ describe("API RBAC integration", () => {
   beforeAll(async () => {
     app.use(express.json());
 
-    const [{ default: hrRoutes }, { default: recruitmentRoutes }, { default: payrollRoutes }, { default: performanceRoutes }, { default: onboardingRoutes }] = await Promise.all([
+    const [{ default: hrRoutes }, { default: payrollRoutes }, { default: performanceRoutes }, { default: onboardingRoutes }] = await Promise.all([
       import("../../src/routes/hr.routes.js"),
-      import("../../src/routes/recruitment.routes.js"),
       import("../../src/routes/payroll.routes.js"),
       import("../../src/routes/performance.routes.js"),
       import("../../src/routes/onboarding.routes.js"),
     ]);
 
     app.use("/api/v1/hr", hrRoutes);
-    app.use("/api/v1/recruitment", recruitmentRoutes);
     app.use("/api/v1/payroll", payrollRoutes);
     app.use("/api/v1/performance", performanceRoutes);
     app.use("/api/v1/onboarding", onboardingRoutes);
@@ -158,21 +152,6 @@ describe("API RBAC integration", () => {
 
     const no = await request(app)
       .get("/api/v1/hr/documents/stats")
-      .set("x-test-user", asHeader(denied));
-    expect(no.status).toBe(403);
-  });
-
-  it("allows and denies recruitment job-postings by permission", async () => {
-    const allowed = makeUser("manager", ["recruitment:view"]);
-    const denied = makeUser("employee", []);
-
-    const ok = await request(app)
-      .get("/api/v1/recruitment/job-postings")
-      .set("x-test-user", asHeader(allowed));
-    expect(ok.status).toBe(200);
-
-    const no = await request(app)
-      .get("/api/v1/recruitment/job-postings")
       .set("x-test-user", asHeader(denied));
     expect(no.status).toBe(403);
   });
@@ -220,16 +199,6 @@ describe("API RBAC integration", () => {
       .get("/api/v1/onboarding/templates")
       .set("x-test-user", asHeader(denied));
     expect(no.status).toBe(403);
-  });
-
-  it("rejects invalid recruitment candidates query params", async () => {
-    const allowed = makeUser("manager", ["recruitment:view"]);
-
-    const bad = await request(app)
-      .get("/api/v1/recruitment/candidates?page=not-a-number")
-      .set("x-test-user", asHeader(allowed));
-
-    expect(bad.status).toBe(400);
   });
 
   it("rejects invalid payroll run initiation payload", async () => {

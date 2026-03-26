@@ -12,8 +12,7 @@ export async function getComprehensiveAnalytics() {
     { data: activePostings },
     { data: payrolls },
     { data: reviewCycles },
-    { data: probationList },
-    { data: expiringDocs }
+    { data: probationList }
   ] = await Promise.all([
     supabaseAdmin.from("users").select("id", { count: "exact", head: true }).eq("is_active", true),
     supabaseAdmin.from("leave_requests").select("status").gte("start_date", new Date(new Date().getFullYear(), 0, 1).toISOString()),
@@ -21,7 +20,6 @@ export async function getComprehensiveAnalytics() {
     supabaseAdmin.from("payroll_runs").select("total_gross, month").order("month", { ascending: false }).limit(6),
     supabaseAdmin.from("review_cycles").select("status").in("status", ["active", "draft"]),
     supabaseAdmin.from("employee_profiles").select("user_id").eq("hr_status", "probation"),
-    supabaseAdmin.from("employee_documents").select("id").not("expiry_date", "is", null).lte("expiry_date", new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()),
   ]);
 
   const leaveRate = (leaves || []).filter(l => l.status === "approved").length;
@@ -34,7 +32,6 @@ export async function getComprehensiveAnalytics() {
     payrollTrend: payrolls || [],
     activeReviewCycles: (reviewCycles || []).length,
     employeesOnProbation: (probationList || []).length,
-    expiringDocuments: (expiringDocs || []).length,
   };
 }
 
@@ -45,28 +42,7 @@ export async function getComprehensiveAnalytics() {
 export async function runComplianceChecks() {
   let notificationsSent = 0;
   
-  // 1. Check expiring documents (within 30 days)
-  const targetDateDocs = new Date();
-  targetDateDocs.setDate(targetDateDocs.getDate() + 30);
-  const { data: docs } = await supabaseAdmin
-    .from("employee_documents")
-    .select("id, title, user_id, expiry_date")
-    .lte("expiry_date", targetDateDocs.toISOString().split("T")[0])
-    .gte("expiry_date", new Date().toISOString().split("T")[0]);
-
-  if (docs && docs.length > 0) {
-    const alerts = docs.map((doc: any) => ({
-      user_id: doc.user_id,
-      title: "Document Expiring Soon ⚠️",
-      message: `Your document '${doc.title}' expires on ${doc.expiry_date}. Please upload a new version.`,
-      type: "system",
-      priority: "high"
-    }));
-    await supabaseAdmin.from("notifications").insert(alerts);
-    notificationsSent += alerts.length;
-  }
-
-  // 2. Check probation ending (within 14 days)
+  // 1. Check probation ending (within 14 days)
   const targetDateProbation = new Date();
   targetDateProbation.setDate(targetDateProbation.getDate() + 14);
   const { data: probation } = await supabaseAdmin
@@ -357,17 +333,9 @@ export async function getComplianceAnalytics() {
   const nextMonthStr = nextMonth.toISOString().split("T")[0];
 
   const [
-    { data: expiringDocs },
     { data: probationEnding },
     { data: missingDocs }
   ] = await Promise.all([
-    supabaseAdmin
-      .from("employee_documents")
-      .select("id, title, user_id, users!user_id(full_name), expiry_date, document_type")
-      .not("expiry_date", "is", null)
-      .gte("expiry_date", todayStr)
-      .lte("expiry_date", nextMonthStr)
-      .order("expiry_date", { ascending: true }),
     supabaseAdmin
       .from("employee_profiles")
       .select("user_id, users!user_id(full_name), probation_end_date, department")
@@ -384,14 +352,6 @@ export async function getComplianceAnalytics() {
   ]);
 
   return {
-    expiringDocumentsCount: expiringDocs?.length || 0,
-    expiringDocumentsList: (expiringDocs || []).map((doc: any) => ({
-      id: doc.id,
-      title: doc.title,
-      employeeName: doc.users?.full_name || "Unknown",
-      expiryDate: doc.expiry_date,
-      documentType: doc.document_type,
-    })),
     probationEndingCount: probationEnding?.length || 0,
     probationEndingList: (probationEnding || []).map((emp: any) => ({
       userId: emp.user_id,
@@ -400,71 +360,6 @@ export async function getComplianceAnalytics() {
       department: emp.department,
     })),
     complianceScore: 85, // Simplified for now
-  };
-}
-
-/**
- * Onboarding Analytics: Active onboardings, pending tasks, completion rate
- */
-export async function getOnboardingAnalytics() {
-  const [
-    { data: activeOnboardings },
-    { data: completedOnboardings },
-    { data: pipelineRows },
-  ] = await Promise.all([
-    supabaseAdmin
-      .from("onboarding_checklists")
-      .select(
-        "id, employee_id, joining_date, tasks, created_at, updated_at, employee:users!employee_id(id, full_name, email)",
-      )
-      .eq("type", "onboarding")
-      .order("created_at", { ascending: false })
-      .limit(50),
-    supabaseAdmin
-      .from("onboarding_checklists")
-      .select("id, tasks, created_at")
-      .eq("type", "onboarding"),
-    supabaseAdmin
-      .from("onboarding_checklists")
-      .select("id, tasks, type, created_at")
-      .limit(200),
-  ]);
-
-  const computeRate = (tasks: unknown): number => {
-    const arr = (tasks as { status?: string }[]) || [];
-    if (!arr.length) return 0;
-    const done = arr.filter((t) => t.status === "done").length;
-    return Math.round((done / arr.length) * 100);
-  };
-
-  const list = activeOnboardings || [];
-  const avgCompletion =
-    list.length > 0
-      ? Math.round(
-          list.reduce((sum: number, o: any) => sum + computeRate(o.tasks), 0) /
-            list.length,
-        )
-      : 0;
-
-  const completedFull = (completedOnboardings || []).filter(
-    (o: any) => computeRate(o.tasks) >= 100,
-  );
-
-  return {
-    activeOnboardings: list.filter((o: any) => computeRate(o.tasks) < 100).length,
-    activeOnboardingsList: list.slice(0, 10).map((o: any) => ({
-      id: o.id,
-      employeeName: o.employee?.full_name || "Unknown",
-      startedDate: o.created_at,
-      completionRate: computeRate(o.tasks),
-    })),
-    completedThisMonth: completedFull.length,
-    completionRate: avgCompletion,
-    onboardingVsOffboarding: {
-      onboarding: (pipelineRows || []).filter((r: any) => r.type === "onboarding").length,
-      offboarding: (pipelineRows || []).filter((r: any) => r.type === "offboarding").length,
-    },
-    recentCompletedOnboarding: completedFull.slice(-5).reverse(),
   };
 }
 
@@ -485,27 +380,6 @@ export async function getSystemAlerts() {
   // Check for expiring documents
   const today = new Date().toISOString().split("T")[0];
   const thirtyDaysOut = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-  const { data: expiringDocs } = await supabaseAdmin
-    .from("employee_documents")
-    .select("id, title, user_id, expiry_date")
-    .not("expiry_date", "is", null)
-    .gte("expiry_date", today)
-    .lte("expiry_date", thirtyDaysOut)
-    .order("expiry_date", { ascending: true })
-    .limit(3);
-
-  if (expiringDocs && expiringDocs.length > 0) {
-    alerts.push({
-      id: "alert_expiring_docs",
-      title: "Documents Expiring Soon 📋",
-      message: `${expiringDocs.length} employee document(s) expiring in the next 30 days. Review compliance status.`,
-      type: "warning",
-      priority: "high",
-      actionUrl: "/hr/compliance",
-      createdAt: new Date().toISOString(),
-    });
-  }
 
   // Check for pending payroll approvals
   const { data: pendingPayroll } = await supabaseAdmin

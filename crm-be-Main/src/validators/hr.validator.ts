@@ -58,7 +58,7 @@ export const hrLeaveBalanceQuerySchema = z.object({
 });
 
 export const hrCreateLeaveRequestSchema = z.object({
-  leaveTypeId: z.string().uuid("Invalid leave type ID format"),
+  leaveTypeId: z.string().uuid("Invalid leave type ID format").optional(),
   startDate: z.string().date("Invalid startDate format, expected YYYY-MM-DD"),
   endDate: z.string().date("Invalid endDate format, expected YYYY-MM-DD"),
   reason: z.string().max(1000).optional(),

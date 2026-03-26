@@ -464,7 +464,7 @@ export async function getPendingLeaveRequests(): Promise<LeaveRequest[]> {
  */
 export async function createLeaveRequest(
   input: {
-    leaveTypeId: string;
+    leaveTypeId?: string;
     startDate: string;
     endDate: string;
     reason?: string;
@@ -483,22 +483,25 @@ export async function createLeaveRequest(
     );
   }
 
-  // Check leave balance
-  const balances = await getUserLeaveBalances(userId, start.getFullYear());
-  const balance = balances.find((b) => b.leaveTypeId === input.leaveTypeId);
+  // Check leave balance (skip if no leave type specified)
+  let balance;
+  if (input.leaveTypeId) {
+    const balances = await getUserLeaveBalances(userId, start.getFullYear());
+    balance = balances.find((b) => b.leaveTypeId === input.leaveTypeId);
 
-  const totalDays =
-    Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const totalDays =
+      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-  if (
-    !options?.skipBalanceCheck &&
-    balance &&
-    balance.remainingDays < totalDays
-  ) {
-    throw new ApiError(
-      ERROR_CODES.VALIDATION_ERROR,
-      `Insufficient leave balance. You have ${balance.remainingDays} days remaining.`,
-    );
+    if (
+      !options?.skipBalanceCheck &&
+      balance &&
+      balance.remainingDays < totalDays
+    ) {
+      throw new ApiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        `Insufficient leave balance. You have ${balance.remainingDays} days remaining.`,
+      );
+    }
   }
 
   // Check for overlapping requests

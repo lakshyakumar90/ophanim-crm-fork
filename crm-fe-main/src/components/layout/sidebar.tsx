@@ -37,7 +37,6 @@ import {
   FolderKanban,
   ListTodo,
   Users2,
-  UserCircle,
   ClipboardList,
   Copy,
   Shield,
@@ -304,12 +303,6 @@ const hrItems: NavItem[] = [
     roles: ["admin", "manager"],
   },
   {
-    title: "Recruitment",
-    href: "/hr/recruitment",
-    icon: Briefcase,
-    roles: ["admin", "manager"],
-  },
-  {
     title: "Payroll",
     href: "/hr/payroll",
     icon: Receipt,
@@ -321,13 +314,6 @@ const hrItems: NavItem[] = [
     icon: Target,
     roles: ["admin", "manager"],
     anyPermission: ["performance:view", "performance:manage", "performance:review"],
-  },
-  {
-    title: "Onboarding",
-    href: "/hr/onboarding",
-    icon: UserCircle,
-    roles: ["admin", "manager"],
-    anyPermission: ["onboarding:view", "onboarding:manage"],
   },
   {
     title: "Holidays",

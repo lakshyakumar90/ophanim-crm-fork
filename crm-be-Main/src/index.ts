@@ -37,10 +37,8 @@ import cronRoutes from "./routes/cron.routes.js";
 import internalRoutes from "./routes/internal.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import rolesRoutes from "./routes/roles.routes.js";
-import recruitmentRoutes from "./routes/recruitment.routes.js";
 import payrollRoutes from "./routes/payroll.routes.js";
 import performanceRoutes from "./routes/performance.routes.js";
-import onboardingRoutes from "./routes/onboarding.routes.js";
 // Create Express app
 const app: Application = express();
 
@@ -111,10 +109,8 @@ app.use(`${API_PREFIX}/cron`, cronRoutes);
 app.use(`${API_PREFIX}/internal`, internalRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/roles`, rolesRoutes);
-app.use(`${API_PREFIX}/recruitment`, recruitmentRoutes);
 app.use(`${API_PREFIX}/payroll`, payrollRoutes);
 app.use(`${API_PREFIX}/performance`, performanceRoutes);
-app.use(`${API_PREFIX}/onboarding`, onboardingRoutes);
 // 404 handler
 app.use(notFoundMiddleware);
 
