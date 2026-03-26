@@ -104,19 +104,25 @@ router.get(
  */
 router.get(
   "/lead-analytics",
-  requireManager as any,
   asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
     const now = new Date();
     const startDate =
       (req.query["startDate"] as string) ||
       new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const endDate = (req.query["endDate"] as string) || now.toISOString();
+    const teamId = req.query["teamId"] as string | undefined;
+    const userId = req.query["userId"] as string | undefined;
 
     // Cache analytics for 5 minutes
-    const cacheKey = `analytics:leads:${startDate.slice(0, 10)}:${endDate.slice(0, 10)}`;
+    const cacheKey = `analytics:leads:${authReq.user.id}:${startDate.slice(0, 10)}:${endDate.slice(0, 10)}:${teamId || "all"}:${userId || "all"}`;
     const data = await getCached(
       cacheKey,
-      () => dashboardService.getLeadAnalytics(startDate, endDate),
+      () =>
+        dashboardService.getLeadAnalyticsScoped(authReq.user, startDate, endDate, {
+          teamId,
+          userId,
+        }),
       CACHE_TTL.ANALYTICS,
     );
     sendSuccess(res, data);
@@ -165,6 +171,33 @@ router.get(
       startDate,
       endDate,
     );
+    sendSuccess(res, data);
+  }),
+);
+
+/**
+ * GET /dashboard/user-wise-analytics
+ * Get user-wise analytics and leaderboard within role scope
+ */
+router.get(
+  "/user-wise-analytics",
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const now = nowIST();
+    const startDate =
+      (req.query["startDate"] as string) ||
+      getStartOfMonthIST(now.getFullYear(), now.getMonth() + 1);
+    const endDate = (req.query["endDate"] as string) || now.toISOString();
+    const teamId = req.query["teamId"] as string | undefined;
+    const userId = req.query["userId"] as string | undefined;
+
+    const data = await dashboardService.getUserWiseAnalytics(authReq.user, {
+      startDate,
+      endDate,
+      teamId,
+      userId,
+    });
+
     sendSuccess(res, data);
   }),
 );

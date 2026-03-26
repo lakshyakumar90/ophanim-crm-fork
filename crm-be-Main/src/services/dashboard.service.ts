@@ -14,6 +14,7 @@ import {
 } from "../utils/date-utils.js";
 import * as invoiceService from "./finance/invoice.service.js";
 import * as expenseService from "./finance/expense.service.js";
+import { ERROR_CODES } from "../utils/error-codes.js";
 
 /**
  * Try to use PostgreSQL function for faster dashboard stats
@@ -607,6 +608,378 @@ export async function getLeadAnalytics(startDate: string, endDate: string) {
     wonCount,
     wonValue,
     conversionRate: leads?.length ? (wonCount / leads.length) * 100 : 0,
+  };
+}
+
+interface LeadAnalyticsFilters {
+  teamId?: string;
+  userId?: string;
+}
+
+interface UserWiseAnalyticsFilters extends LeadAnalyticsFilters {
+  startDate: string;
+  endDate: string;
+}
+
+function getScopedUserIds(
+  authUser: AuthUser,
+  users: Array<{ id: string; team_id: string | null }>,
+  filters: LeadAnalyticsFilters,
+): string[] {
+  if (authUser.role === USER_ROLES.EMPLOYEE) {
+    return [authUser.id];
+  }
+
+  if (authUser.role === USER_ROLES.MANAGER) {
+    const managerTeamId = authUser.teamId;
+    if (!managerTeamId) {
+      return [authUser.id];
+    }
+
+    const teamUserIds = users
+      .filter((u) => u.team_id === managerTeamId)
+      .map((u) => u.id);
+    if (!teamUserIds.includes(authUser.id)) {
+      teamUserIds.push(authUser.id);
+    }
+
+    if (filters.teamId && filters.teamId !== managerTeamId) {
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "Managers can only view analytics for their own team",
+      );
+    }
+
+    if (filters.userId && !teamUserIds.includes(filters.userId)) {
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "Selected user is outside your team scope",
+      );
+    }
+
+    if (filters.userId) {
+      return [filters.userId];
+    }
+
+    return teamUserIds;
+  }
+
+  let scopedUsers = users;
+  if (filters.teamId) {
+    scopedUsers = scopedUsers.filter((u) => u.team_id === filters.teamId);
+  }
+  if (filters.userId) {
+    scopedUsers = scopedUsers.filter((u) => u.id === filters.userId);
+  }
+
+  return scopedUsers.map((u) => u.id);
+}
+
+export async function getLeadAnalyticsScoped(
+  authUser: AuthUser,
+  startDate: string,
+  endDate: string,
+  filters: LeadAnalyticsFilters = {},
+) {
+  const { data: usersData, error: usersError } = await supabaseAdmin
+    .from("users")
+    .select("id, team_id")
+    .eq("is_active", true);
+
+  if (usersError) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersError.message);
+  }
+
+  const users = (usersData || []) as Array<{ id: string; team_id: string | null }>;
+  const scopedUserIds = getScopedUserIds(authUser, users, filters);
+
+  if (scopedUserIds.length === 0) {
+    return {
+      total: 0,
+      byStatus: {},
+      bySource: {},
+      totalValue: 0,
+      wonCount: 0,
+      lostCount: 0,
+      wonValue: 0,
+      conversionRate: 0,
+    };
+  }
+
+  const { data: leads, error: leadsError } = await supabaseAdmin
+    .from("leads")
+    .select("status, source, lead_value")
+    .eq("is_deleted", false)
+    .in("assigned_to", scopedUserIds)
+    .gte("created_at", startDate)
+    .lte("created_at", endDate);
+
+  if (leadsError) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, leadsError.message);
+  }
+
+  const byStatus: Record<string, number> = {};
+  const bySource: Record<string, number> = {};
+  let totalValue = 0;
+  let wonCount = 0;
+  let lostCount = 0;
+  let wonValue = 0;
+
+  for (const lead of leads || []) {
+    const l = lead as {
+      status: string;
+      source: string | null;
+      lead_value: number | null;
+    };
+    byStatus[l.status] = (byStatus[l.status] || 0) + 1;
+    const sourceKey =
+      typeof l.source === "string" && l.source.trim().length > 0
+        ? l.source
+        : "email_marketer";
+    bySource[sourceKey] = (bySource[sourceKey] || 0) + 1;
+    if (l.lead_value) {
+      totalValue += l.lead_value;
+    }
+    if (l.status === "won") {
+      wonCount += 1;
+      if (l.lead_value) {
+        wonValue += l.lead_value;
+      }
+    }
+    if (l.status === "lost") {
+      lostCount += 1;
+    }
+  }
+
+  return {
+    total: leads?.length || 0,
+    byStatus,
+    bySource,
+    totalValue,
+    wonCount,
+    lostCount,
+    wonValue,
+    conversionRate: leads?.length ? (wonCount / leads.length) * 100 : 0,
+  };
+}
+
+export async function getUserWiseAnalytics(
+  authUser: AuthUser,
+  filters: UserWiseAnalyticsFilters,
+): Promise<{
+  users: Array<{
+    id: string;
+    fullName: string;
+    role: string;
+    teamId: string | null;
+    teamName: string | null;
+    totalLeads: number;
+    leadsWorked: number;
+    conversions: number;
+    activitiesLogged: number;
+    statusChanges: number;
+    comments: number;
+    winRate: number;
+  }>;
+  leaderboard: Array<{
+    rank: number;
+    id: string;
+    fullName: string;
+    role: string;
+    teamName: string | null;
+    conversions: number;
+    leadsWorked: number;
+    totalLeads: number;
+    winRate: number;
+  }>;
+}> {
+  const { data: usersData, error: usersError } = await supabaseAdmin
+    .from("users")
+    .select("id, full_name, role, team_id")
+    .eq("is_active", true);
+
+  if (usersError) {
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersError.message);
+  }
+
+  const users = (usersData || []) as Array<{
+    id: string;
+    full_name: string;
+    role: string;
+    team_id: string | null;
+  }>;
+
+  const scopedUserIds = getScopedUserIds(authUser, users, {
+    teamId: filters.teamId,
+    userId: filters.userId,
+  });
+
+  if (scopedUserIds.length === 0) {
+    return { users: [], leaderboard: [] };
+  }
+
+  const { data: teamsData } = await supabaseAdmin
+    .from("teams")
+    .select("id, name")
+    .in(
+      "id",
+      [
+        ...new Set(
+          users
+            .filter((u) => scopedUserIds.includes(u.id))
+            .map((u) => u.team_id)
+            .filter((x): x is string => Boolean(x)),
+        ),
+      ],
+    );
+
+  const teamMap = (teamsData || []).reduce(
+    (acc: Record<string, string>, t: { id: string; name: string }) => {
+      acc[t.id] = t.name;
+      return acc;
+    },
+    {},
+  );
+
+  const [assignedRows, workedRows, convertedRows, activityRows, commentsRows] = await Promise.all([
+    supabaseAdmin
+      .from("lead_assignments_history")
+      .select("to_user_id")
+      .in("to_user_id", scopedUserIds)
+      .gte("created_at", filters.startDate)
+      .lte("created_at", filters.endDate),
+    supabaseAdmin
+      .from("lead_activities")
+      .select("user_id, lead_id")
+      .in("user_id", scopedUserIds)
+      .gte("created_at", filters.startDate)
+      .lte("created_at", filters.endDate),
+    supabaseAdmin
+      .from("leads")
+      .select("assigned_to")
+      .in("assigned_to", scopedUserIds)
+      .eq("status", "won")
+      .gte("converted_at", filters.startDate)
+      .lte("converted_at", filters.endDate),
+    supabaseAdmin
+      .from("lead_activities")
+      .select("user_id, activity_type")
+      .in("user_id", scopedUserIds)
+      .gte("created_at", filters.startDate)
+      .lte("created_at", filters.endDate),
+    supabaseAdmin
+      .from("comments")
+      .select("user_id")
+      .eq("entity_type", "lead")
+      .eq("is_deleted", false)
+      .in("user_id", scopedUserIds)
+      .gte("created_at", filters.startDate)
+      .lte("created_at", filters.endDate),
+  ]);
+
+  const assignedError = assignedRows.error;
+  const workedError = workedRows.error;
+  const convertedError = convertedRows.error;
+  const activityError = activityRows.error;
+  const commentsError = commentsRows.error;
+  if (assignedError || workedError || convertedError || activityError || commentsError) {
+    const msg =
+      assignedError?.message ||
+      workedError?.message ||
+      convertedError?.message ||
+      activityError?.message ||
+      commentsError?.message ||
+      "Failed to compute user-wise analytics";
+    throw new ApiError(ERROR_CODES.DATABASE_ERROR, msg);
+  }
+
+  const totalLeadsByUser: Record<string, number> = {};
+  for (const row of assignedRows.data || []) {
+    const userId = (row as { to_user_id: string }).to_user_id;
+    totalLeadsByUser[userId] = (totalLeadsByUser[userId] || 0) + 1;
+  }
+
+  const workedSetByUser: Record<string, Set<string>> = {};
+  for (const row of workedRows.data || []) {
+    const r = row as { user_id: string; lead_id: string };
+    let userSet = workedSetByUser[r.user_id];
+    if (!userSet) {
+      userSet = new Set<string>();
+      workedSetByUser[r.user_id] = userSet;
+    }
+    userSet.add(r.lead_id);
+  }
+
+  const conversionsByUser: Record<string, number> = {};
+  for (const row of convertedRows.data || []) {
+    const userId = (row as { assigned_to: string }).assigned_to;
+    conversionsByUser[userId] = (conversionsByUser[userId] || 0) + 1;
+  }
+
+  const activitiesByUser: Record<string, number> = {};
+  const statusChangesByUser: Record<string, number> = {};
+  const commentsByUser: Record<string, number> = {};
+  for (const row of activityRows.data || []) {
+    const r = row as { user_id: string; activity_type: string };
+    activitiesByUser[r.user_id] = (activitiesByUser[r.user_id] || 0) + 1;
+    if (r.activity_type === "status_change") {
+      statusChangesByUser[r.user_id] = (statusChangesByUser[r.user_id] || 0) + 1;
+    }
+  }
+  for (const row of commentsRows.data || []) {
+    const userId = (row as { user_id: string | null }).user_id;
+    if (!userId) continue;
+    commentsByUser[userId] = (commentsByUser[userId] || 0) + 1;
+  }
+
+  const userRows = users
+    .filter((u) => scopedUserIds.includes(u.id))
+    .map((u) => {
+      const totalLeads = totalLeadsByUser[u.id] || 0;
+      const leadsWorked = workedSetByUser[u.id]?.size || 0;
+      const conversions = conversionsByUser[u.id] || 0;
+      const activitiesLogged = activitiesByUser[u.id] || 0;
+      const statusChanges = statusChangesByUser[u.id] || 0;
+      const comments = commentsByUser[u.id] || 0;
+      const winRate = totalLeads > 0 ? (conversions / totalLeads) * 100 : 0;
+      return {
+        id: u.id,
+        fullName: u.full_name,
+        role: u.role,
+        teamId: u.team_id,
+        teamName: (u.team_id ? teamMap[u.team_id] : null) || null,
+        totalLeads,
+        leadsWorked,
+        conversions,
+        activitiesLogged,
+        statusChanges,
+        comments,
+        winRate,
+      };
+    });
+
+  const leaderboard = [...userRows]
+    .sort((a, b) => {
+      if (b.conversions !== a.conversions) return b.conversions - a.conversions;
+      if (b.leadsWorked !== a.leadsWorked) return b.leadsWorked - a.leadsWorked;
+      if (b.totalLeads !== a.totalLeads) return b.totalLeads - a.totalLeads;
+      return a.fullName.localeCompare(b.fullName);
+    })
+    .map((row, idx) => ({
+      rank: idx + 1,
+      id: row.id,
+      fullName: row.fullName,
+      role: row.role,
+      teamName: row.teamName,
+      conversions: row.conversions,
+      leadsWorked: row.leadsWorked,
+      totalLeads: row.totalLeads,
+      winRate: row.winRate,
+    }));
+
+  return {
+    users: userRows,
+    leaderboard,
   };
 }
 

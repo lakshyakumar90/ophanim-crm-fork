@@ -7,6 +7,7 @@ import {
 import { ApiError } from "../utils/responses.js";
 import { formatDateIST } from "../utils/date-utils.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
+import { SHIFT_TYPES } from "../config/constants.js";
 
 const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
 const COMMENT_ACTIVITY_TYPE = "comment";
@@ -490,52 +491,119 @@ export async function getActivityAnalytics(filters: {
   interval?: "daily" | "weekly" | "monthly" | "quarterly";
   departmentId?: string;
 }) {
-  let query = supabaseAdmin
+  let scopedUserIds: string[] | undefined;
+
+  if (filters.departmentId && !filters.teamId && !filters.userId) {
+    const userIds = await getUsersInDepartment(filters.departmentId);
+    if (userIds.length === 0) return [];
+    scopedUserIds = userIds;
+  } else if (filters.teamId) {
+    const teamUserIds = await getUsersInTeams([filters.teamId]);
+    if (teamUserIds.length === 0) return [];
+    if (filters.userId) {
+      if (!teamUserIds.includes(filters.userId)) return [];
+      scopedUserIds = [filters.userId];
+    } else {
+      scopedUserIds = teamUserIds;
+    }
+  } else if (filters.userId) {
+    scopedUserIds = [filters.userId];
+  }
+
+  let leadActivitiesQuery = supabaseAdmin
     .from("lead_activities")
     .select("created_at, activity_type, user_id")
     .order("created_at", { ascending: true });
 
-  if (filters.departmentId && !filters.teamId && !filters.userId) {
-    const userIds = await getUsersInDepartment(filters.departmentId);
-    if (userIds.length > 0) {
-      query = query.in("user_id", userIds);
-    } else {
-      return [];
-    }
-  }
+  let commentsQuery = supabaseAdmin
+    .from("comments")
+    .select("created_at, user_id")
+    .eq("entity_type", "lead")
+    .or("is_deleted.is.null,is_deleted.eq.false")
+    .order("created_at", { ascending: true });
 
   if (filters.startDate) {
-    query = query.gte("created_at", filters.startDate);
+    leadActivitiesQuery = leadActivitiesQuery.gte("created_at", filters.startDate);
+    commentsQuery = commentsQuery.gte("created_at", filters.startDate);
   }
 
   if (filters.endDate) {
-    query = query.lte("created_at", filters.endDate);
+    leadActivitiesQuery = leadActivitiesQuery.lte("created_at", filters.endDate);
+    commentsQuery = commentsQuery.lte("created_at", filters.endDate);
   }
 
-  if (filters.userId) {
-    query = query.eq("user_id", filters.userId);
+  if (scopedUserIds && scopedUserIds.length > 0) {
+    leadActivitiesQuery = leadActivitiesQuery.in("user_id", scopedUserIds);
+    commentsQuery = commentsQuery.in("user_id", scopedUserIds);
   }
 
-  if (filters.teamId && !filters.userId) {
-    const userIds = await getUsersInTeams([filters.teamId]);
-    if (userIds.length > 0) {
-      query = query.in("user_id", userIds);
-    } else {
-      return [];
+  const [{ data: leadActivities, error: leadError }, { data: comments, error: commentsError }] =
+    await Promise.all([leadActivitiesQuery, commentsQuery]);
+
+  if (leadError || commentsError) {
+    throw new ApiError(
+      ERROR_CODES.INTERNAL_ERROR,
+      leadError?.message || commentsError?.message || "Failed to fetch activity analytics",
+    );
+  }
+
+  const data: Array<{ created_at: string; activity_type: string }> = [
+    ...((leadActivities || []) as Array<{ created_at: string; activity_type: string }>),
+    ...((comments || []) as Array<{ created_at: string }>).map((row) => ({
+      created_at: row.created_at,
+      activity_type: "comment",
+    })),
+  ];
+
+  const analyticsUserIds = Array.from(
+    new Set(
+      [
+        ...((leadActivities || []) as Array<{ user_id?: string | null }>).map((r) => r.user_id || null),
+        ...((comments || []) as Array<{ user_id?: string | null }>).map((r) => r.user_id || null),
+      ].filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const userShiftById: Record<string, string> = {};
+  if (analyticsUserIds.length > 0) {
+    const { data: usersWithShift, error: usersShiftError } = await supabaseAdmin
+      .from("users")
+      .select("id, shift_type")
+      .in("id", analyticsUserIds);
+
+    if (usersShiftError) {
+      throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersShiftError.message);
     }
-  }
 
-  const { data, error } = await query;
-
-  if (error) {
-    throw new ApiError(ERROR_CODES.INTERNAL_ERROR, error.message);
+    for (const row of usersWithShift || []) {
+      const u = row as { id: string; shift_type: string | null };
+      userShiftById[u.id] = u.shift_type || SHIFT_TYPES.DAY_SHIFT;
+    }
   }
 
   const interval = filters.interval || "daily";
   const groupedData: Record<string, any> = {};
 
-  (data || []).forEach((log) => {
-    const istDateStr = formatDateIST(log.created_at, "date");
+  (data || []).forEach((log, idx) => {
+    const userId =
+      (leadActivities?.[idx] as { user_id?: string | null } | undefined)?.user_id ??
+      (comments?.[idx - (leadActivities?.length || 0)] as { user_id?: string | null } | undefined)?.user_id ??
+      null;
+    const shiftType =
+      (userId && userShiftById[userId]) || SHIFT_TYPES.DAY_SHIFT;
+
+    const rawDateStr = formatDateIST(log.created_at, "date");
+    const rawTimeStr = formatDateIST(log.created_at, "time");
+    const hour = parseInt(rawTimeStr.slice(0, 2) || "0", 10);
+    const minute = parseInt(rawTimeStr.slice(3, 5) || "0", 10);
+    let istDateStr = rawDateStr;
+
+    if (shiftType === SHIFT_TYPES.NIGHT_SHIFT && (hour < 6 || (hour === 6 && minute === 0))) {
+      const d = new Date(`${rawDateStr}T00:00:00+05:30`);
+      d.setDate(d.getDate() - 1);
+      istDateStr = formatDateIST(d, "date");
+    }
+
     const istYear = parseInt(istDateStr.split("-")[0] || "0", 10);
     const istMonth = parseInt(istDateStr.split("-")[1] || "1", 10);
 
@@ -559,19 +627,20 @@ export async function getActivityAnalytics(filters: {
         call: 0,
         email: 0,
         meeting: 0,
-        note: 0,
+        comment: 0,
         other: 0,
       };
     }
 
     groupedData[key].total++;
 
-    const activityType = log.activity_type;
+    const activityType = (log.activity_type || "").toLowerCase();
     if (activityType === "status_change") groupedData[key].status_change++;
     else if (activityType === "call") groupedData[key].call++;
     else if (activityType === "email") groupedData[key].email++;
     else if (activityType === "meeting") groupedData[key].meeting++;
-    else if (activityType === "note") groupedData[key].note++;
+    else if (activityType === "comment" || activityType === "note" || activityType.startsWith("comment"))
+      groupedData[key].comment++;
     else groupedData[key].other++;
   });
 

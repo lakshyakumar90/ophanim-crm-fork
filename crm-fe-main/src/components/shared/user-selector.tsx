@@ -26,6 +26,8 @@ interface UserOption {
   role?: string;
   departmentName?: string;
   jobTitle?: string;
+  isActive?: boolean;
+  is_active?: boolean;
 }
 
 interface UserSelectorProps {
@@ -36,6 +38,8 @@ interface UserSelectorProps {
   excludeUserId?: string | null;
   disabled?: boolean;
   className?: string;
+  showAllOption?: boolean;
+  allOptionLabel?: string;
 }
 
 export function UserSelector({
@@ -46,6 +50,8 @@ export function UserSelector({
   excludeUserId,
   disabled = false,
   className,
+  showAllOption = false,
+  allOptionLabel = "All Users",
 }: UserSelectorProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -55,8 +61,8 @@ export function UserSelector({
     const activeUsers = users.filter(
       (u) =>
         u.id !== excludeUserId &&
-        (u as any).isActive !== false &&
-        (u as any).is_active !== false,
+        u.isActive !== false &&
+        u.is_active !== false,
     );
 
     // Apply search filter
@@ -122,6 +128,27 @@ export function UserSelector({
           >
             <CommandEmpty>No users found.</CommandEmpty>
             <CommandGroup>
+              {showAllOption && (
+                <CommandItem
+                  value={allOptionLabel}
+                  onSelect={() => {
+                    onValueChange("");
+                    setOpen(false);
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Check
+                    className={cn(
+                      "h-4 w-4",
+                      value === "" ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <div className="flex flex-col">
+                    <span className="font-medium">{allOptionLabel}</span>
+                    <span className="text-xs text-muted-foreground">No user filter applied</span>
+                  </div>
+                </CommandItem>
+              )}
               {filteredUsers.map((user) => {
                 const name = user.fullName || user.full_name || "Unknown";
                 return (

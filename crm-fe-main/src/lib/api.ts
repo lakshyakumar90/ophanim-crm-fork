@@ -804,8 +804,15 @@ export const dashboardApi = {
     const res = await api.get("/dashboard/admin");
     return unwrap(res);
   },
-  getLeadAnalytics: async (startDate?: string, endDate?: string) => {
-    const res = await api.get("/dashboard/lead-analytics", { params: { startDate, endDate } });
+  getLeadAnalytics: async (
+    startDate?: string,
+    endDate?: string,
+    teamId?: string,
+    userId?: string,
+  ) => {
+    const res = await api.get("/dashboard/lead-analytics", {
+      params: { startDate, endDate, teamId, userId },
+    });
     return unwrap(res);
   },
   getUserPerformance: async (userId: string, startDate?: string, endDate?: string) => {
@@ -816,6 +823,15 @@ export const dashboardApi = {
   },
   getMyPerformance: async (startDate?: string, endDate?: string) => {
     const res = await api.get("/dashboard/my-performance", { params: { startDate, endDate } });
+    return unwrap(res);
+  },
+  getUserWiseAnalytics: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    teamId?: string;
+    userId?: string;
+  }) => {
+    const res = await api.get("/dashboard/user-wise-analytics", { params });
     return unwrap(res);
   },
 };

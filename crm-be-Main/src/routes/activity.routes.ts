@@ -150,7 +150,7 @@ router.get(
 );
 
 /**
- * Get activity analytics (admin only)
+ * Get activity analytics (role-scoped)
  * GET /activities/analytics
  */
 router.get(
@@ -159,19 +159,25 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     const authReq = req as unknown as AuthenticatedRequest;
     try {
-      // Allow admins and managers to view analytics
-      if (authReq.user?.role !== "admin" && authReq.user?.role !== "manager") {
-        throw new ApiError(
-          ERROR_CODES.FORBIDDEN,
-          "Admin or Manager access required",
-        );
+      if (!authReq.user) {
+        throw new ApiError(ERROR_CODES.UNAUTHORIZED, "Authentication required");
       }
 
       const result = await activityService.getActivityAnalytics({
         startDate: req.query.startDate as string,
         endDate: req.query.endDate as string,
-        teamId: req.query.teamId as string,
-        userId: req.query.userId as string,
+        teamId:
+          authReq.user.role === "admin"
+            ? (req.query.teamId as string)
+            : authReq.user.role === "manager"
+              ? authReq.user.teamId || undefined
+              : undefined,
+        userId:
+          authReq.user.role === "admin"
+            ? (req.query.userId as string)
+            : authReq.user.role === "manager"
+              ? (req.query.userId as string)
+              : authReq.user.id,
         interval: req.query.interval as
           | "daily"
           | "weekly"
