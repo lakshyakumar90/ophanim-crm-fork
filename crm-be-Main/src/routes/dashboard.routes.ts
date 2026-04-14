@@ -113,15 +113,17 @@ router.get(
     const endDate = (req.query["endDate"] as string) || now.toISOString();
     const teamId = req.query["teamId"] as string | undefined;
     const userId = req.query["userId"] as string | undefined;
+    const departmentId = req.query["departmentId"] as string | undefined;
 
     // Cache analytics for 5 minutes
-    const cacheKey = `analytics:leads:${authReq.user.id}:${startDate.slice(0, 10)}:${endDate.slice(0, 10)}:${teamId || "all"}:${userId || "all"}`;
+    const cacheKey = `analytics:leads:${authReq.user.id}:${startDate.slice(0, 10)}:${endDate.slice(0, 10)}:${teamId || "all"}:${userId || "all"}:${departmentId || "all"}`;
     const data = await getCached(
       cacheKey,
       () =>
         dashboardService.getLeadAnalyticsScoped(authReq.user, startDate, endDate, {
           teamId,
           userId,
+          departmentId,
         }),
       CACHE_TTL.ANALYTICS,
     );
@@ -190,12 +192,14 @@ router.get(
     const endDate = (req.query["endDate"] as string) || now.toISOString();
     const teamId = req.query["teamId"] as string | undefined;
     const userId = req.query["userId"] as string | undefined;
+    const departmentId = req.query["departmentId"] as string | undefined;
 
     const data = await dashboardService.getUserWiseAnalytics(authReq.user, {
       startDate,
       endDate,
       teamId,
       userId,
+      departmentId,
     });
 
     sendSuccess(res, data);

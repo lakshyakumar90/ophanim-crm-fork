@@ -616,7 +616,7 @@ function GlobalSidebar({
     user ? "sidebar-reminders-count" : null,
     () => leadsApi.getRemindersCount({ status: "pending" }),
     {
-      refreshInterval: isPollingLeader ? 180000 : 0,
+      refreshInterval: 0,
       refreshWhenHidden: false,
       refreshWhenOffline: false,
       revalidateOnFocus: false,
@@ -629,7 +629,7 @@ function GlobalSidebar({
     user ? "performance-reminder-counts" : null,
     () => fetchPerformanceReminderCounts(),
     {
-      refreshInterval: isPollingLeader ? 180000 : 0,
+      refreshInterval: 0,
       refreshWhenHidden: false,
       refreshWhenOffline: false,
       revalidateOnFocus: false,

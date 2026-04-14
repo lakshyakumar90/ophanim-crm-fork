@@ -5,6 +5,7 @@ import axios, {
 } from "axios";
 import * as sq from "./supabase-queries";
 import { smartRead, type QueryStrategy } from "./smart-read";
+import { recordHttpRequest } from "./performance-metrics";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -56,6 +57,8 @@ export const tokens = {
 // Request interceptor - add auth token
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    recordHttpRequest(config.url, config.method, config.params);
+
     const token = tokens.accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -355,12 +358,13 @@ export const teamNotesApi = {
 const LEADS_READ_STRATEGY: Record<string, QueryStrategy> = {
   list: "supabase-with-fallback",
   get: "supabase-with-fallback",
+  getDetailPageData: "backend-only",
   getPipeline: "supabase-with-fallback",
   getWonLeads: "supabase-with-fallback",
   getActivities: "supabase-with-fallback",
-  getComments: "supabase-with-fallback",
-  getAllReminders: "backend-only",
-  getRemindersCount: "backend-only",
+  getComments: "backend-only",
+  getAllReminders: "supabase-with-fallback",
+  getRemindersCount: "supabase-with-fallback",
   getReminders: "backend-only",
   getStatsByUser: "backend-only",
 } as const;
@@ -380,6 +384,13 @@ export const leadsApi = {
       strategy: LEADS_READ_STRATEGY.get,
       supabaseQuery: () => sq.getLeadById(id),
       backendQuery: async () => unwrap(await api.get(`/leads/${id}`)),
+    });
+  },
+  getDetailPageData: async (id: string) => {
+    return smartRead({
+      routeKey: "leads.getDetailPageData",
+      strategy: LEADS_READ_STRATEGY.getDetailPageData,
+      backendQuery: async () => unwrap(await api.get(`/leads/${id}/page-data`)),
     });
   },
   create: (data: Record<string, unknown>) => api.post("/leads", data),
@@ -448,6 +459,7 @@ export const leadsApi = {
     return smartRead({
       routeKey: "leads.getAllReminders",
       strategy: LEADS_READ_STRATEGY.getAllReminders,
+      supabaseQuery: () => sq.getAllReminders(params),
       backendQuery: async () => {
         const res = await api.get("/leads/reminders/all", { params });
         const payload = unwrap(res);
@@ -489,6 +501,7 @@ export const leadsApi = {
     return smartRead({
       routeKey: "leads.getRemindersCount",
       strategy: LEADS_READ_STRATEGY.getRemindersCount,
+      supabaseQuery: () => sq.getRemindersCount(params),
       backendQuery: async () => unwrap(await api.get("/leads/reminders/count", { params })),
     });
   },
@@ -569,13 +582,8 @@ export const tasksApi = {
     }
   },
   getComments: async (id: string) => {
-    try {
-      return await sq.getTaskComments(id);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") console.warn("Supabase task comments read failed, falling back to API", (error as any)?.message || (error as any)?.code || String(error));
-      const res = await api.get(`/tasks/${id}/comments`);
-      return unwrap(res);
-    }
+    const res = await api.get(`/tasks/${id}/comments`);
+    return unwrap(res);
   },
   addComment: (id: string, commentText: string) =>
     api.post(`/tasks/${id}/comments`, { commentText }),
@@ -809,9 +817,10 @@ export const dashboardApi = {
     endDate?: string,
     teamId?: string,
     userId?: string,
+    departmentId?: string,
   ) => {
     const res = await api.get("/dashboard/lead-analytics", {
-      params: { startDate, endDate, teamId, userId },
+      params: { startDate, endDate, teamId, userId, departmentId },
     });
     return unwrap(res);
   },
@@ -830,6 +839,7 @@ export const dashboardApi = {
     endDate?: string;
     teamId?: string;
     userId?: string;
+    departmentId?: string;
   }) => {
     const res = await api.get("/dashboard/user-wise-analytics", { params });
     return unwrap(res);
@@ -882,18 +892,51 @@ export const activitiesApi = {
     /** Cursor from previous page's meta.nextCursor.id */
     cursorId?: string;
   }) => {
-    const { useEventsFeed, cursorTime, cursorId, ...rest } = params ?? {};
-    const queryParams: Record<string, unknown> = { ...rest };
-    if (useEventsFeed) {
-      queryParams.use_events_feed = "true";
-      if (cursorTime) queryParams.cursor_time = cursorTime;
-      if (cursorId) queryParams.cursor_id = cursorId;
-    }
-    const res = await api.get("/activities", { params: queryParams });
-    return {
-      data: res.data.data,
-      meta: res.data.meta,
-    };
+    const { useEventsFeed, cursorTime, cursorId, entityId, commentsOnly, ...rest } = params ?? {};
+
+    const requiresBackendOnly = Boolean(
+      useEventsFeed || cursorTime || cursorId || entityId || commentsOnly,
+    );
+
+    const strategy: QueryStrategy = requiresBackendOnly
+      ? "backend-only"
+      : "supabase-with-fallback";
+
+    return smartRead({
+      routeKey: "activities.list",
+      strategy,
+      supabaseQuery: async () =>
+        sq.getActivityLogs({
+          page: rest.page,
+          limit: rest.limit,
+          userId: rest.userId,
+          teamId: rest.teamId,
+          resourceType: rest.resourceType,
+          action: rest.action,
+          startDate: rest.startDate,
+          endDate: rest.endDate,
+          departmentId: rest.departmentId,
+        }),
+      backendQuery: async () => {
+        const queryParams: Record<string, unknown> = {
+          ...rest,
+          ...(entityId ? { entityId } : {}),
+          ...(commentsOnly ? { commentsOnly } : {}),
+        };
+
+        if (useEventsFeed) {
+          queryParams.use_events_feed = "true";
+          if (cursorTime) queryParams.cursor_time = cursorTime;
+          if (cursorId) queryParams.cursor_id = cursorId;
+        }
+
+        const res = await api.get("/activities", { params: queryParams });
+        return {
+          data: res.data.data,
+          meta: res.data.meta,
+        };
+      },
+    });
   },
   getLeadActivities: async (params?: {
     page?: number;

@@ -39,6 +39,7 @@ import {
 } from "../utils/responses.js";
 import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
+import { logger } from "../utils/logger.js";
 
 const router: RouterType = Router();
 
@@ -227,6 +228,43 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const lead = await leadsService.getLeadById(req.params["id"] as string);
     sendSuccess(res, lead);
+  }),
+);
+
+/**
+ * GET /leads/:id/page-data
+ * Get consolidated payload for lead detail page initial render
+ */
+router.get(
+  "/:id/page-data",
+  validateParams(uuidParamSchema),
+  checkResourceAccess("lead") as any,
+  asyncHandler(async (req: Request, res: Response) => {
+    const start = Date.now();
+    const authReq = req as unknown as AuthenticatedRequest;
+    const pageData = await leadsService.getLeadDetailPageData(
+      req.params["id"] as string,
+      authReq.user,
+    );
+
+    const durationMs = Date.now() - start;
+    const payloadBytes = Buffer.byteLength(JSON.stringify(pageData), "utf8");
+    res.setHeader("X-Lead-Page-Data-Time-Ms", String(durationMs));
+    res.setHeader("X-Lead-Page-Data-Bytes", String(payloadBytes));
+
+    logger.info(
+      {
+        route: "/api/v1/leads/:id/page-data",
+        leadId: req.params["id"],
+        userId: authReq.user.id,
+        role: authReq.user.role,
+        durationMs,
+        payloadBytes,
+      },
+      "Lead page-data performance metrics",
+    );
+
+    sendSuccess(res, pageData);
   }),
 );
 

@@ -1,0 +1,5 @@
+# Graphify artifacts and local runs
+**/graphify-out/
+**/.graphify*
+graphify*.py
+root_graphify_run*.txt

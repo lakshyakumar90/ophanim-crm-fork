@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format, subDays, startOfMonth } from "date-fns";
+import { differenceInCalendarDays, format, startOfMonth, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import {
   Bar,
@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { nowIST } from "@/lib/date-utils";
 import { useAuth } from "@/providers/auth-provider";
+import { useDepartment } from "@/providers/department-context";
 import {
   activitiesApi,
   dashboardApi,
@@ -52,6 +53,7 @@ type Interval = "daily" | "weekly" | "monthly";
 interface TeamOption {
   id: string;
   name: string;
+  departmentId: string | null;
 }
 
 interface UserOption {
@@ -153,6 +155,8 @@ const PIPELINE_STAGES = [
   { key: "lost", label: "Lost", color: "#dc2626" },
 ];
 
+const MAX_CUSTOM_RANGE_DAYS = 365;
+
 function buildPresetDate(preset: string): DateRange {
   const n = nowIST();
   if (preset === "0d") return { from: n, to: n };
@@ -197,8 +201,14 @@ function normalizeTeams(input: unknown): TeamOption[] {
       const row = item as Record<string, unknown>;
       const id = typeof row.id === "string" ? row.id : "";
       const name = typeof row.name === "string" ? row.name : "";
+      const departmentId =
+        typeof row.departmentId === "string"
+          ? row.departmentId
+          : typeof row.department_id === "string"
+            ? row.department_id
+            : null;
       if (!id || !name) return null;
-      return { id, name };
+      return { id, name, departmentId };
     })
     .filter((x): x is TeamOption => Boolean(x));
 }
@@ -310,10 +320,12 @@ function normalizeUserWise(input: unknown): { users: UserWiseRow[]; leaderboard:
 
 export default function SalesAnalyticsPage() {
   const { user } = useAuth();
+  const { currentDepartment, isLoading: isDepartmentLoading } = useDepartment();
   const isAdmin = user?.role === "admin";
   const isManager = user?.role === "manager";
   const isManagerOrAbove = isAdmin || isManager;
   const isEmployee = user?.role === "employee";
+  const salesDepartmentId = currentDepartment?.id;
 
   const router = useRouter();
   const [date, setDate] = useState<DateRange | undefined>(() => initDateFromUrl());
@@ -340,12 +352,18 @@ export default function SalesAnalyticsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
+  const [draftDate, setDraftDate] = useState<DateRange | undefined>(() => initDateFromUrl());
 
   useEffect(() => {
     if (isEmployee && user?.id) {
       setUserId(user.id);
     }
   }, [isEmployee, user?.id]);
+
+  useEffect(() => {
+    setDraftDate(date);
+  }, [date]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -361,14 +379,16 @@ export default function SalesAnalyticsPage() {
   }, [activePreset, date, interval, teamId, userId, isEmployee]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || isDepartmentLoading || !salesDepartmentId) return;
     const loadFilters = async () => {
       try {
         const [teamsData, usersData] = await Promise.all([
           teamsApi.list(),
-          usersApi.list({ limit: 1000 }),
+          usersApi.list({ limit: 1000, departmentId: salesDepartmentId }),
         ]);
-        const normalizedTeams = normalizeTeams(teamsData);
+        const normalizedTeams = normalizeTeams(teamsData).filter(
+          (t) => t.departmentId === salesDepartmentId,
+        );
         const normalizedUsers = normalizeUsers(usersData);
 
         setTeams(normalizedTeams);
@@ -397,11 +417,30 @@ export default function SalesAnalyticsPage() {
     };
 
     void loadFilters();
-  }, [user, isAdmin, isManager]);
+  }, [
+    user,
+    isAdmin,
+    isManager,
+    isDepartmentLoading,
+    salesDepartmentId,
+  ]);
+
+  useEffect(() => {
+    if (teamId !== "all" && !teams.some((t) => t.id === teamId)) {
+      setTeamId("all");
+    }
+  }, [teamId, teams]);
+
+  useEffect(() => {
+    if (isEmployee) return;
+    if (userId && !users.some((u) => u.id === userId)) {
+      setUserId("");
+    }
+  }, [isEmployee, userId, users]);
 
   const fetchAnalytics = useCallback(
     async (quiet = false) => {
-      if (!user || !date?.from) return;
+      if (!user || !date?.from || !salesDepartmentId) return;
       if (quiet) setIsRefreshing(true);
       else setIsLoading(true);
 
@@ -411,24 +450,40 @@ export default function SalesAnalyticsPage() {
       const scopedUserId = isEmployee ? user.id : userId || undefined;
 
       try {
-        const [overviewRes, activityRes, userWiseRes] = await Promise.all([
-          dashboardApi.getLeadAnalytics(startDate, endDate, scopedTeamId, scopedUserId),
+        const [overviewRes, activityRes, userWiseRes, dashboardRes] = await Promise.all([
+          dashboardApi.getLeadAnalytics(
+            startDate,
+            endDate,
+            scopedTeamId,
+            scopedUserId,
+            salesDepartmentId,
+          ),
           activitiesApi.getAnalytics({
             startDate,
             endDate,
             interval,
             teamId: scopedTeamId,
             userId: scopedUserId,
+            departmentId: salesDepartmentId,
           }),
           dashboardApi.getUserWiseAnalytics({
             startDate,
             endDate,
             teamId: scopedTeamId,
             userId: scopedUserId,
+            departmentId: salesDepartmentId,
           }),
+          dashboardApi.get(salesDepartmentId),
         ]);
 
-        setOverview(normalizeOverview(overviewRes));
+        const normalizedOverview = normalizeOverview(overviewRes);
+        const dashboardLeads = (dashboardRes as { leads?: { total?: unknown } })
+          ?.leads;
+        const dashboardTotalLeads = toNumber(dashboardLeads?.total);
+        setOverview({
+          ...normalizedOverview,
+          total: dashboardTotalLeads || normalizedOverview.total,
+        });
         setActivityData(normalizeActivity(activityRes));
         const userWise = normalizeUserWise(userWiseRes);
         setUserWiseRows(userWise.users);
@@ -440,7 +495,15 @@ export default function SalesAnalyticsPage() {
         setIsRefreshing(false);
       }
     },
-    [user, date, teamId, userId, interval, isEmployee],
+    [
+      user,
+      date,
+      teamId,
+      userId,
+      interval,
+      isEmployee,
+      salesDepartmentId,
+    ],
   );
 
   useEffect(() => {
@@ -491,10 +554,26 @@ export default function SalesAnalyticsPage() {
     [activityData],
   );
 
-  console.log(activityData);
   const totalNotes = useMemo(
     () => activityData.reduce((sum, item) => sum + item.comment, 0),
     [activityData],
+  );
+
+  const draftRange = useMemo(() => {
+    if (!draftDate?.from) return undefined;
+    return {
+      from: draftDate.from,
+      to: draftDate.to || draftDate.from,
+    };
+  }, [draftDate]);
+
+  const isDraftRangeTooLong = useMemo(() => {
+    if (!draftRange?.from || !draftRange?.to) return false;
+    return differenceInCalendarDays(draftRange.to, draftRange.from) > MAX_CUSTOM_RANGE_DAYS;
+  }, [draftRange]);
+
+  const canApplyDraftRange = Boolean(
+    draftRange?.from && draftRange?.to && !isDraftRangeTooLong,
   );
 
   const dateLabel = useMemo(() => {
@@ -546,24 +625,69 @@ export default function SalesAnalyticsPage() {
 
         <div className="h-5 w-px bg-border mx-1" />
 
-        <Popover>
+        <Popover
+          open={isDatePopoverOpen}
+          onOpenChange={(open) => {
+            setIsDatePopoverOpen(open);
+            if (open) {
+              setDraftDate(date);
+            }
+          }}
+        >
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="gap-2 text-xs h-8" onClick={() => setActivePreset("")}>
               <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
               <span>{dateLabel}</span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="range"
-              defaultMonth={date?.from}
-              selected={date}
-              onSelect={(d) => {
-                setDate(d);
-                setActivePreset("");
-              }}
-              numberOfMonths={2}
-            />
+          <PopoverContent className="w-auto p-3" align="start">
+            <div className="space-y-3">
+              <Calendar
+                mode="range"
+                defaultMonth={draftDate?.from || date?.from}
+                selected={draftDate}
+                onSelect={(d) => setDraftDate(d)}
+                numberOfMonths={1}
+                captionLayout="dropdown"
+                fromYear={2000}
+                toYear={nowIST().getFullYear() + 1}
+              />
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Max custom range: 1 year
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setDraftDate(date);
+                      setIsDatePopoverOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!canApplyDraftRange}
+                    onClick={() => {
+                      if (!draftRange?.from || !draftRange?.to) return;
+                      if (isDraftRangeTooLong) return;
+                      setDate({ from: draftRange.from, to: draftRange.to });
+                      setActivePreset("");
+                      setIsDatePopoverOpen(false);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+              {isDraftRangeTooLong && (
+                <p className="text-xs text-destructive">
+                  Date range cannot exceed 1 year.
+                </p>
+              )}
+            </div>
           </PopoverContent>
         </Popover>
 

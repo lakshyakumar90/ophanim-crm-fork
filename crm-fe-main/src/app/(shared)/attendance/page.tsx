@@ -1042,7 +1042,7 @@ export default function AttendancePage() {
                         }
                       }}
                       disabled={(date) => date > new Date() || date < oneYearAgo}
-                      numberOfMonths={2}
+                      numberOfMonths={1}
                       captionLayout="dropdown"
                       fromYear={oneYearAgo.getFullYear()}
                       toYear={new Date().getFullYear()}

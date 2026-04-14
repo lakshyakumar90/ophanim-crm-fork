@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   ReactNode,
 } from "react";
 import { useAuth } from "@/providers/auth-provider";
@@ -96,25 +97,38 @@ export function DepartmentProvider({ children }: { children: ReactNode }) {
     }
   }, [pathname, departments]);
 
-  const switchDepartment = (slug: string | null) => {
-    if (slug === null) {
-      router.push("/global");
-    } else {
-      router.push(`/${slug}`);
-    }
-  };
+  const switchDepartment = useCallback(
+    (slug: string | null) => {
+      if (slug === null) {
+        router.push("/global");
+      } else {
+        router.push(`/${slug}`);
+      }
+    },
+    [router],
+  );
+
+  const contextValue = useMemo(
+    () => ({
+      currentDepartment,
+      isGlobalContext,
+      departments,
+      isLoading,
+      switchDepartment,
+      refreshDepartments: fetchDepartments,
+    }),
+    [
+      currentDepartment,
+      isGlobalContext,
+      departments,
+      isLoading,
+      switchDepartment,
+      fetchDepartments,
+    ],
+  );
 
   return (
-    <DepartmentContext.Provider
-      value={{
-        currentDepartment,
-        isGlobalContext,
-        departments,
-        isLoading,
-        switchDepartment,
-        refreshDepartments: fetchDepartments,
-      }}
-    >
+    <DepartmentContext.Provider value={contextValue}>
       {children}
     </DepartmentContext.Provider>
   );

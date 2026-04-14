@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { format, subDays } from "date-fns";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { differenceInCalendarDays, format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -50,6 +50,7 @@ import {
 } from "@/lib/api";
 import { LEAD_STATUS_CONFIG } from "@/config/constants";
 import { useAuth } from "@/providers/auth-provider";
+import { useDepartment } from "@/providers/department-context";
 import { toast } from "sonner";
 import {
   nowIST,
@@ -103,6 +104,7 @@ const PIPELINE_COLORS: Record<string, string> = {
 // Priority statuses for Top Deals
 const TOP_DEALS_PRIORITY_STATUSES = ["won", "meeting_scheduled", "proposal_sent", "hot_lead"];
 const MAX_ACTIVITY_DISPLAY_COUNT = 1000;
+const MAX_CUSTOM_RANGE_DAYS = 365;
 
 const DATE_PRESETS = [
   { label: "Today", value: "0d", days: 0 },
@@ -115,11 +117,18 @@ export default function SalesDashboardPage() {
   const now = nowIST();
   const router = useRouter();
   const { user } = useAuth();
+  const { currentDepartment, isLoading: isDepartmentLoading } = useDepartment();
+  const salesDepartmentId = currentDepartment?.id;
 
   const [date, setDate] = useState<DateRange | undefined>({
     from: subDays(now, 30),
     to: now,
   });
+  const [draftDate, setDraftDate] = useState<DateRange | undefined>({
+    from: subDays(now, 30),
+    to: now,
+  });
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
   const [activePreset, setActivePreset] = useState("30d");
   const [teamId, setTeamId] = useState("all");
   const [userId, setUserId] = useState("");
@@ -132,6 +141,9 @@ export default function SalesDashboardPage() {
   const [reminders, setReminders] = useState<any>({ overdue: 0, dueToday: 0, pending: 0, total: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFilterContextReady, setIsFilterContextReady] = useState(false);
+  const inFlightFetchRef = useRef<Promise<void> | null>(null);
+  const lastFetchKeyRef = useRef<string>("");
 
   // Pick activity scope based on role — avoids 403 for managers/employees
   const activityScope =
@@ -146,57 +158,127 @@ export default function SalesDashboardPage() {
   const isEmployee = user?.role === "employee";
 
   useEffect(() => {
-    // Determine the right query params for users based on role
-    const isManager = user?.role === "manager";
-    const userParams: any = { limit: 1000 };
-    
-    // Scoping for manager
-    if (isManager) {
-      if (user?.teamId) {
+    setDraftDate(date);
+  }, [date]);
+
+  useEffect(() => {
+    if (!user || isDepartmentLoading || !salesDepartmentId) return;
+
+    const loadScopeContext = async () => {
+      const userParams: any = {
+        limit: 1000,
+        departmentId: salesDepartmentId,
+      };
+
+      if (isManager && user.teamId) {
         userParams.teamId = user.teamId;
-      } else if (user?.departmentIds && user.departmentIds.length > 0) {
-        userParams.departmentId = user.departmentIds[0];
       }
-    }
 
-    Promise.allSettled([
-      teamsApi.list(),
-      usersApi.list(userParams),
-    ]).then(([t, u]) => {
-      let fetchedTeams = t.status === "fulfilled" && Array.isArray(t.value) ? t.value : [];
-      let fetchedUsers = u.status === "fulfilled" ? u.value?.data || (Array.isArray(u.value) ? u.value : []) : [];
+      const [teamsResult, usersResult] = await Promise.allSettled([
+        teamsApi.list(),
+        usersApi.list(userParams),
+      ]);
 
-      // Filter teams for managers
-      if (isManager && user?.teamId) {
+      let fetchedTeams =
+        teamsResult.status === "fulfilled" && Array.isArray(teamsResult.value)
+          ? teamsResult.value.filter(
+              (team: any) => team.departmentId === salesDepartmentId,
+            )
+          : [];
+
+      let fetchedUsers =
+        usersResult.status === "fulfilled"
+          ? usersResult.value?.data ||
+            (Array.isArray(usersResult.value) ? usersResult.value : [])
+          : [];
+
+      if (isManager && user.teamId) {
         fetchedTeams = fetchedTeams.filter((team: any) => team.id === user.teamId);
+        fetchedUsers = fetchedUsers.filter(
+          (member: any) =>
+            member.id === user.id ||
+            member.teamId === user.teamId ||
+            member.team_id === user.teamId,
+        );
+      }
+
+      if (isEmployee) {
+        fetchedUsers = fetchedUsers.filter((member: any) => member.id === user.id);
       }
 
       setTeams(fetchedTeams);
       setUsers(fetchedUsers);
-    });
-  }, []);
+      setIsFilterContextReady(true);
+    };
+
+    setIsFilterContextReady(false);
+    void loadScopeContext();
+  }, [
+    isDepartmentLoading,
+    isEmployee,
+    isManager,
+    salesDepartmentId,
+    user,
+  ]);
+
+  useEffect(() => {
+    if (teamId !== "all" && !teams.some((t: any) => t.id === teamId)) {
+      setTeamId("all");
+    }
+  }, [teamId, teams]);
+
+  useEffect(() => {
+    if (isEmployee) return;
+    if (userId && !users.some((u: any) => u.id === userId)) {
+      setUserId("");
+    }
+  }, [isEmployee, userId, users]);
 
   const fetchData = useCallback(async () => {
-    if (!user || !date?.from) return;
-    setIsLoading(true);
-    try {
-      const shiftType = user.shiftType;
-      const fromKey = getShiftAwareDateKeyIST(date.from, shiftType);
-      const toKey = getShiftAwareDateKeyIST(date.to || date.from, shiftType);
-      const startDate = getShiftAwareDayBoundsISO(fromKey, shiftType).startDate;
-      const endDate = getShiftAwareDayBoundsISO(toKey, shiftType).endDate;
-      const scopedTeamId =
-        isEmployee ? undefined : teamId === "all" ? undefined : teamId;
-      const scopedUserId = isEmployee ? user.id : userId || undefined;
+    if (!user || !date?.from || !salesDepartmentId || !isFilterContextReady) return;
+    const shiftType = user.shiftType;
+    const fromKey = getShiftAwareDateKeyIST(date.from, shiftType);
+    const toKey = getShiftAwareDateKeyIST(date.to || date.from, shiftType);
+    const startDate = getShiftAwareDayBoundsISO(fromKey, shiftType).startDate;
+    const endDate = getShiftAwareDayBoundsISO(toKey, shiftType).endDate;
+    const scopedTeamId =
+      isEmployee ? undefined : teamId === "all" ? undefined : teamId;
+    const scopedUserId = isEmployee ? user.id : userId || undefined;
+    const allowedUserIds = new Set(
+      users
+        .map((u: any) => u.id)
+        .filter((id: unknown): id is string => typeof id === "string" && id.length > 0),
+    );
 
-      const [dashResult, analyticsResult, dealsResult, userWiseResult, actsResult, remindersResult] =
-        await Promise.allSettled([
-          dashboardApi.get(),
+    const fetchKey = JSON.stringify({
+      userId: user.id,
+      role: user.role,
+      startDate,
+      endDate,
+      scopedTeamId: scopedTeamId || "all",
+      scopedUserId: scopedUserId || "all",
+      activityScope,
+      salesDepartmentId,
+    });
+
+    if (inFlightFetchRef.current && lastFetchKeyRef.current === fetchKey) {
+      return inFlightFetchRef.current;
+    }
+
+    lastFetchKeyRef.current = fetchKey;
+
+    const run = async () => {
+      setIsLoading(true);
+      try {
+        const [dashResult, analyticsResult, dealsResult, userWiseResult, actsResult, remindersResult] =
+          await Promise.allSettled([
+          dashboardApi.get(salesDepartmentId),
           dashboardApi.getLeadAnalytics(
             startDate,
             endDate,
             scopedTeamId,
             scopedUserId,
+            salesDepartmentId,
           ),
           leadsApi.list({
             limit: 1000,
@@ -216,143 +298,179 @@ export default function SalesDashboardPage() {
             endDate,
             teamId: scopedTeamId,
             userId: scopedUserId,
+            departmentId: salesDepartmentId,
           }),
           activitiesApi.list({
             limit: 10,
             scope: activityScope,
             startDate,
             endDate,
+            departmentId: salesDepartmentId,
             ...(scopedTeamId && { teamId: scopedTeamId }),
             ...(scopedUserId && { userId: scopedUserId }),
           }),
           leadsApi.getAllReminders({ status: "pending", limit: 100 }),
-        ]);
+          ]);
 
-      const baseDash =
-        dashResult.status === "fulfilled" ? dashResult.value : null;
-      const analytics =
-        analyticsResult.status === "fulfilled" ? analyticsResult.value : null;
+        const baseDash =
+          dashResult.status === "fulfilled" ? dashResult.value : null;
+        const analytics =
+          analyticsResult.status === "fulfilled" ? analyticsResult.value : null;
 
-      setDashData({
-        ...(baseDash || {}),
-        leads: {
-          ...(baseDash?.leads || {}),
-          total: analytics?.total || 0,
-          newThisMonth: analytics?.total || 0,
-          wonThisMonth: analytics?.wonCount || 0,
-          pipeline: analytics?.byStatus || {},
-        },
-        revenue: {
-          ...(baseDash?.revenue || {}),
-          total: analytics?.totalValue || 0,
-        },
-      });
+        setDashData({
+          ...(baseDash || {}),
+          leads: {
+            ...(baseDash?.leads || {}),
+            total: baseDash?.leads?.total || analytics?.total || 0,
+            newThisMonth: analytics?.total || 0,
+            wonThisMonth: analytics?.wonCount || 0,
+            pipeline: analytics?.byStatus || {},
+          },
+          revenue: {
+            ...(baseDash?.revenue || {}),
+            total: analytics?.totalValue || 0,
+          },
+        });
       
       // Filter and sort top deals by priority statuses (limit to 10)
-      const allDeals = dealsResult.status === "fulfilled"
-        ? dealsResult.value?.data || []
-        : [];
+        const allDeals = dealsResult.status === "fulfilled"
+          ? dealsResult.value?.data || []
+          : [];
+
+        const scopedDeals =
+          allowedUserIds.size > 0
+            ? allDeals.filter((deal: any) => {
+                const assigneeId =
+                  deal.assignedTo || deal.assigned_to || deal.userId || deal.user_id || null;
+                if (!assigneeId) return false;
+                return allowedUserIds.has(assigneeId);
+              })
+            : [];
       
-      const priorityDeals = allDeals
-        .filter((deal: any) => TOP_DEALS_PRIORITY_STATUSES.includes(deal.status))
-        .sort((a: any, b: any) => {
-          const aIndex = TOP_DEALS_PRIORITY_STATUSES.indexOf(a.status);
-          const bIndex = TOP_DEALS_PRIORITY_STATUSES.indexOf(b.status);
-          if (aIndex !== bIndex) return aIndex - bIndex;
-          return (b.leadValue || b.lead_value || 0) - (a.leadValue || a.lead_value || 0);
-        })
-        .slice(0, 10);
+        const priorityDeals = scopedDeals
+          .filter((deal: any) => TOP_DEALS_PRIORITY_STATUSES.includes(deal.status))
+          .sort((a: any, b: any) => {
+            const aIndex = TOP_DEALS_PRIORITY_STATUSES.indexOf(a.status);
+            const bIndex = TOP_DEALS_PRIORITY_STATUSES.indexOf(b.status);
+            if (aIndex !== bIndex) return aIndex - bIndex;
+            return (b.leadValue || b.lead_value || 0) - (a.leadValue || a.lead_value || 0);
+          })
+          .slice(0, 10);
       
-      setTopDeals(priorityDeals);
+        setTopDeals(priorityDeals);
       
       // Sort leaderboard by activities + leads (date-range aware)
-      const userWiseData =
-        userWiseResult.status === "fulfilled" ? userWiseResult.value : null;
-      let leaderboardData = (userWiseData?.users || []).map((u: any) => ({
-        id: u.id,
-        fullName: u.fullName || u.full_name || "Unknown",
-        teamName: u.teamName || u.team_name || null,
-        role: u.role || "",
-        activityCount: u.activitiesLogged || 0,
-        activityCountCapped: Boolean(u.activityCountCapped),
-        leadCount: u.totalLeads || 0,
-      }));
+        const userWiseData =
+          userWiseResult.status === "fulfilled" ? userWiseResult.value : null;
+        let leaderboardData = (userWiseData?.users || []).map((u: any) => ({
+          id: u.id,
+          fullName: u.fullName || u.full_name || "Unknown",
+          teamName: u.teamName || u.team_name || null,
+          role: u.role || "",
+          activityCount: u.activitiesLogged || 0,
+          activityCountCapped: Boolean(u.activityCountCapped),
+          leadCount: u.totalLeads || 0,
+        }));
 
-      leaderboardData = leaderboardData
-        .map((rep: any) => ({
-          ...rep,
-          activityCount: rep.activityCount || 0,
-          activityCountCapped:
-            Boolean(rep.activityCountCapped) ||
-            Number(rep.activityCount || 0) >= MAX_ACTIVITY_DISPLAY_COUNT,
-          leadCount: rep.leadCount || 0,
-        }))
-        .sort((a: any, b: any) => {
-          // Primary sort: activities
-          if (b.activityCount !== a.activityCount) {
-            return b.activityCount - a.activityCount;
-          }
-          // Secondary sort: leads
-          return b.leadCount - a.leadCount;
-        })
-        .slice(0, 8);
+        leaderboardData = leaderboardData
+          .map((rep: any) => ({
+            ...rep,
+            activityCount: rep.activityCount || 0,
+            activityCountCapped:
+              Boolean(rep.activityCountCapped) ||
+              Number(rep.activityCount || 0) >= MAX_ACTIVITY_DISPLAY_COUNT,
+            leadCount: rep.leadCount || 0,
+          }))
+          .sort((a: any, b: any) => {
+            // Primary sort: activities
+            if (b.activityCount !== a.activityCount) {
+              return b.activityCount - a.activityCount;
+            }
+            // Secondary sort: leads
+            return b.leadCount - a.leadCount;
+          })
+          .slice(0, 8);
       
-      setLeaderboard(leaderboardData);
+        setLeaderboard(leaderboardData);
       
-      setActivities(
-        actsResult.status === "fulfilled"
-          ? actsResult.value?.data || []
-          : [],
-      );
+        setActivities(
+          actsResult.status === "fulfilled"
+            ? actsResult.value?.data || []
+            : [],
+        );
 
       // Calculate reminder counts
-      const remindersData = remindersResult.status === "fulfilled"
-        ? remindersResult.value?.data || []
-        : [];
+        const remindersData = remindersResult.status === "fulfilled"
+          ? remindersResult.value?.data || []
+          : [];
 
-      const filteredReminders = remindersData.filter((r: any) => {
-        const reminderTime = new Date(
-          r.reminderAt || r.reminder_at || r.createdAt || r.created_at,
-        ).getTime();
-        return (
-          reminderTime >= new Date(startDate).getTime() &&
-          reminderTime <= new Date(endDate).getTime()
-        );
-      });
+        const filteredReminders = remindersData.filter((r: any) => {
+          const reminderUserId = r.userId || r.user_id || r.user?.id || null;
+          if (allowedUserIds.size === 0) {
+            return false;
+          }
+          if (reminderUserId && !allowedUserIds.has(reminderUserId)) {
+            return false;
+          }
+          const reminderTime = new Date(
+            r.reminderAt || r.reminder_at || r.createdAt || r.created_at,
+          ).getTime();
+          return (
+            reminderTime >= new Date(startDate).getTime() &&
+            reminderTime <= new Date(endDate).getTime()
+          );
+        });
       
-      const nowTime = new Date().getTime();
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
+        const nowTime = new Date().getTime();
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
       
-      const overdue = filteredReminders.filter((r: any) => {
-        const reminderTime = new Date(r.reminderAt || r.reminder_at).getTime();
-        return reminderTime < nowTime;
-      }).length;
+        const overdue = filteredReminders.filter((r: any) => {
+          const reminderTime = new Date(r.reminderAt || r.reminder_at).getTime();
+          return reminderTime < nowTime;
+        }).length;
       
-      const dueToday = filteredReminders.filter((r: any) => {
-        const reminderTime = new Date(r.reminderAt || r.reminder_at).getTime();
-        return reminderTime >= todayStart.getTime() && reminderTime <= todayEnd.getTime();
-      }).length;
+        const dueToday = filteredReminders.filter((r: any) => {
+          const reminderTime = new Date(r.reminderAt || r.reminder_at).getTime();
+          return reminderTime >= todayStart.getTime() && reminderTime <= todayEnd.getTime();
+        }).length;
       
-      setReminders({
-        overdue,
-        dueToday,
-        pending: filteredReminders.length,
-        total: filteredReminders.length,
-      });
+        setReminders({
+          overdue,
+          dueToday,
+          pending: filteredReminders.length,
+          total: filteredReminders.length,
+        });
 
-      if (dashResult.status === "rejected") {
+        if (dashResult.status === "rejected") {
+          toast.error("Failed to load dashboard data");
+        }
+      } catch {
         toast.error("Failed to load dashboard data");
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+        inFlightFetchRef.current = null;
       }
-    } catch {
-      toast.error("Failed to load dashboard data");
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [user, date, teamId, userId, activityScope, isAdmin, isManager, isEmployee]);
+    };
+
+    inFlightFetchRef.current = run();
+    return inFlightFetchRef.current;
+  }, [
+    user,
+    date,
+    teamId,
+    userId,
+    activityScope,
+    isAdmin,
+    isManager,
+    isEmployee,
+    isFilterContextReady,
+    salesDepartmentId,
+    users,
+  ]);
 
   useEffect(() => {
     fetchData();
@@ -382,6 +500,16 @@ export default function SalesDashboardPage() {
   }));
 
   const pipelineMaxCount = Math.max(...pipelineChartData.map((item) => item.count), 0);
+  const draftRange = draftDate?.from
+    ? { from: draftDate.from, to: draftDate.to || draftDate.from }
+    : undefined;
+  const isDraftRangeTooLong =
+    !!draftRange?.from &&
+    !!draftRange?.to &&
+    differenceInCalendarDays(draftRange.to, draftRange.from) > MAX_CUSTOM_RANGE_DAYS;
+  const canApplyDraftRange = Boolean(
+    draftRange?.from && draftRange?.to && !isDraftRangeTooLong,
+  );
 
   if (isLoading) return <PageSkeleton />;
 
@@ -421,8 +549,9 @@ export default function SalesDashboardPage() {
               variant={activePreset === p.value ? "default" : "outline"}
               size="sm"
               onClick={() => {
+                const current = nowIST();
                 setActivePreset(p.value);
-                setDate({ from: subDays(now, p.days), to: now });
+                setDate({ from: subDays(current, p.days), to: current });
               }}
             >
               {p.label}
@@ -431,7 +560,15 @@ export default function SalesDashboardPage() {
         </div>
 
         {/* Date range picker */}
-        <Popover>
+        <Popover
+          open={isDatePopoverOpen}
+          onOpenChange={(open) => {
+            setIsDatePopoverOpen(open);
+            if (open) {
+              setDraftDate(date);
+            }
+          }}
+        >
           <PopoverTrigger asChild>
             <Button
               variant="outline"
@@ -448,18 +585,53 @@ export default function SalesDashboardPage() {
                 : "Pick date range"}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              initialFocus
-              mode="range"
-              defaultMonth={date?.from}
-              selected={date}
-              onSelect={(d) => {
-                setDate(d);
-                setActivePreset("custom");
-              }}
-              numberOfMonths={2}
-            />
+          <PopoverContent className="w-auto p-3" align="start">
+            <div className="space-y-3">
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={draftDate?.from || date?.from}
+                selected={draftDate}
+                onSelect={(d) => setDraftDate(d)}
+                numberOfMonths={1}
+                captionLayout="dropdown"
+                fromYear={2000}
+                toYear={nowIST().getFullYear() + 1}
+              />
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">Max custom range: 1 year</p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setDraftDate(date);
+                      setIsDatePopoverOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!canApplyDraftRange}
+                    onClick={() => {
+                      if (!draftRange?.from || !draftRange?.to) return;
+                      if (isDraftRangeTooLong) return;
+                      setDate({ from: draftRange.from, to: draftRange.to });
+                      setActivePreset("custom");
+                      setIsDatePopoverOpen(false);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+              {isDraftRangeTooLong && (
+                <p className="text-xs text-destructive">
+                  Date range cannot exceed 1 year.
+                </p>
+              )}
+            </div>
           </PopoverContent>
         </Popover>
 
@@ -524,7 +696,7 @@ export default function SalesDashboardPage() {
             accentColor="blue"
           />
           <StatsCard
-            title="New Leads"
+            title="Leads Worked on"
             value={newLeads}
             icon={TrendingUp}
             accentColor="green"
@@ -756,7 +928,7 @@ export default function SalesDashboardPage() {
       </div>
 
       {/* Section 4 + 6: Recent Activity + Leaderboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6 ">
         <Card className="lg:col-span-4">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -769,7 +941,7 @@ export default function SalesDashboardPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => router.push("/activities")}
+                onClick={() => router.push("/activity")}
               >
                 View All
                 <ArrowRight className="w-4 h-4 ml-1" />
@@ -778,7 +950,7 @@ export default function SalesDashboardPage() {
           </CardHeader>
           <CardContent>
             {activities.length > 0 ? (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                 {activities.map((act: any, i) => (
                   <div key={i} className="flex gap-3 items-start text-sm border-b last:border-0 pb-3 last:pb-0">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -842,7 +1014,7 @@ export default function SalesDashboardPage() {
             </CardTitle>
             <CardDescription>Top performers by activities & leads</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="max-h-[500px] overflow-y-auto pr-1">
             {leaderboard.length > 0 ? (
               <div className="space-y-3">
                 {leaderboard.map((rep: any, i) => (

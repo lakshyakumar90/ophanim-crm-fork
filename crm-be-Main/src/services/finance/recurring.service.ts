@@ -220,7 +220,7 @@ export async function resumeRecurringSchedule(scheduleId: string) {
   // Get current schedule to recalculate next run date
   const { data: schedule } = await supabaseAdmin
     .from("recurring_schedules")
-    .select("*")
+    .select("id, frequency, day_of_month, day_of_week")
     .eq("id", scheduleId)
     .single();
 
@@ -337,7 +337,24 @@ export async function processRecurringInvoices() {
   // Get all active schedules where next_run_date <= today
   const { data: schedules, error } = await supabaseAdmin
     .from("recurring_schedules")
-    .select("*")
+    .select(
+      `
+      id,
+      end_date,
+      lead_id,
+      client_name,
+      client_email,
+      line_items_template,
+      tax_rate,
+      department_id,
+      created_by,
+      auto_send_email,
+      requires_approval,
+      frequency,
+      day_of_month,
+      day_of_week
+    `,
+    )
     .eq("is_active", true)
     .lte("next_run_date", today);
 

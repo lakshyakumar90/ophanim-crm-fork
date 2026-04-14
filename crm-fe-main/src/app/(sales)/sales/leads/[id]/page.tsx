@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
-import { leadsApi, usersApi, csvApi } from "@/lib/api";
+import { leadsApi, csvApi } from "@/lib/api";
 import { useAuth, useIsAdmin } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { UserSelector } from "@/components/shared/user-selector";
@@ -127,6 +127,32 @@ function formatActivityDescription(activity: LeadActivity): string | null {
   return activity.description;
 }
 
+interface LeadReminderRecord {
+  id: string;
+  reminderAt: string;
+  note: string | null;
+  isSent: boolean;
+  isDone: boolean;
+}
+
+interface LeadDetailPageData {
+  lead: Lead;
+  activities: LeadActivity[];
+  comments: Array<Record<string, unknown>>;
+  reminders: LeadReminderRecord[];
+  assignableUsers: Array<{
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+    isActive: boolean;
+    avatarUrl: string | null;
+  }>;
+}
+
+const LEAD_DETAIL_INITIAL_CALL_BUDGET = 3;
+const INLINE_FIELD_UPDATE_DEBOUNCE_MS = 300;
+
 export default function LeadDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -167,38 +193,39 @@ export default function LeadDetailPage() {
   const [nalReasonValue, setNalReasonValue] = useState("");
   const [isSavingNalReason, setIsSavingNalReason] = useState(false);
 
-  const {
-    data: leadData,
-    isLoading: loadingLead,
-    mutate: mutateLead,
-  } = useSWR(id ? `lead-${id}` : null, () =>
-    leadsApi.get(id as string),
-  );
+  const initialCallCountRef = useRef(0);
+  const initialPhaseRef = useRef(true);
+  const inlineUpdateTimersRef = useRef<
+    Record<string, ReturnType<typeof setTimeout> | undefined>
+  >({});
+
+  const registerApiCall = useCallback((callName: string, isInitial = false) => {
+    if (process.env.NODE_ENV === "production") return;
+
+    if (initialPhaseRef.current || isInitial) {
+      initialCallCountRef.current += 1;
+      if (initialCallCountRef.current > LEAD_DETAIL_INITIAL_CALL_BUDGET) {
+        console.warn(
+          `[LeadDetailPage] Initial API call budget exceeded (${initialCallCountRef.current}/${LEAD_DETAIL_INITIAL_CALL_BUDGET}): ${callName}`,
+        );
+      }
+    }
+  }, []);
 
   const {
-    data: activitiesData,
-    isLoading: loadingActivities,
-    mutate: mutateActivities,
-  } = useSWR(id ? `lead-activities-${id}` : null, () =>
-    leadsApi.getActivities(id as string),
-  );
-
-  // Fetch comments
-  const { data: commentsData, mutate: mutateComments } = useSWR(
-    id ? `lead-comments-${id}` : null,
-    () => leadsApi.getComments(id as string),
-  );
-
-  // Fetch reminders for this lead
-  const { data: remindersData, mutate: mutateReminders } = useSWR(
-    id ? `lead-reminders-${id}` : null,
-    () => leadsApi.getReminders(id as string),
-  );
+    data: pageData,
+    isLoading: loadingPageData,
+    mutate: mutatePageData,
+  } = useSWR<LeadDetailPageData>(id ? `lead-detail-page-data-${id}` : null, () => {
+    registerApiCall("leads.getDetailPageData", true);
+    return leadsApi.getDetailPageData(id as string);
+  });
 
   // Check if this lead is a duplicate (shared SWR cache with leads list)
   const { data: duplicatesData } = useSWR(
     user ? "duplicate-leads" : null,
     async () => {
+      registerApiCall("csv.getDuplicateLeads", true);
       const res = await csvApi.getDuplicateLeads();
       return (res.data?.data ?? res.data) as {
         groups: { leads: { id: string }[] }[];
@@ -206,26 +233,82 @@ export default function LeadDetailPage() {
     },
     { revalidateOnFocus: false },
   );
+
+  const applyOptimisticLeadPatch = useCallback(
+    (patch: Partial<Lead>) => {
+      mutatePageData(
+        (current: LeadDetailPageData | undefined) => {
+          if (!current) return current;
+          return {
+            ...current,
+            lead: {
+              ...current.lead,
+              ...patch,
+            },
+          };
+        },
+        { revalidate: false },
+      );
+    },
+    [mutatePageData],
+  );
+
+  const debouncedInlineLeadUpdate = useCallback(
+    (
+      fieldKey: string,
+      patch: Record<string, unknown>,
+      optimisticPatch: Partial<Lead>,
+    ) =>
+      new Promise<void>((resolve, reject) => {
+        const existingTimer = inlineUpdateTimersRef.current[fieldKey];
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        applyOptimisticLeadPatch(optimisticPatch);
+
+        inlineUpdateTimersRef.current[fieldKey] = setTimeout(async () => {
+          try {
+            if (!id) {
+              resolve();
+              return;
+            }
+            registerApiCall(`leads.update:${fieldKey}`);
+            await leadsApi.update(id as string, patch);
+            await mutatePageData();
+            resolve();
+          } catch (error) {
+            await mutatePageData();
+            reject(error);
+          }
+        }, INLINE_FIELD_UPDATE_DEBOUNCE_MS);
+      }),
+    [applyOptimisticLeadPatch, id, mutatePageData, registerApiCall],
+  );
+
+  useEffect(() => {
+    if (pageData) {
+      initialPhaseRef.current = false;
+    }
+  }, [pageData]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(inlineUpdateTimersRef.current).forEach((timer) => {
+        if (timer) {
+          clearTimeout(timer);
+        }
+      });
+    };
+  }, []);
   const isDuplicateLead = useMemo(() => {
     const groups = duplicatesData?.groups ?? [];
     return groups.some((g) => g.leads.some((l) => l.id === id));
   }, [duplicatesData, id]);
 
-  // Fetch users list for admin assignment - all active users
-  const { data: usersData, isLoading: loadingUsers } = useSWR(
-    isAdmin ? "users-list-for-reassign" : null,
-    () =>
-      usersApi.list({ limit: 500, isActive: true }),
-  );
-
   const refreshLeadData = useCallback(async () => {
-    await Promise.all([
-      mutateLead(),
-      mutateActivities(),
-      mutateComments(),
-      mutateReminders(),
-    ]);
-  }, [mutateActivities, mutateComments, mutateLead, mutateReminders]);
+    await mutatePageData();
+  }, [mutatePageData]);
 
   useHeaderRefresh({
     onRefresh: refreshLeadData,
@@ -233,33 +316,59 @@ export default function LeadDetailPage() {
   });
 
   // Handle the nested data structure properly - include all active users for reassignment
-  const allUsers = usersData?.data || [];
-  const users = Array.isArray(allUsers)
-    ? allUsers.filter(
-        (u: any) =>
-          u.isActive,
-      )
-    : [];
-  const lead = leadData as Lead | undefined;
-  const activities = (activitiesData || []) as LeadActivity[];
-  const comments = (commentsData || []) as any[];
+  const allUsers = pageData?.assignableUsers || [];
+  const users = allUsers.filter((u) => u.isActive);
+  const lead = pageData?.lead;
+  const activities = pageData?.activities || [];
+  const comments = pageData?.comments || [];
+  const reminders = pageData?.reminders || [];
+  const loadingLead = loadingPageData;
+  const loadingActivities = loadingPageData;
 
   // Process reminders - show all reminders not marked as done
   // This includes overdue reminders (where time has passed but user hasn't marked done)
-  const reminders = (remindersData || []) as any[];
-  const pendingReminders = reminders.filter((r: any) => !r.isDone);
+  const pendingReminders = reminders.filter((r) => !r.isDone);
 
   // Check if a reminder is overdue (time has passed)
   const isReminderOverdue = (reminderAt: string) => {
     return new Date(reminderAt).getTime() < Date.now();
   };
 
+  const createReminder = useCallback(
+    async (input: { reminderAt: string; note?: string }) => {
+      if (!id) return;
+      await leadsApi.createReminder(
+        id as string,
+        input.reminderAt,
+        input.note,
+      );
+      await mutatePageData();
+    },
+    [id, mutatePageData],
+  );
+
+  const deleteReminder = useCallback(
+    async (reminderId: string) => {
+      if (!id) return;
+      await leadsApi.deleteReminder(id as string, reminderId);
+      await mutatePageData();
+    },
+    [id, mutatePageData],
+  );
+
+  const markReminderDone = useCallback(
+    async (reminderId: string) => {
+      await leadsApi.markReminderDone(reminderId);
+      await mutatePageData();
+    },
+    [mutatePageData],
+  );
+
   // Handle marking reminder as done
   const handleMarkReminderDone = async (reminderId: string) => {
     try {
-      await leadsApi.markReminderDone(reminderId);
+      await markReminderDone(reminderId);
       toast.success("Reminder marked as done");
-      mutateReminders();
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message ||
@@ -278,8 +387,7 @@ export default function LeadDetailPage() {
       toast.success("Lead assigned successfully");
       setSelectedUserId("");
       setIsReassignDialogOpen(false);
-      mutateLead();
-      mutateActivities();
+      mutatePageData();
     } catch (error: any) {
       const message =
         error.response?.data?.error?.message || "Failed to assign lead";
@@ -310,8 +418,7 @@ export default function LeadDetailPage() {
     try {
       await leadsApi.updateStatus(id as string, newStatus, reason);
       toast.success("Status updated successfully");
-      mutateLead();
-      mutateActivities();
+      mutatePageData();
     } catch (error: any) {
       const message =
         error.response?.data?.error?.message || "Failed to update status";
@@ -350,9 +457,12 @@ export default function LeadDetailPage() {
     if (!id) return;
     setIsSavingTimezone(true);
     try {
-      await leadsApi.update(id as string, { timezone: timezoneValue });
+      await debouncedInlineLeadUpdate(
+        "timezone",
+        { timezone: timezoneValue },
+        { timezone: timezoneValue },
+      );
       toast.success("Timezone updated");
-      mutateLead();
       setEditingTimezone(false);
     } catch {
       toast.error("Failed to update timezone");
@@ -365,9 +475,12 @@ export default function LeadDetailPage() {
     if (!id) return;
     setIsSavingClientResponse(true);
     try {
-      await leadsApi.update(id as string, { clientResponse: clientResponseValue });
+      await debouncedInlineLeadUpdate(
+        "clientResponse",
+        { clientResponse: clientResponseValue },
+        { clientResponse: clientResponseValue },
+      );
       toast.success("Client response updated");
-      mutateLead();
       setEditingClientResponse(false);
     } catch {
       toast.error("Failed to update client response");
@@ -380,9 +493,12 @@ export default function LeadDetailPage() {
     if (!id) return;
     setIsSavingCountry(true);
     try {
-      await leadsApi.update(id as string, { country: countryValue });
+      await debouncedInlineLeadUpdate(
+        "country",
+        { country: countryValue },
+        { country: countryValue },
+      );
       toast.success("Country updated");
-      mutateLead();
       setEditingCountry(false);
     } catch {
       toast.error("Failed to update country");
@@ -395,9 +511,12 @@ export default function LeadDetailPage() {
     if (!id) return;
     setIsSavingNalReason(true);
     try {
-      await leadsApi.update(id as string, { nalReason: nalReasonValue });
+      await debouncedInlineLeadUpdate(
+        "nalReason",
+        { nalReason: nalReasonValue },
+        { nalReason: nalReasonValue },
+      );
       toast.success("NAL reason updated");
-      mutateLead();
       setEditingNalReason(false);
     } catch {
       toast.error("Failed to update NAL reason");
@@ -415,7 +534,7 @@ export default function LeadDetailPage() {
       await leadsApi.addComment(id as string, newComment.trim());
       toast.success("Comment added");
       setNewComment("");
-      mutateComments();
+      mutatePageData();
     } catch (error: any) {
       const message =
         error.response?.data?.error?.message || "Failed to add comment";
@@ -438,7 +557,7 @@ export default function LeadDetailPage() {
       toast.success("Comment updated");
       setEditingCommentId(null);
       setEditingCommentContent("");
-      mutateComments();
+      mutatePageData();
     } catch (error: any) {
       const message =
         error.response?.data?.error?.message || "Failed to update comment";
@@ -453,7 +572,7 @@ export default function LeadDetailPage() {
     try {
       await leadsApi.deleteComment(id as string, commentId);
       toast.success("Comment deleted");
-      mutateComments();
+      mutatePageData();
     } catch (error: any) {
       const message =
         error.response?.data?.error?.message || "Failed to delete comment";
@@ -558,7 +677,11 @@ export default function LeadDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <SetReminderButton leadId={id as string} />
+            <SetReminderButton
+              leadId={id as string}
+              onCreateReminder={createReminder}
+              onRefresh={refreshLeadData}
+            />
             {isAdmin && (
               <Button
                 variant="outline"
@@ -591,7 +714,7 @@ export default function LeadDetailPage() {
               </span>
             </div>
             <div className="space-y-2">
-              {pendingReminders.map((reminder: any) => {
+              {pendingReminders.map((reminder) => {
                 const isOverdue = isReminderOverdue(reminder.reminderAt);
                 return (
                   <div
@@ -1215,7 +1338,14 @@ export default function LeadDetailPage() {
                 </Card>
 
                 {/* Reminders Card */}
-                <LeadReminderWidget leadId={id as string} />
+                <LeadReminderWidget
+                  leadId={id as string}
+                  reminders={reminders}
+                  onCreateReminder={createReminder}
+                  onDeleteReminder={deleteReminder}
+                  onMarkDone={markReminderDone}
+                  onRefresh={refreshLeadData}
+                />
               </div>
 
               {/* Right Column: Comments (70%) */}

@@ -70,6 +70,48 @@ async function withResolvedFileUrl(
   };
 }
 
+async function withResolvedFileUrlsBatch(
+  docs: EmployeeDocument[],
+): Promise<EmployeeDocument[]> {
+  const storagePaths = [
+    ...new Set(
+      docs
+        .map((doc) => doc.fileUrl)
+        .filter((value) => Boolean(value) && !isHttpUrl(value)),
+    ),
+  ];
+
+  if (storagePaths.length === 0) {
+    return docs;
+  }
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(HR_DOCUMENTS_BUCKET)
+    .createSignedUrls(storagePaths, HR_DOC_SIGNED_URL_TTL_SEC);
+
+  if (error || !data) {
+    return Promise.all(docs.map(withResolvedFileUrl));
+  }
+
+  const signedByPath = new Map<string, string>();
+  for (const row of data as any[]) {
+    if (row?.path && row?.signedUrl) {
+      signedByPath.set(row.path, row.signedUrl);
+    }
+  }
+
+  return docs.map((doc) => {
+    if (!doc.fileUrl || isHttpUrl(doc.fileUrl)) {
+      return doc;
+    }
+
+    return {
+      ...doc,
+      fileUrl: signedByPath.get(doc.fileUrl) || doc.fileUrl,
+    };
+  });
+}
+
 // ====================
 // TYPES
 // ====================
@@ -234,7 +276,7 @@ export async function getDocuments(filters?: {
   }
 
   const rows = (data || []).map((doc: any) => mapRowToEmployeeDocument(doc));
-  return Promise.all(rows.map(withResolvedFileUrl));
+  return withResolvedFileUrlsBatch(rows);
 }
 
 /**

@@ -352,6 +352,9 @@ export async function getManagerDashboard(authUser: AuthUser) {
 
   const today = getTodayIST();
   const overdueTimestamp = getTimestampIST();
+  const startOfMonth = getStartOfMonthIST(getYearIST(), getMonthIST());
+  const startOfDay = getStartOfTodayIST();
+  const endOfDay = getEndOfTodayIST();
 
   // Get team members
   const { data: teamMembers } = await supabaseAdmin
@@ -394,12 +397,30 @@ export async function getManagerDashboard(authUser: AuthUser) {
     .in("user_id", memberIds)
     .in("status", ["present", "late"]);
 
+  const newLeadsThisMonthQuery = supabaseAdmin
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("is_deleted", false)
+    .in("assigned_to", memberIds)
+    .gte("created_at", startOfMonth);
+
+  const dueTodayQuery = supabaseAdmin
+    .from("tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("is_deleted", false)
+    .in("assigned_to", memberIds)
+    .gte("due_date", startOfDay)
+    .lte("due_date", endOfDay)
+    .neq("status", "completed");
+
   // Execute all queries in parallel
   const [
     { data: teamLeads },
     { count: pendingTasks },
     { count: overdueTasks },
     { count: presentToday },
+    { count: newLeadsThisMonth },
+    { count: dueToday },
     invoiceStats,
     expenseStats,
   ] = await Promise.all([
@@ -407,6 +428,8 @@ export async function getManagerDashboard(authUser: AuthUser) {
     pendingTasksQuery,
     overdueTasksQuery,
     attendanceQuery,
+    newLeadsThisMonthQuery,
+    dueTodayQuery,
     invoiceService.getInvoiceStats(authUser.departmentId || undefined),
     expenseService.getExpenseStats(authUser.departmentId || undefined),
   ]);
@@ -420,27 +443,6 @@ export async function getManagerDashboard(authUser: AuthUser) {
       totalRevenue += l.lead_value;
     }
   }
-
-  // Get new leads this month
-  const startOfMonth = getStartOfMonthIST(getYearIST(), getMonthIST());
-  const { count: newLeadsThisMonth } = await supabaseAdmin
-    .from("leads")
-    .select("id", { count: "exact", head: true })
-    .eq("is_deleted", false)
-    .in("assigned_to", memberIds)
-    .gte("created_at", startOfMonth);
-
-  // Get tasks due today
-  const startOfDay = getStartOfTodayIST();
-  const endOfDay = getEndOfTodayIST();
-  const { count: dueToday } = await supabaseAdmin
-    .from("tasks")
-    .select("id", { count: "exact", head: true })
-    .eq("is_deleted", false)
-    .in("assigned_to", memberIds)
-    .gte("due_date", startOfDay)
-    .lte("due_date", endOfDay)
-    .neq("status", "completed");
 
   return {
     team: {
@@ -537,6 +539,13 @@ export async function getEmployeeDashboard(userId: string) {
     .select("status, amount")
     .eq("submitted_by", userId);
 
+  const newLeadsThisMonthQuery = supabaseAdmin
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("is_deleted", false)
+    .eq("assigned_to", userId)
+    .gte("created_at", startOfMonth);
+
   // Execute ALL queries in parallel
   const [
     { data: myLeads },
@@ -546,6 +555,7 @@ export async function getEmployeeDashboard(userId: string) {
     { count: daysPresent },
     { data: todayAttendance },
     { data: myExpenses },
+    { count: newLeadsThisMonth },
   ] = await Promise.all([
     myLeadsQuery,
     pendingTasksQuery,
@@ -554,11 +564,11 @@ export async function getEmployeeDashboard(userId: string) {
     daysPresentQuery,
     todayAttendanceQuery,
     myExpensesQuery,
+    newLeadsThisMonthQuery,
   ]);
 
   const leadPipeline: Record<string, number> = {};
   let totalRevenue = 0;
-  let newLeadsCount = 0;
   for (const lead of myLeads || []) {
     const l = lead as { status: string; lead_value?: number | null };
     leadPipeline[l.status] = (leadPipeline[l.status] || 0) + 1;
@@ -566,14 +576,6 @@ export async function getEmployeeDashboard(userId: string) {
       totalRevenue += l.lead_value;
     }
   }
-
-  // Count new leads this month
-  const { count: newLeadsThisMonth } = await supabaseAdmin
-    .from("leads")
-    .select("id", { count: "exact", head: true })
-    .eq("is_deleted", false)
-    .eq("assigned_to", userId)
-    .gte("created_at", startOfMonth);
 
   const myTotalExpenses = (myExpenses || []).reduce(
     (sum, e: any) => sum + (Number(e.amount) || 0),
@@ -612,13 +614,135 @@ export async function getEmployeeDashboard(userId: string) {
 /**
  * Get lead analytics
  */
+const DASHBOARD_LEAD_ANALYTICS_BATCH_SIZE = 1000;
+
+type LeadAnalyticsRow = {
+  id: string;
+  status: string;
+  source: string | null;
+  lead_value: number | null;
+};
+
+async function fetchLeadIdsWithActivities(
+  startDate: string,
+  endDate: string,
+  scopedUserIds?: string[],
+): Promise<string[]> {
+  const leadIds = new Set<string>();
+  let from = 0;
+
+  while (true) {
+    let query = supabaseAdmin
+      .from("lead_activities")
+      .select("lead_id")
+      .gte("created_at", startDate)
+      .lte("created_at", endDate)
+      .order("id", { ascending: true })
+      .range(from, from + DASHBOARD_LEAD_ANALYTICS_BATCH_SIZE - 1);
+
+    if (scopedUserIds && scopedUserIds.length > 0) {
+      query = query.in("user_id", scopedUserIds);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+    }
+
+    const batch = (data || []) as Array<{ lead_id: string | null }>;
+    for (const row of batch) {
+      if (row.lead_id) {
+        leadIds.add(row.lead_id);
+      }
+    }
+
+    if (batch.length < DASHBOARD_LEAD_ANALYTICS_BATCH_SIZE) {
+      break;
+    }
+
+    from += DASHBOARD_LEAD_ANALYTICS_BATCH_SIZE;
+  }
+
+  return Array.from(leadIds);
+}
+
+async function fetchLeadAnalyticsRowsByIds(
+  leadIds: string[],
+  scopedUserIds?: string[],
+): Promise<LeadAnalyticsRow[]> {
+  if (leadIds.length === 0) {
+    return [];
+  }
+
+  const rows: LeadAnalyticsRow[] = [];
+  const idBatchSize = 200;
+
+  for (let i = 0; i < leadIds.length; i += idBatchSize) {
+    const idBatch = leadIds.slice(i, i + idBatchSize);
+
+    let query = supabaseAdmin
+      .from("leads")
+      .select("id, status, source, lead_value")
+      .eq("is_deleted", false)
+      .in("id", idBatch);
+
+    if (scopedUserIds && scopedUserIds.length > 0) {
+      query = query.in("assigned_to", scopedUserIds);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+    }
+
+    rows.push(...((data || []) as LeadAnalyticsRow[]));
+  }
+
+  return rows;
+}
+
+async function fetchLeadAnalyticsRows(
+  startDate: string,
+  endDate: string,
+  scopedUserIds?: string[],
+): Promise<LeadAnalyticsRow[]> {
+  const allRows: LeadAnalyticsRow[] = [];
+  let from = 0;
+
+  while (true) {
+    let query = supabaseAdmin
+      .from("leads")
+      .select("id, status, source, lead_value")
+      .eq("is_deleted", false)
+      .gte("created_at", startDate)
+      .lte("created_at", endDate)
+      .order("id", { ascending: true })
+      .range(from, from + DASHBOARD_LEAD_ANALYTICS_BATCH_SIZE - 1);
+
+    if (scopedUserIds && scopedUserIds.length > 0) {
+      query = query.in("assigned_to", scopedUserIds);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+    }
+
+    const batch = (data || []) as LeadAnalyticsRow[];
+    allRows.push(...batch);
+
+    if (batch.length < DASHBOARD_LEAD_ANALYTICS_BATCH_SIZE) {
+      break;
+    }
+
+    from += DASHBOARD_LEAD_ANALYTICS_BATCH_SIZE;
+  }
+
+  return allRows;
+}
+
 export async function getLeadAnalytics(startDate: string, endDate: string) {
-  const { data: leads } = await supabaseAdmin
-    .from("leads")
-    .select("status, source, lead_value, created_at, converted_at")
-    .eq("is_deleted", false)
-    .gte("created_at", startDate)
-    .lte("created_at", endDate);
+  const leads = await fetchLeadAnalyticsRows(startDate, endDate);
 
   const byStatus: Record<string, number> = {};
   const bySource: Record<string, number> = {};
@@ -626,12 +750,8 @@ export async function getLeadAnalytics(startDate: string, endDate: string) {
   let wonCount = 0;
   let wonValue = 0;
 
-  for (const lead of leads || []) {
-    const l = lead as {
-      status: string;
-      source: string | null;
-      lead_value: number | null;
-    };
+  for (const lead of leads) {
+    const l = lead;
 
     byStatus[l.status] = (byStatus[l.status] || 0) + 1;
     if (l.source) {
@@ -647,19 +767,20 @@ export async function getLeadAnalytics(startDate: string, endDate: string) {
   }
 
   return {
-    total: leads?.length || 0,
+    total: leads.length,
     byStatus,
     bySource,
     totalValue,
     wonCount,
     wonValue,
-    conversionRate: leads?.length ? (wonCount / leads.length) * 100 : 0,
+    conversionRate: leads.length ? (wonCount / leads.length) * 100 : 0,
   };
 }
 
 interface LeadAnalyticsFilters {
   teamId?: string;
   userId?: string;
+  departmentId?: string;
 }
 
 interface UserWiseAnalyticsFilters extends LeadAnalyticsFilters {
@@ -729,14 +850,22 @@ export async function getLeadAnalyticsScoped(
 ) {
   const { data: usersData, error: usersError } = await supabaseAdmin
     .from("users")
-    .select("id, team_id")
+    .select("id, team_id, department_id")
     .eq("is_active", true);
 
   if (usersError) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersError.message);
   }
 
-  const users = (usersData || []) as Array<{ id: string; team_id: string | null }>;
+  let users = (usersData || []) as Array<{
+    id: string;
+    team_id: string | null;
+    department_id: string | null;
+  }>;
+
+  if (authUser.role === USER_ROLES.ADMIN && filters.departmentId) {
+    users = users.filter((u) => u.department_id === filters.departmentId);
+  }
   const scopedUserIds = getScopedUserIds(authUser, users, filters);
 
   if (scopedUserIds.length === 0) {
@@ -752,17 +881,24 @@ export async function getLeadAnalyticsScoped(
     };
   }
 
-  const { data: leads, error: leadsError } = await supabaseAdmin
-    .from("leads")
-    .select("status, source, lead_value")
-    .eq("is_deleted", false)
-    .in("assigned_to", scopedUserIds)
-    .gte("created_at", startDate)
-    .lte("created_at", endDate);
+  const [createdPeriodLeads, activityLeadIds] = await Promise.all([
+    fetchLeadAnalyticsRows(startDate, endDate, scopedUserIds),
+    fetchLeadIdsWithActivities(startDate, endDate, scopedUserIds),
+  ]);
 
-  if (leadsError) {
-    throw new ApiError(ERROR_CODES.DATABASE_ERROR, leadsError.message);
+  const activityLeads = await fetchLeadAnalyticsRowsByIds(
+    activityLeadIds,
+    scopedUserIds,
+  );
+
+  const leadMap = new Map<string, LeadAnalyticsRow>();
+  for (const lead of createdPeriodLeads) {
+    leadMap.set(lead.id, lead);
   }
+  for (const lead of activityLeads) {
+    leadMap.set(lead.id, lead);
+  }
+  const leads = Array.from(leadMap.values());
 
   const byStatus: Record<string, number> = {};
   const bySource: Record<string, number> = {};
@@ -771,12 +907,8 @@ export async function getLeadAnalyticsScoped(
   let lostCount = 0;
   let wonValue = 0;
 
-  for (const lead of leads || []) {
-    const l = lead as {
-      status: string;
-      source: string | null;
-      lead_value: number | null;
-    };
+  for (const lead of leads) {
+    const l = lead;
     byStatus[l.status] = (byStatus[l.status] || 0) + 1;
     const sourceKey =
       typeof l.source === "string" && l.source.trim().length > 0
@@ -798,14 +930,14 @@ export async function getLeadAnalyticsScoped(
   }
 
   return {
-    total: leads?.length || 0,
+    total: leads.length,
     byStatus,
     bySource,
     totalValue,
     wonCount,
     lostCount,
     wonValue,
-    conversionRate: leads?.length ? (wonCount / leads.length) * 100 : 0,
+    conversionRate: leads.length ? (wonCount / leads.length) * 100 : 0,
   };
 }
 
@@ -842,19 +974,24 @@ export async function getUserWiseAnalytics(
 }> {
   const { data: usersData, error: usersError } = await supabaseAdmin
     .from("users")
-    .select("id, full_name, role, team_id")
+    .select("id, full_name, role, team_id, department_id")
     .eq("is_active", true);
 
   if (usersError) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, usersError.message);
   }
 
-  const users = (usersData || []) as Array<{
+  let users = (usersData || []) as Array<{
     id: string;
     full_name: string;
     role: string;
     team_id: string | null;
+    department_id: string | null;
   }>;
+
+  if (authUser.role === USER_ROLES.ADMIN && filters.departmentId) {
+    users = users.filter((u) => u.department_id === filters.departmentId);
+  }
 
   const scopedUserIds = getScopedUserIds(authUser, users, {
     teamId: filters.teamId,

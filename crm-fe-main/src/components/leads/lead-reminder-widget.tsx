@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
 import { leadsApi } from "@/lib/api";
@@ -40,17 +40,29 @@ import { Badge } from "@/components/ui/badge";
 
 interface LeadReminderWidgetProps {
   leadId: string;
+  reminders?: Reminder[];
+  onCreateReminder?: (input: { reminderAt: string; note?: string }) => Promise<void>;
+  onDeleteReminder?: (reminderId: string) => Promise<void>;
+  onMarkDone?: (reminderId: string) => Promise<void>;
+  onRefresh?: () => Promise<void> | void;
 }
 
 interface Reminder {
   id: string;
-  leadId: string;
-  userId: string;
+  leadId?: string;
+  userId?: string;
   reminderAt: string;
   note: string | null;
   isSent: boolean;
   isDone: boolean;
-  createdAt: string;
+  createdAt?: string;
+}
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  const message = (error as {
+    response?: { data?: { error?: { message?: string } } };
+  })?.response?.data?.error?.message;
+  return message || fallback;
 }
 
 const HOURS = Array.from({ length: 12 }, (_, i) =>
@@ -58,7 +70,14 @@ const HOURS = Array.from({ length: 12 }, (_, i) =>
 );
 const MINUTES = ["00", "15", "30", "45"];
 
-export function LeadReminderWidget({ leadId }: LeadReminderWidgetProps) {
+export function LeadReminderWidget({
+  leadId,
+  reminders: externalReminders,
+  onCreateReminder,
+  onDeleteReminder,
+  onMarkDone,
+  onRefresh,
+}: LeadReminderWidgetProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -69,14 +88,31 @@ export function LeadReminderWidget({ leadId }: LeadReminderWidgetProps) {
   const [reminderPeriod, setReminderPeriod] = useState<"AM" | "PM">("AM");
   const [reminderNote, setReminderNote] = useState("");
 
-  const { data: reminders, mutate } = useSWR(
-    leadId ? `lead-reminders-${leadId}` : null,
+  const hasExternalReminders = Array.isArray(externalReminders);
+  const { data: swrReminders, mutate } = useSWR(
+    !hasExternalReminders && leadId ? `lead-reminders-${leadId}` : null,
     () => leadsApi.getReminders(leadId),
     {
       refreshInterval: 0, // No polling
       revalidateOnFocus: false,
     },
   );
+
+  const reminders = useMemo(
+    () =>
+      (hasExternalReminders
+        ? externalReminders ?? []
+        : swrReminders ?? []) as Reminder[],
+    [hasExternalReminders, externalReminders, swrReminders],
+  );
+
+  const refreshReminderList = async () => {
+    if (onRefresh) {
+      await onRefresh();
+      return;
+    }
+    await mutate();
+  };
 
   // Client-side check for reminders every minute
   useEffect(() => {
@@ -126,19 +162,24 @@ export function LeadReminderWidget({ leadId }: LeadReminderWidgetProps) {
       const reminderDateTime = new Date(reminderDate);
       reminderDateTime.setHours(hour24, parseInt(reminderMinute), 0, 0);
 
-      await leadsApi.createReminder(
-        leadId,
-        reminderDateTime.toISOString(),
-        reminderNote || undefined,
-      );
+      if (onCreateReminder) {
+        await onCreateReminder({
+          reminderAt: reminderDateTime.toISOString(),
+          note: reminderNote || undefined,
+        });
+      } else {
+        await leadsApi.createReminder(
+          leadId,
+          reminderDateTime.toISOString(),
+          reminderNote || undefined,
+        );
+      }
       toast.success("Reminder set successfully");
       setIsDialogOpen(false);
       resetForm();
-      mutate();
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.error?.message || "Failed to create reminder",
-      );
+      await refreshReminderList();
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to create reminder"));
     } finally {
       setIsCreating(false);
     }
@@ -154,26 +195,29 @@ export function LeadReminderWidget({ leadId }: LeadReminderWidgetProps) {
 
   const handleDeleteReminder = async (reminderId: string) => {
     try {
-      await leadsApi.deleteReminder(leadId, reminderId);
+      if (onDeleteReminder) {
+        await onDeleteReminder(reminderId);
+      } else {
+        await leadsApi.deleteReminder(leadId, reminderId);
+      }
       toast.success("Reminder deleted");
-      mutate();
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.error?.message || "Failed to delete reminder",
-      );
+      await refreshReminderList();
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to delete reminder"));
     }
   };
 
   const handleMarkDone = async (reminderId: string) => {
     try {
-      await leadsApi.markReminderDone(reminderId);
+      if (onMarkDone) {
+        await onMarkDone(reminderId);
+      } else {
+        await leadsApi.markReminderDone(reminderId);
+      }
       toast.success("Reminder marked as done");
-      mutate();
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.error?.message ||
-          "Failed to mark reminder as done",
-      );
+      await refreshReminderList();
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to mark reminder as done"));
     }
   };
 
@@ -437,9 +481,15 @@ export function LeadReminderWidget({ leadId }: LeadReminderWidgetProps) {
 // Header button component
 interface SetReminderButtonProps {
   leadId: string;
+  onCreateReminder?: (input: { reminderAt: string; note?: string }) => Promise<void>;
+  onRefresh?: () => Promise<void> | void;
 }
 
-export function SetReminderButton({ leadId }: SetReminderButtonProps) {
+export function SetReminderButton({
+  leadId,
+  onCreateReminder,
+  onRefresh,
+}: SetReminderButtonProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -449,9 +499,18 @@ export function SetReminderButton({ leadId }: SetReminderButtonProps) {
   const [reminderPeriod, setReminderPeriod] = useState<"AM" | "PM">("AM");
   const [reminderNote, setReminderNote] = useState("");
 
-  const { mutate } = useSWR(leadId ? `lead-reminders-${leadId}` : null, () =>
-    leadsApi.getReminders(leadId),
+  const { mutate } = useSWR(
+    onRefresh ? null : leadId ? `lead-reminders-${leadId}` : null,
+    () => leadsApi.getReminders(leadId),
   );
+
+  const refreshReminderList = async () => {
+    if (onRefresh) {
+      await onRefresh();
+      return;
+    }
+    await mutate();
+  };
 
   const handleCreate = async () => {
     if (!reminderDate) {
@@ -468,11 +527,18 @@ export function SetReminderButton({ leadId }: SetReminderButtonProps) {
       const dt = new Date(reminderDate);
       dt.setHours(hour24, parseInt(reminderMinute), 0, 0);
 
-      await leadsApi.createReminder(
-        leadId,
-        dt.toISOString(),
-        reminderNote || undefined,
-      );
+      if (onCreateReminder) {
+        await onCreateReminder({
+          reminderAt: dt.toISOString(),
+          note: reminderNote || undefined,
+        });
+      } else {
+        await leadsApi.createReminder(
+          leadId,
+          dt.toISOString(),
+          reminderNote || undefined,
+        );
+      }
       toast.success("Reminder set!");
       setIsDialogOpen(false);
       setReminderDate("");
@@ -480,11 +546,9 @@ export function SetReminderButton({ leadId }: SetReminderButtonProps) {
       setReminderMinute("00");
       setReminderPeriod("AM");
       setReminderNote("");
-      mutate();
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.error?.message || "Failed to create reminder",
-      );
+      await refreshReminderList();
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to create reminder"));
     } finally {
       setIsCreating(false);
     }

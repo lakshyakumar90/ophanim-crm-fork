@@ -35,23 +35,41 @@ export async function getPendingApprovals(
     throw error;
   }
 
-  // Fetch related entities for each approval
-  const enrichedApprovals = await Promise.all(
-    (data || []).map(async (approval) => {
-      let entity = null;
+  const approvals = data || [];
 
-      switch (approval.approval_type) {
-        case "invoice": {
-          const { data: invoice } = await supabaseAdmin
+  // Batch entity lookups by type to avoid N+1 queries.
+  const invoiceIds = [
+    ...new Set(
+      approvals
+        .filter((approval) => approval.approval_type === "invoice")
+        .map((approval) => approval.entity_id),
+    ),
+  ];
+  const expenseIds = [
+    ...new Set(
+      approvals
+        .filter((approval) => approval.approval_type === "expense")
+        .map((approval) => approval.entity_id),
+    ),
+  ];
+  const emailIds = [
+    ...new Set(
+      approvals
+        .filter((approval) => approval.approval_type === "email")
+        .map((approval) => approval.entity_id),
+    ),
+  ];
+
+  const [{ data: invoices }, { data: expenses }, { data: emailRequests }] =
+    await Promise.all([
+      invoiceIds.length > 0
+        ? supabaseAdmin
             .from("invoices")
             .select("id, invoice_number, client_name, total_amount, status")
-            .eq("id", approval.entity_id)
-            .single();
-          entity = invoice;
-          break;
-        }
-        case "expense": {
-          const { data: expense } = await supabaseAdmin
+            .in("id", invoiceIds)
+        : Promise.resolve({ data: [] as any[] }),
+      expenseIds.length > 0
+        ? supabaseAdmin
             .from("expenses")
             .select(
               `
@@ -63,28 +81,40 @@ export async function getPendingApprovals(
               category:expense_categories(name)
             `,
             )
-            .eq("id", approval.entity_id)
-            .single();
-          entity = expense;
-          break;
-        }
-        case "email": {
-          const { data: emailRequest } = await supabaseAdmin
+            .in("id", expenseIds)
+        : Promise.resolve({ data: [] as any[] }),
+      emailIds.length > 0
+        ? supabaseAdmin
             .from("email_requests")
             .select("id, subject, recipient_email, status, email_type")
-            .eq("id", approval.entity_id)
-            .single();
-          entity = emailRequest;
-          break;
-        }
-      }
+            .in("id", emailIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
 
-      return {
-        ...approval,
-        entity,
-      };
-    }),
-  );
+  const invoiceMap = new Map((invoices || []).map((row: any) => [row.id, row]));
+  const expenseMap = new Map((expenses || []).map((row: any) => [row.id, row]));
+  const emailMap = new Map((emailRequests || []).map((row: any) => [row.id, row]));
+
+  const enrichedApprovals = approvals.map((approval) => {
+    let entity: any = null;
+
+    switch (approval.approval_type) {
+      case "invoice":
+        entity = invoiceMap.get(approval.entity_id) || null;
+        break;
+      case "expense":
+        entity = expenseMap.get(approval.entity_id) || null;
+        break;
+      case "email":
+        entity = emailMap.get(approval.entity_id) || null;
+        break;
+    }
+
+    return {
+      ...approval,
+      entity,
+    };
+  });
 
   return { data: enrichedApprovals, total: count || 0 };
 }

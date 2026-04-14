@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -248,20 +249,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const contextValue = useMemo(
+    () => ({
+      user,
+      isLoading,
+      isAuthenticated: !!user,
+      login,
+      completeTwoFactorLogin,
+      register,
+      logout,
+      refreshUser,
+      can,
+      inDepartment,
+    }),
+    [
+      user,
+      isLoading,
+      login,
+      completeTwoFactorLogin,
+      register,
+      logout,
+      refreshUser,
+      can,
+      inDepartment,
+    ],
+  );
+
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        isAuthenticated: !!user,
-        login,
-        completeTwoFactorLogin,
-        register,
-        logout,
-        refreshUser,
-        can,
-        inDepartment,
-      }}
+      value={contextValue}
     >
       {isLoading && !isPublicPath ? (
         <div className="h-full min-h-screen flex items-center justify-center text-sm text-muted-foreground">

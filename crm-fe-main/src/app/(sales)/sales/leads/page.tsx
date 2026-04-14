@@ -77,6 +77,11 @@ import {
   getStatusLabel,
 } from "@/lib/lead-status-config";
 import {
+  SALES_KANBAN_DEFAULT_LIMIT,
+  SALES_KANBAN_LOAD_MORE_STEP,
+  SALES_KANBAN_STATUSES,
+} from "@/lib/kanban-contract";
+import {
   DragDropContext,
   Droppable,
   Draggable,
@@ -111,19 +116,8 @@ const DEFAULT_COLUMNS = [
   "createdAt",
 ];
 
-// Kanban status columns - the statuses to show
-const KANBAN_STATUSES: LeadStatus[] = [
-  "fresh_lead",
-  "hot_lead",
-  "cold_lead",
-  "did_not_pick",
-  "follow_up",
-  "meeting_scheduled",
-  "proposal_sent",
-  "future_lead",
-  "not_interested",
-  "not_a_lead",
-];
+// Kanban status columns come from non-regression contract constants.
+const KANBAN_STATUSES: LeadStatus[] = SALES_KANBAN_STATUSES;
 
 export default function LeadsPage() {
   const router = useRouter();
@@ -153,7 +147,9 @@ export default function LeadsPage() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   // Kanban pagination - limit leads per status column
   const [statusLimits, setStatusLimits] = useState<Record<string, number>>(
-    Object.fromEntries(KANBAN_STATUSES.map((s) => [s, 100])),
+    Object.fromEntries(
+      KANBAN_STATUSES.map((s) => [s, SALES_KANBAN_DEFAULT_LIMIT]),
+    ),
   );
   // Admins and managers can choose view mode, employees see Kanban only
   const [viewMode, setViewMode] = useState<"table" | "kanban">(
@@ -261,7 +257,7 @@ export default function LeadsPage() {
     async () => {
       const results = await Promise.all(
         KANBAN_STATUSES.map(async (statusValue) => {
-          const limit = statusLimits[statusValue] || 100;
+          const limit = statusLimits[statusValue] || SALES_KANBAN_DEFAULT_LIMIT;
           const res = await leadsApi.list({
             limit,
             page: 1,
@@ -763,7 +759,9 @@ export default function LeadsPage() {
   const loadMoreForStatus = (statusValue: LeadStatus) => {
     setStatusLimits((prev) => ({
       ...prev,
-      [statusValue]: (prev[statusValue] || 100) + 100,
+      [statusValue]:
+        (prev[statusValue] || SALES_KANBAN_DEFAULT_LIMIT) +
+        SALES_KANBAN_LOAD_MORE_STEP,
     }));
   };
 

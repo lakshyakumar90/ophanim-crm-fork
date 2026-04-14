@@ -27,6 +27,9 @@ interface TeamRow {
   updated_at: string;
 }
 
+const TEAM_SELECT =
+  "id, name, manager_id, department_id, description, created_at, updated_at";
+
 function mapTeamRowToRecord(data: TeamRow): TeamRecord {
   return {
     id: data.id,
@@ -45,7 +48,7 @@ function mapTeamRowToRecord(data: TeamRow): TeamRecord {
 export async function getTeams(): Promise<TeamRecord[]> {
   const { data, error } = await supabaseAdmin
     .from("teams")
-    .select("*")
+    .select(TEAM_SELECT)
     .order("name");
 
   if (error) {
@@ -86,7 +89,7 @@ export async function getTeams(): Promise<TeamRecord[]> {
 export async function getTeamsForUser(
   authUser: AuthUser,
 ): Promise<TeamRecord[]> {
-  let query = supabaseAdmin.from("teams").select("*").order("name");
+  let query = supabaseAdmin.from("teams").select(TEAM_SELECT).order("name");
 
   if (authUser.role === "admin") {
     // Admin sees all teams
@@ -158,7 +161,7 @@ export async function getTeamsForUser(
 export async function getTeamById(teamId: string): Promise<TeamRecord> {
   const { data, error } = await supabaseAdmin
     .from("teams")
-    .select("*")
+    .select(TEAM_SELECT)
     .eq("id", teamId)
     .single();
 
@@ -171,7 +174,7 @@ export async function getTeamById(teamId: string): Promise<TeamRecord> {
   // Get member count from user_teams
   const { count } = await supabaseAdmin
     .from("user_teams")
-    .select("*", { count: "exact", head: true })
+    .select("team_id", { count: "exact", head: true })
     .eq("team_id", teamId);
   team.memberCount = count || 0;
 

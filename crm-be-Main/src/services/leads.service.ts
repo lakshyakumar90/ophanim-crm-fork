@@ -27,6 +27,13 @@ import type {
   UpdateCommentInput,
 } from "../validators/leads.validator.js";
 import { getTimestampIST } from "../utils/date-utils.js";
+import {
+  getCachedStaleWhileRevalidate,
+  invalidateCachePattern,
+  buildCacheKey,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from "./cache.service.js";
 
 // Update LeadRecord interface
 interface LeadRecord {
@@ -101,6 +108,83 @@ interface LeadRow {
     full_name: string;
     avatar_url: string | null;
   };
+}
+
+interface AssignableUserRecord {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  avatarUrl: string | null;
+}
+
+const LEAD_DETAIL_SELECT = `
+  id,
+  lead_name,
+  business_name,
+  email,
+  phone,
+  alternate_phone,
+  address,
+  city,
+  state,
+  pincode,
+  status,
+  source,
+  lead_value,
+  industry,
+  designation,
+  description,
+  tags,
+  assigned_to,
+  website,
+  country,
+  timezone,
+  nal_reason,
+  client_response,
+  lead_type,
+  created_by,
+  converted_at,
+  created_at,
+  updated_at,
+  assignee:users!assigned_to(id, full_name, avatar_url)
+`;
+
+const LEAD_ACTIVITY_SELECT = `
+  id,
+  lead_id,
+  user_id,
+  activity_type,
+  title,
+  description,
+  metadata,
+  created_at,
+  user:users(id, full_name, email, avatar_url)
+`;
+
+const LEAD_COMMENT_SELECT = `
+  id,
+  entity_type,
+  entity_id,
+  user_id,
+  content,
+  created_at,
+  updated_at,
+  is_deleted,
+  users:user_id (id, full_name, email, avatar_url)
+`;
+
+const LEAD_REMINDER_SELECT =
+  "id, lead_id, user_id, reminder_at, note, is_sent, is_done, created_at";
+
+function getLeadDetailPageCacheKey(leadId: string, authUser: AuthUser): string {
+  const scope = authUser.role === USER_ROLES.ADMIN ? "admin" : `user:${authUser.id}`;
+  return buildCacheKey(CACHE_KEYS.LEAD_DETAIL_PAGE, leadId, scope);
+}
+
+async function invalidateLeadDetailPageCache(leadId: string): Promise<void> {
+  await invalidateCachePattern(buildCacheKey(CACHE_KEYS.LEAD_DETAIL_PAGE, leadId, "*"));
 }
 
 function mapLeadRowToRecord(data: LeadRow): LeadRecord {
@@ -297,12 +381,7 @@ export async function getLeads(
 export async function getLeadById(leadId: string): Promise<LeadRecord> {
   const { data, error } = await supabaseAdmin
     .from("leads")
-    .select(
-      `
-      *,
-      assignee:users!assigned_to(id, full_name, avatar_url)
-    `,
-    )
+    .select(LEAD_DETAIL_SELECT)
     .eq("id", leadId)
     .eq("is_deleted", false)
     .single();
@@ -312,6 +391,71 @@ export async function getLeadById(leadId: string): Promise<LeadRecord> {
   }
 
   return mapLeadRowToRecord(data as unknown as LeadRow);
+}
+
+/**
+ * Get consolidated data needed for the lead detail page initial render.
+ */
+export async function getLeadDetailPageData(
+  leadId: string,
+  authUser: AuthUser,
+): Promise<{
+  lead: LeadRecord;
+  activities: LeadActivityRecord[];
+  comments: LeadComment[];
+  reminders: LeadReminder[];
+  assignableUsers: AssignableUserRecord[];
+}> {
+  const cacheKey = getLeadDetailPageCacheKey(leadId, authUser);
+
+  return getCachedStaleWhileRevalidate(
+    cacheKey,
+    async () => {
+      const lead = await getLeadById(leadId);
+
+      const [activities, comments, reminders, assignableUsers] =
+        await Promise.all([
+          getLeadActivities(leadId),
+          getLeadComments(leadId, { skipLeadCheck: true }),
+          getLeadReminders(leadId, authUser),
+          authUser.role === USER_ROLES.ADMIN
+            ? (async () => {
+                const { data, error } = await supabaseAdmin
+                  .from("users")
+                  .select("id, full_name, email, role, is_active, avatar_url")
+                  .eq("is_active", true)
+                  .order("full_name", { ascending: true })
+                  .limit(500);
+
+                if (error) {
+                  throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+                }
+
+                return (data || []).map((user: any) => ({
+                  id: user.id,
+                  fullName: user.full_name,
+                  email: user.email,
+                  role: user.role,
+                  isActive: user.is_active,
+                  avatarUrl: user.avatar_url,
+                })) as AssignableUserRecord[];
+              })()
+            : Promise.resolve([] as AssignableUserRecord[]),
+        ]);
+
+      return {
+        lead,
+        activities,
+        comments,
+        reminders,
+        assignableUsers,
+      };
+    },
+    {
+      freshTtlSeconds: CACHE_TTL.LEAD_DETAIL_PAGE,
+      staleTtlSeconds: CACHE_TTL.LEAD_DETAIL_PAGE * 4,
+    },
+  );
 }
 
 /**
@@ -521,6 +665,8 @@ export async function updateLead(
     }
   }
 
+  await invalidateLeadDetailPageCache(leadId);
+
   return mapLeadRowToRecord(data as unknown as LeadRow);
 }
 
@@ -621,6 +767,8 @@ export async function assignLead(
       to_user_name: newAssigneeName,
     },
   });
+
+  await invalidateLeadDetailPageCache(leadId);
 
   return mapLeadRowToRecord(data as unknown as LeadRow);
 }
@@ -745,6 +893,8 @@ export async function deleteLead(leadId: string): Promise<void> {
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
+
+  await invalidateLeadDetailPageCache(leadId);
 }
 
 /**
@@ -1081,6 +1231,8 @@ export async function addLeadActivity(
     },
   });
 
+  await invalidateLeadDetailPageCache(leadId);
+
   // Note: last_contacted_at column was removed in migration 005_strict_schema_cleanup.sql
   // Activity logging is sufficient for tracking contact history
 }
@@ -1112,15 +1264,24 @@ interface LeadActivityRow {
   description: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
-  user?: {
-    id: string;
-    full_name: string;
-    email: string;
-    avatar_url: string | null;
-  };
+  user?:
+    | {
+        id: string;
+        full_name: string;
+        email: string;
+        avatar_url: string | null;
+      }
+    | {
+        id: string;
+        full_name: string;
+        email: string;
+        avatar_url: string | null;
+      }[];
 }
 
 function mapLeadActivityRowToRecord(row: LeadActivityRow): LeadActivityRecord {
+  const normalizedUser = Array.isArray(row.user) ? row.user[0] : row.user;
+
   return {
     id: row.id,
     leadId: row.lead_id,
@@ -1130,12 +1291,12 @@ function mapLeadActivityRowToRecord(row: LeadActivityRow): LeadActivityRecord {
     description: row.description,
     metadata: row.metadata,
     createdAt: row.created_at,
-    user: row.user
+    user: normalizedUser
       ? {
-          id: row.user.id,
-          fullName: row.user.full_name,
-          email: row.user.email,
-          avatarUrl: row.user.avatar_url,
+          id: normalizedUser.id,
+          fullName: normalizedUser.full_name,
+          email: normalizedUser.email,
+          avatarUrl: normalizedUser.avatar_url,
         }
       : undefined,
   };
@@ -1149,12 +1310,7 @@ export async function getLeadActivities(
 ): Promise<LeadActivityRecord[]> {
   const { data, error } = await supabaseAdmin
     .from("lead_activities")
-    .select(
-      `
-      *,
-      user:users(id, full_name, email, avatar_url)
-    `,
-    )
+    .select(LEAD_ACTIVITY_SELECT)
     .eq("lead_id", leadId)
     .order("created_at", { ascending: false });
 
@@ -1227,6 +1383,8 @@ export async function updateLeadStatus(
     console.error("Failed to insert lead activity:", activityError);
   }
 
+  await invalidateLeadDetailPageCache(leadId);
+
   return mapLeadRowToRecord(data as unknown as LeadRow);
 }
 
@@ -1257,15 +1415,24 @@ interface CommentRow {
   created_at: string;
   updated_at: string;
   is_deleted: boolean;
-  users?: {
-    id: string;
-    full_name: string;
-    email: string;
-    avatar_url: string | null;
-  };
+  users?:
+    | {
+        id: string;
+        full_name: string;
+        email: string;
+        avatar_url: string | null;
+      }
+    | {
+        id: string;
+        full_name: string;
+        email: string;
+        avatar_url: string | null;
+      }[];
 }
 
 function mapCommentRowToRecord(row: CommentRow): LeadComment {
+  const normalizedUser = Array.isArray(row.users) ? row.users[0] : row.users;
+
   return {
     id: row.id,
     leadId: row.entity_id,
@@ -1274,12 +1441,12 @@ function mapCommentRowToRecord(row: CommentRow): LeadComment {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isDeleted: row.is_deleted,
-    user: row.users
+    user: normalizedUser
       ? {
-          id: row.users.id,
-          fullName: row.users.full_name,
-          email: row.users.email,
-          avatarUrl: row.users.avatar_url,
+          id: normalizedUser.id,
+          fullName: normalizedUser.full_name,
+          email: normalizedUser.email,
+          avatarUrl: normalizedUser.avatar_url,
         }
       : undefined,
   };
@@ -1288,18 +1455,18 @@ function mapCommentRowToRecord(row: CommentRow): LeadComment {
 /**
  * Get lead comments
  */
-export async function getLeadComments(leadId: string): Promise<LeadComment[]> {
-  // First verify the lead exists
-  await getLeadById(leadId);
+export async function getLeadComments(
+  leadId: string,
+  options?: { skipLeadCheck?: boolean },
+): Promise<LeadComment[]> {
+  // Reuse the existing existence check for standalone endpoints.
+  if (!options?.skipLeadCheck) {
+    await getLeadById(leadId);
+  }
 
   const { data, error } = await supabaseAdmin
     .from("comments")
-    .select(
-      `
-      *,
-      users:user_id (id, full_name, email, avatar_url)
-    `,
-    )
+    .select(LEAD_COMMENT_SELECT)
     .eq("entity_type", "lead")
     .eq("entity_id", leadId)
     .eq("is_deleted", false)
@@ -1331,12 +1498,7 @@ export async function addLeadComment(
       user_id: userId,
       content: input.content,
     })
-    .select(
-      `
-      *,
-      users:user_id (id, full_name, email, avatar_url)
-    `,
-    )
+    .select(LEAD_COMMENT_SELECT)
     .single();
 
   if (error) {
@@ -1376,6 +1538,8 @@ export async function addLeadComment(
     },
   });
 
+  await invalidateLeadDetailPageCache(leadId);
+
   return mapCommentRowToRecord(data as CommentRow);
 }
 
@@ -1396,12 +1560,7 @@ export async function updateLeadComment(
     .eq("id", commentId)
     .eq("entity_type", "lead")
     .eq("is_deleted", false)
-    .select(
-      `
-      *,
-      users:user_id (id, full_name, email, avatar_url)
-    `,
-    )
+    .select(LEAD_COMMENT_SELECT)
     .single();
 
   if (error) {
@@ -1412,6 +1571,8 @@ export async function updateLeadComment(
     throw ApiError.notFound("Comment");
   }
 
+  await invalidateLeadDetailPageCache(data.entity_id);
+
   return mapCommentRowToRecord(data as CommentRow);
 }
 
@@ -1419,17 +1580,23 @@ export async function updateLeadComment(
  * Delete comment (admin only - soft delete)
  */
 export async function deleteLeadComment(commentId: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error, data } = await supabaseAdmin
     .from("comments")
     .update({
       is_deleted: true,
       updated_at: getCurrentTimestamp(),
     })
     .eq("id", commentId)
-    .eq("entity_type", "lead");
+    .eq("entity_type", "lead")
+    .select("entity_id")
+    .maybeSingle();
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
+  }
+
+  if (data?.entity_id) {
+    await invalidateLeadDetailPageCache(data.entity_id);
   }
 }
 
@@ -1527,7 +1694,7 @@ export async function getLeadReminders(
 ): Promise<LeadReminder[]> {
   let baseQuery = supabaseAdmin
     .from("lead_reminders")
-    .select("*")
+    .select(LEAD_REMINDER_SELECT)
     .eq("lead_id", leadId)
     .order("reminder_at", { ascending: true });
 
@@ -1567,7 +1734,7 @@ export async function createLeadReminder(
       note: note || null,
       is_sent: false,
     })
-    .select("*")
+    .select(LEAD_REMINDER_SELECT)
     .single();
 
   if (error) {
@@ -1579,6 +1746,9 @@ export async function createLeadReminder(
     throw ApiError.notFound("Reminder");
   }
   const { user, ...record } = reminder;
+
+  await invalidateLeadDetailPageCache(leadId);
+
   return record;
 }
 
@@ -1597,13 +1767,17 @@ export async function deleteLeadReminder(
     query = query.eq("user_id", authUser.id); // Non-admins can only delete their own reminders
   }
 
-  const { error, data } = await query.select("id").maybeSingle();
+  const { error, data } = await query.select("id, lead_id").maybeSingle();
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
   }
   if (!data) {
     throw ApiError.notFound("Reminder");
+  }
+
+  if (data.lead_id) {
+    await invalidateLeadDetailPageCache(data.lead_id);
   }
 }
 
@@ -1836,7 +2010,7 @@ export async function markReminderDone(
   }
 
   const { data, error } = await query
-    .select("*")
+    .select(LEAD_REMINDER_SELECT)
     .maybeSingle();
 
   if (error) {
@@ -1852,5 +2026,8 @@ export async function markReminderDone(
     throw ApiError.notFound("Reminder");
   }
   const { user, ...record } = reminder;
+
+  await invalidateLeadDetailPageCache(record.leadId);
+
   return record;
 }
