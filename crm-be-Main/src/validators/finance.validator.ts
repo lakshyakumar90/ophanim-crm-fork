@@ -6,8 +6,15 @@ import { z } from "zod";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
+  service_name: z.string().trim().optional(),
+  plan_name: z.string().trim().optional(),
+  original_amount: z.number().min(0).optional(),
   quantity: z.number().min(0.01, "Quantity must be positive"),
   unit_price: z.number().min(0, "Unit price must be non-negative"),
+  item_discount_type: z
+    .enum(["none", "percentage", "fixed"])
+    .optional(),
+  item_discount_value: z.number().min(0).optional(),
   tax_rate: z.number().min(0).max(100).optional(),
 });
 
@@ -19,6 +26,8 @@ export const createInvoiceSchema = z.object({
   client_address: z.string().optional(),
   invoice_date: z.string().optional(),
   due_date: z.string().min(1, "Due date is required"),
+  currency: z.enum(["USD", "CAD", "GBP", "EUR", "INR"]).optional(),
+  status: z.enum(["draft", "sent"]).optional(),
   tax_rate: z.number().min(0).max(100).optional(),
   discount_rate: z.number().min(0).max(100).optional(),
   payment_terms: z.string().optional(),
@@ -41,10 +50,16 @@ export const createPaymentSchema = z.object({
     "bank_transfer",
     "upi",
     "card",
+    "credit_card",
+    "debit_card",
+    "paypal",
+    "stripe",
     "cheque",
     "other",
   ]),
   transaction_id: z.string().optional(),
+  transaction_proof_url: z.string().url().optional().or(z.literal("")),
+  transaction_proof_name: z.string().optional(),
   status: z.enum(["success", "pending", "failed"]).optional(),
   notes: z.string().optional(),
 });

@@ -16,6 +16,7 @@ import {
 import { ERROR_CODES } from "../utils/error-codes.js";
 import type { NextFunction, Request, Response } from "express";
 import type { AuthenticatedRequest } from "../types/api.types.js";
+import multer from "multer";
 
 // Services
 import * as invoiceService from "../services/finance/invoice.service.js";
@@ -26,6 +27,10 @@ import * as approvalService from "../services/finance/approval.service.js";
 import * as recurringService from "../services/finance/recurring.service.js";
 import * as dashboardService from "../services/finance/finance-dashboard.service.js";
 import * as scheduledEmailService from "../services/finance/scheduled-email.service.js";
+import {
+  buildInvoicePreviewHtml,
+  generateInvoicePdfBuffer,
+} from "../services/finance/invoice-pdf.service.js";
 
 // Validators
 import {
@@ -47,6 +52,10 @@ import {
 } from "../validators/finance.validator.js";
 
 const router: RouterType = Router();
+const paymentProofUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
 
 function requireHttpCronEnabled(
   _req: Request,
@@ -114,11 +123,50 @@ router.get(
 );
 
 /**
+ * GET /finance/invoices/:id/preview
+ * Render invoice preview HTML for in-app preview
+ */
+router.get(
+  "/invoices/:id/preview",
+  asyncHandler(async (req: Request, res: Response) => {
+    const invoice = await invoiceService.getInvoiceById(
+      req.params["id"] as string,
+    );
+
+    const html = await buildInvoicePreviewHtml(invoice);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  }),
+);
+
+/**
+ * GET /finance/invoices/:id/pdf
+ * Generate and download invoice PDF
+ */
+router.get(
+  "/invoices/:id/pdf",
+  asyncHandler(async (req: Request, res: Response) => {
+    const invoice = await invoiceService.getInvoiceById(
+      req.params["id"] as string,
+    );
+    const pdfBuffer = await generateInvoicePdfBuffer(invoice);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${invoice.invoice_number}.pdf"`,
+    );
+    res.send(pdfBuffer);
+  }),
+);
+
+/**
  * POST /finance/invoices
  * Create invoice
  */
 router.post(
   "/invoices",
+  requireManager as any,
   validateBody(createInvoiceSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as unknown as AuthenticatedRequest;
@@ -145,6 +193,19 @@ router.put(
       authReq.user.id,
     );
     sendSuccess(res, invoice);
+  }),
+);
+
+/**
+ * DELETE /finance/invoices/:id
+ * Delete invoice (Admin only)
+ */
+router.delete(
+  "/invoices/:id",
+  requireAdmin as any,
+  asyncHandler(async (req: Request, res: Response) => {
+    await invoiceService.deleteInvoice(req.params["id"] as string);
+    sendNoContent(res);
   }),
 );
 
@@ -270,6 +331,35 @@ router.get(
       req.params["id"] as string,
     );
     sendSuccess(res, payments);
+  }),
+);
+
+/**
+ * POST /finance/payments/upload-proof
+ * Upload payment transaction proof and return URL
+ */
+router.post(
+  "/payments/upload-proof",
+  requireManager as any,
+  paymentProofUpload.single("file"),
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+
+    if (!file) {
+      throw new ApiError(ERROR_CODES.MISSING_REQUIRED_FIELD, "No file uploaded");
+    }
+
+    const uploaded = await paymentService.uploadPaymentProof(
+      {
+        fileBuffer: file.buffer,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+      },
+      authReq.user.id,
+    );
+
+    sendCreated(res, uploaded);
   }),
 );
 

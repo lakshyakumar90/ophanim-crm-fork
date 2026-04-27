@@ -8,8 +8,13 @@ import { getISTDate, getISTTimestamp } from "../../utils/date-utils.js";
 export interface InvoiceLineItem {
   id?: string;
   description: string;
+  service_name?: string;
+  plan_name?: string;
+  original_amount?: number;
   quantity: number;
   unit_price: number;
+  item_discount_type?: "none" | "percentage" | "fixed";
+  item_discount_value?: number;
   tax_rate?: number;
   total: number;
   sort_order?: number;
@@ -23,6 +28,14 @@ export interface CreateInvoiceInput {
   client_address?: string;
   invoice_date?: string;
   due_date: string;
+  currency?: "USD" | "CAD" | "GBP" | "EUR" | "INR";
+  status?:
+    | "draft"
+    | "pending_approval"
+    | "sent"
+    | "paid"
+    | "overdue"
+    | "cancelled";
   tax_rate?: number;
   discount_rate?: number;
   payment_terms?: string;
@@ -32,7 +45,13 @@ export interface CreateInvoiceInput {
 }
 
 export interface UpdateInvoiceInput extends Partial<CreateInvoiceInput> {
-  status?: string;
+  status?:
+    | "draft"
+    | "pending_approval"
+    | "sent"
+    | "paid"
+    | "overdue"
+    | "cancelled";
 }
 
 export interface InvoiceFilters {
@@ -43,6 +62,64 @@ export interface InvoiceFilters {
   from_date?: string;
   to_date?: string;
   search?: string;
+}
+
+function calculateLineItemTotal(item: InvoiceLineItem): number {
+  const baseAmount = Number(item.quantity || 0) * Number(item.unit_price || 0);
+  const discountType = item.item_discount_type || "none";
+  const discountValue = Number(item.item_discount_value || 0);
+  const discountAmount =
+    discountType === "percentage"
+      ? (baseAmount * discountValue) / 100
+      : discountType === "fixed"
+        ? discountValue
+        : 0;
+
+  return Math.max(baseAmount - discountAmount, 0);
+}
+
+function calculateInvoiceAmounts(
+  lineItems: InvoiceLineItem[],
+  taxRate: number,
+  discountRate: number,
+) {
+  const subtotal = lineItems.reduce(
+    (sum, item) => sum + calculateLineItemTotal(item),
+    0,
+  );
+  const discountAmount = subtotal * ((discountRate || 0) / 100);
+  const taxableAmount = subtotal - discountAmount;
+  const taxAmount = taxableAmount * ((taxRate || 0) / 100);
+  const totalAmount = taxableAmount + taxAmount;
+
+  return {
+    subtotal,
+    discountAmount,
+    taxAmount,
+    totalAmount,
+  };
+}
+
+async function syncInvoiceAmounts(
+  invoiceId: string,
+  lineItems: InvoiceLineItem[],
+  taxRate: number,
+  discountRate: number,
+) {
+  const amounts = calculateInvoiceAmounts(lineItems, taxRate, discountRate);
+
+  await supabaseAdmin
+    .from("invoices")
+    .update({
+      subtotal: amounts.subtotal,
+      discount_amount: amounts.discountAmount,
+      tax_amount: amounts.taxAmount,
+      total_amount: amounts.totalAmount,
+      updated_at: getISTTimestamp(),
+    })
+    .eq("id", invoiceId);
+
+  return amounts;
 }
 
 /**
@@ -155,9 +232,39 @@ export async function getInvoiceById(invoiceId: string) {
     .eq("invoice_id", invoiceId)
     .order("payment_date", { ascending: false });
 
+  const normalizedLineItems = (lineItems || []).map((item) => ({
+    ...item,
+    total: calculateLineItemTotal(item as InvoiceLineItem),
+  }));
+
+  const amounts = calculateInvoiceAmounts(
+    normalizedLineItems as InvoiceLineItem[],
+    Number(invoice.tax_rate || 0),
+    Number(invoice.discount_rate || 0),
+  );
+
+  const hasMismatch =
+    Number(invoice.subtotal || 0) !== amounts.subtotal ||
+    Number(invoice.discount_amount || 0) !== amounts.discountAmount ||
+    Number(invoice.tax_amount || 0) !== amounts.taxAmount ||
+    Number(invoice.total_amount || 0) !== amounts.totalAmount;
+
+  if (hasMismatch) {
+    await syncInvoiceAmounts(
+      invoiceId,
+      normalizedLineItems as InvoiceLineItem[],
+      Number(invoice.tax_rate || 0),
+      Number(invoice.discount_rate || 0),
+    );
+  }
+
   return {
     ...invoice,
-    line_items: lineItems || [],
+    subtotal: amounts.subtotal,
+    discount_amount: amounts.discountAmount,
+    tax_amount: amounts.taxAmount,
+    total_amount: amounts.totalAmount,
+    line_items: normalizedLineItems || [],
     payments: payments || [],
   };
 }
@@ -169,21 +276,40 @@ export async function createInvoice(
   input: CreateInvoiceInput,
   createdBy: string,
 ) {
-  // Calculate line item totals
-  const lineItemsWithTotals = input.line_items.map((item, index) => ({
-    ...item,
-    total: item.quantity * item.unit_price,
-    sort_order: index,
-  }));
+  const targetStatus = input.status === "draft" ? "draft" : "sent";
 
-  const subtotal = lineItemsWithTotals.reduce(
-    (sum, item) => sum + item.total,
-    0,
-  );
-  const discountAmount = subtotal * ((input.discount_rate || 0) / 100);
-  const taxableAmount = subtotal - discountAmount;
-  const taxAmount = taxableAmount * ((input.tax_rate || 0) / 100);
-  const totalAmount = taxableAmount + taxAmount;
+  // Calculate line item totals
+  const lineItemsWithTotals = input.line_items.map((item, index) => {
+    const baseAmount = item.quantity * item.unit_price;
+    const discountType = item.item_discount_type || "none";
+    const discountValue = item.item_discount_value || 0;
+    const discountAmount =
+      discountType === "percentage"
+        ? (baseAmount * discountValue) / 100
+        : discountType === "fixed"
+          ? discountValue
+          : 0;
+    const lineTotal = Math.max(baseAmount - discountAmount, 0);
+
+    return {
+      ...item,
+      description:
+        item.description ||
+        [item.service_name, item.plan_name].filter(Boolean).join(" - "),
+      original_amount: item.original_amount ?? baseAmount,
+      item_discount_type: discountType,
+      item_discount_value: discountValue,
+      total: lineTotal,
+      sort_order: index,
+    };
+  });
+
+  const { subtotal, discountAmount, taxAmount, totalAmount } =
+    calculateInvoiceAmounts(
+      lineItemsWithTotals as InvoiceLineItem[],
+      Number(input.tax_rate || 0),
+      Number(input.discount_rate || 0),
+    );
 
   // Create invoice
   const { data: invoice, error: invoiceError } = await supabaseAdmin
@@ -196,6 +322,7 @@ export async function createInvoice(
       client_address: input.client_address,
       invoice_date: input.invoice_date || getISTDate(),
       due_date: input.due_date,
+      currency: input.currency || "INR",
       subtotal,
       tax_rate: input.tax_rate || 0,
       tax_amount: taxAmount,
@@ -206,7 +333,8 @@ export async function createInvoice(
       notes: input.notes,
       department_id: input.department_id,
       created_by: createdBy,
-      status: "draft",
+      status: targetStatus,
+      sent_at: targetStatus === "sent" ? getISTTimestamp() : null,
     })
     .select()
     .single();
@@ -224,8 +352,13 @@ export async function createInvoice(
         lineItemsWithTotals.map((item) => ({
           invoice_id: invoice.id,
           description: item.description,
+          service_name: item.service_name,
+          plan_name: item.plan_name,
+          original_amount: item.original_amount,
           quantity: item.quantity,
           unit_price: item.unit_price,
+          item_discount_type: item.item_discount_type || "none",
+          item_discount_value: item.item_discount_value || 0,
           tax_rate: item.tax_rate || 0,
           total: item.total,
           sort_order: item.sort_order,
@@ -240,8 +373,15 @@ export async function createInvoice(
     }
   }
 
+  await syncInvoiceAmounts(
+    invoice.id,
+    lineItemsWithTotals as InvoiceLineItem[],
+    Number(input.tax_rate || 0),
+    Number(input.discount_rate || 0),
+  );
+
   logger.info({ invoiceId: invoice.id }, "Invoice created");
-  return invoice;
+  return getInvoiceById(invoice.id);
 }
 
 /**
@@ -280,6 +420,7 @@ export async function updateInvoice(
     updateData.client_address = input.client_address;
   if (input.invoice_date) updateData.invoice_date = input.invoice_date;
   if (input.due_date) updateData.due_date = input.due_date;
+  if (input.currency) updateData.currency = input.currency;
   if (input.tax_rate !== undefined) updateData.tax_rate = input.tax_rate;
   if (input.discount_rate !== undefined)
     updateData.discount_rate = input.discount_rate;
@@ -308,15 +449,34 @@ export async function updateInvoice(
 
     // Insert new line items
     if (input.line_items.length > 0) {
-      const lineItemsWithTotals = input.line_items.map((item, index) => ({
-        invoice_id: invoiceId,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        tax_rate: item.tax_rate || 0,
-        total: item.quantity * item.unit_price,
-        sort_order: index,
-      }));
+      const lineItemsWithTotals = input.line_items.map((item, index) => {
+        const baseAmount = item.quantity * item.unit_price;
+        const discountType = item.item_discount_type || "none";
+        const discountValue = item.item_discount_value || 0;
+        const discountAmount =
+          discountType === "percentage"
+            ? (baseAmount * discountValue) / 100
+            : discountType === "fixed"
+              ? discountValue
+              : 0;
+
+        return {
+          invoice_id: invoiceId,
+          description:
+            item.description ||
+            [item.service_name, item.plan_name].filter(Boolean).join(" - "),
+          service_name: item.service_name,
+          plan_name: item.plan_name,
+          original_amount: item.original_amount ?? baseAmount,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          item_discount_type: discountType,
+          item_discount_value: discountValue,
+          tax_rate: item.tax_rate || 0,
+          total: Math.max(baseAmount - discountAmount, 0),
+          sort_order: index,
+        };
+      });
 
       await supabaseAdmin
         .from("invoice_line_items")
@@ -324,29 +484,37 @@ export async function updateInvoice(
     }
 
     // Recalculate totals (trigger will handle this, but let's also update manually)
-    const subtotal = input.line_items.reduce(
-      (sum, item) => sum + item.quantity * item.unit_price,
-      0,
+    await syncInvoiceAmounts(
+      invoiceId,
+      input.line_items,
+      Number(input.tax_rate ?? invoice.tax_rate ?? 0),
+      Number(input.discount_rate ?? invoice.discount_rate ?? 0),
     );
-    const discountAmount =
-      subtotal * ((input.discount_rate ?? invoice.discount_rate ?? 0) / 100);
-    const taxableAmount = subtotal - discountAmount;
-    const taxAmount =
-      taxableAmount * ((input.tax_rate ?? invoice.tax_rate ?? 0) / 100);
-    const totalAmount = taxableAmount + taxAmount;
-
-    await supabaseAdmin
-      .from("invoices")
-      .update({
-        subtotal,
-        tax_amount: taxAmount,
-        discount_amount: discountAmount,
-        total_amount: totalAmount,
-      })
-      .eq("id", invoiceId);
   }
 
   return getInvoiceById(invoiceId);
+}
+
+export async function deleteInvoice(invoiceId: string) {
+  await supabaseAdmin
+    .from("finance_approvals")
+    .delete()
+    .eq("entity_id", invoiceId)
+    .eq("approval_type", "invoice");
+
+  await supabaseAdmin.from("payments").delete().eq("invoice_id", invoiceId);
+  await supabaseAdmin
+    .from("invoice_line_items")
+    .delete()
+    .eq("invoice_id", invoiceId);
+
+  const { error } = await supabaseAdmin.from("invoices").delete().eq("id", invoiceId);
+
+  if (error) {
+    throw error;
+  }
+
+  logger.info({ invoiceId }, "Invoice deleted");
 }
 
 /**
@@ -356,30 +524,63 @@ export async function submitInvoiceForApproval(
   invoiceId: string,
   userId: string,
 ) {
-  const { data: invoice, error } = await supabaseAdmin
+  const { data: existingInvoice, error: existingInvoiceError } = await supabaseAdmin
+    .from("invoices")
+    .select("id, status")
+    .eq("id", invoiceId)
+    .single();
+
+  if (existingInvoiceError || !existingInvoice) {
+    throw new Error("Invoice not found");
+  }
+
+  if (existingInvoice.status === "pending_approval") {
+    return getInvoiceById(invoiceId);
+  }
+
+  if (existingInvoice.status !== "draft") {
+    throw new Error("Invoice not found or not in draft status");
+  }
+
+  const { error } = await supabaseAdmin
     .from("invoices")
     .update({
       status: "pending_approval",
       updated_at: getISTTimestamp(),
     })
-    .eq("id", invoiceId)
-    .eq("status", "draft")
-    .select()
-    .single();
+    .eq("id", invoiceId);
 
-  if (error || !invoice) {
+  if (error) {
     throw new Error("Invoice not found or not in draft status");
   }
 
+  const submittedInvoice = await getInvoiceById(invoiceId);
+
+  if (submittedInvoice.status !== "pending_approval") {
+    throw new Error(
+      `Invoice submit failed: expected pending_approval, got ${submittedInvoice.status}`,
+    );
+  }
+
   // Create approval record
-  await supabaseAdmin.from("finance_approvals").insert({
-    approval_type: "invoice",
-    entity_id: invoiceId,
-    requested_by: userId,
-  });
+  const { data: existingApproval } = await supabaseAdmin
+    .from("finance_approvals")
+    .select("id")
+    .eq("approval_type", "invoice")
+    .eq("entity_id", invoiceId)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (!existingApproval) {
+    await supabaseAdmin.from("finance_approvals").insert({
+      approval_type: "invoice",
+      entity_id: invoiceId,
+      requested_by: userId,
+    });
+  }
 
   logger.info({ invoiceId }, "Invoice submitted for approval");
-  return invoice;
+  return submittedInvoice;
 }
 
 /**
@@ -488,6 +689,7 @@ export async function markInvoiceSent(invoiceId: string) {
   const { data: invoice, error } = await supabaseAdmin
     .from("invoices")
     .update({
+      status: "sent",
       sent_at: getISTTimestamp(),
       updated_at: getISTTimestamp(),
     })

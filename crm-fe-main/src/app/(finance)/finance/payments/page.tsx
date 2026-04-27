@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CircleDollarSign, Search, RefreshCw } from "lucide-react";
+import { CircleDollarSign, ExternalLink, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { useHeaderRefresh } from "@/hooks/use-header-refresh";
@@ -40,6 +40,10 @@ const MODE_LABELS: Record<string, string> = {
   bank_transfer: "Bank Transfer",
   upi: "UPI",
   card: "Card",
+  credit_card: "Credit Card",
+  debit_card: "Debit Card",
+  paypal: "PayPal",
+  stripe: "Stripe",
   cheque: "Cheque",
   other: "Other",
 };
@@ -100,15 +104,19 @@ export default function PaymentsPage() {
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Payment Mode" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Modes</SelectItem>
-            <SelectItem value="cash">Cash</SelectItem>
-            <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-            <SelectItem value="upi">UPI</SelectItem>
-            <SelectItem value="card">Card</SelectItem>
-            <SelectItem value="cheque">Cheque</SelectItem>
-            <SelectItem value="other">Other</SelectItem>
-          </SelectContent>
+            <SelectContent>
+              <SelectItem value="all">All Modes</SelectItem>
+              <SelectItem value="cash">Cash</SelectItem>
+              <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+              <SelectItem value="upi">UPI</SelectItem>
+              <SelectItem value="card">Card</SelectItem>
+              <SelectItem value="credit_card">Credit Card</SelectItem>
+              <SelectItem value="debit_card">Debit Card</SelectItem>
+              <SelectItem value="paypal">PayPal</SelectItem>
+              <SelectItem value="stripe">Stripe</SelectItem>
+              <SelectItem value="cheque">Cheque</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
         </Select>
       </div>
 
@@ -128,15 +136,16 @@ export default function PaymentsPage() {
         <div className="border rounded-lg">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Invoice</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Mode</TableHead>
-                <TableHead>Transaction ID</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
+                <TableRow>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Transaction ID</TableHead>
+                  <TableHead>Proof</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
             </TableHeader>
             <TableBody>
               {payments.map((payment: any) => (
@@ -161,6 +170,21 @@ export default function PaymentsPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {payment.transaction_id || "—"}
+                  </TableCell>
+                  <TableCell>
+                    {payment.transaction_proof_url ? (
+                      <a
+                        href={payment.transaction_proof_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        {payment.transaction_proof_name || "View"}
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
                     ₹{Number(payment.amount).toLocaleString()}

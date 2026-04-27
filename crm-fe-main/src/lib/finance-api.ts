@@ -4,6 +4,20 @@ function unwrap(res: any) {
   return res?.data?.data ?? res?.data ?? res;
 }
 
+export type CurrencyCode = "USD" | "CAD" | "GBP" | "EUR" | "INR";
+
+export type PaymentMode =
+  | "cash"
+  | "bank_transfer"
+  | "upi"
+  | "card"
+  | "credit_card"
+  | "debit_card"
+  | "paypal"
+  | "stripe"
+  | "cheque"
+  | "other";
+
 // ============================================
 // TYPES
 // ============================================
@@ -18,6 +32,7 @@ export interface Invoice {
   client_address?: string;
   invoice_date: string;
   due_date: string;
+  currency: CurrencyCode;
   subtotal: number;
   tax_rate: number;
   tax_amount: number;
@@ -55,8 +70,13 @@ export interface InvoiceLineItem {
   id?: string;
   invoice_id?: string;
   description: string;
+  service_name?: string;
+  plan_name?: string;
+  original_amount?: number;
   quantity: number;
   unit_price: number;
+  item_discount_type?: "none" | "percentage" | "fixed";
+  item_discount_value?: number;
   tax_rate?: number;
   total: number;
   sort_order?: number;
@@ -67,8 +87,10 @@ export interface Payment {
   invoice_id: string;
   amount: number;
   payment_date: string;
-  payment_mode: "cash" | "bank_transfer" | "upi" | "card" | "cheque" | "other";
+  payment_mode: PaymentMode;
   transaction_id?: string;
+  transaction_proof_url?: string;
+  transaction_proof_name?: string;
   status: "success" | "pending" | "failed";
   notes?: string;
   recorded_by?: string;
@@ -217,6 +239,8 @@ export const invoicesApi = {
     client_address?: string;
     invoice_date?: string;
     due_date: string;
+    currency?: CurrencyCode;
+    status?: "draft" | "sent";
     tax_rate?: number;
     discount_rate?: number;
     payment_terms?: string;
@@ -237,7 +261,23 @@ export const invoicesApi = {
 
   cancel: (id: string) => api.post(`/finance/invoices/${id}/cancel`),
 
+  delete: (id: string) => api.delete(`/finance/invoices/${id}`),
+
   markSent: (id: string) => api.post(`/finance/invoices/${id}/mark-sent`),
+
+  getPreviewHtml: async (id: string) => {
+    const res = await api.get(`/finance/invoices/${id}/preview`, {
+      responseType: "text",
+    });
+    return res.data as string;
+  },
+
+  downloadPdf: async (id: string) => {
+    const res = await api.get(`/finance/invoices/${id}/pdf`, {
+      responseType: "blob",
+    });
+    return res.data as Blob;
+  },
 };
 
 // ============================================
@@ -260,14 +300,10 @@ export const paymentsApi = {
     data: {
       amount: number;
       payment_date?: string;
-      payment_mode:
-        | "cash"
-        | "bank_transfer"
-        | "upi"
-        | "card"
-        | "cheque"
-        | "other";
+      payment_mode: PaymentMode;
       transaction_id?: string;
+      transaction_proof_url?: string;
+      transaction_proof_name?: string;
       status?: "success" | "pending" | "failed";
       notes?: string;
     },
@@ -275,6 +311,15 @@ export const paymentsApi = {
 
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/finance/payments/${id}`, data),
+
+  uploadProof: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await api.post("/finance/payments/upload-proof", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return unwrap(res);
+  },
 };
 
 // ============================================

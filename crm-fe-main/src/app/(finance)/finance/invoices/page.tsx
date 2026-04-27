@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from "react";
 import useSWR from "swr";
-import { invoicesApi, type Invoice } from "@/lib/finance-api";
-import { useAuth } from "@/providers/auth-provider";
+import { invoicesApi, type CurrencyCode, type Invoice } from "@/lib/finance-api";
+import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,10 +35,8 @@ import {
   Search,
   MoreVertical,
   Eye,
-  Send,
-  Check,
-  X,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -55,8 +53,19 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
 };
 
+function formatCurrency(amount: number, currency: CurrencyCode = "INR") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount || 0);
+}
+
 export default function InvoicesPage() {
   const { user } = useAuth();
+  const isAdmin = useIsAdmin();
+  const isManager = useIsManager();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -84,23 +93,20 @@ export default function InvoicesPage() {
     enabled: Boolean(user),
   });
 
-  const handleApprove = async (id: string) => {
-    try {
-      await invoicesApi.approve(id);
-      toast.success("Invoice approved");
-      mutate();
-    } catch (error) {
-      toast.error("Failed to approve invoice");
-    }
-  };
+  const canCreateInvoice = isAdmin || isManager;
 
-  const handleSubmit = async (id: string) => {
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm(
+      "Delete this invoice permanently? This will also remove its line items and payment records.",
+    );
+    if (!confirmed) return;
+
     try {
-      await invoicesApi.submit(id);
-      toast.success("Invoice submitted for approval");
+      await invoicesApi.delete(id);
+      toast.success("Invoice deleted");
       mutate();
-    } catch (error) {
-      toast.error("Failed to submit invoice");
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Failed to delete invoice");
     }
   };
 
@@ -126,12 +132,14 @@ export default function InvoicesPage() {
             />
             Refresh
           </Button>
-          <Link href="/finance/invoices/new">
-            <Button size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              New Invoice
-            </Button>
-          </Link>
+          {canCreateInvoice && (
+            <Link href="/finance/invoices/new">
+              <Button size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                New Invoice
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -219,7 +227,10 @@ export default function InvoicesPage() {
                     {format(new Date(invoice.due_date), "dd MMM yyyy")}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    ₹{Number(invoice.total_amount).toLocaleString()}
+                    {formatCurrency(
+                      Number(invoice.total_amount),
+                      invoice.currency || "INR",
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -242,24 +253,15 @@ export default function InvoicesPage() {
                             View Details
                           </Link>
                         </DropdownMenuItem>
-                        {invoice.status === "draft" && (
+                        {user?.role === "admin" && (
                           <DropdownMenuItem
-                            onClick={() => handleSubmit(invoice.id)}
+                            onClick={() => handleDelete(invoice.id)}
+                            className="text-destructive focus:text-destructive"
                           >
-                            <Send className="h-4 w-4 mr-2" />
-                            Submit for Approval
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Invoice
                           </DropdownMenuItem>
                         )}
-                        {invoice.status === "pending_approval" &&
-                          (user?.role === "admin" ||
-                            user?.role === "manager") && (
-                            <DropdownMenuItem
-                              onClick={() => handleApprove(invoice.id)}
-                            >
-                              <Check className="h-4 w-4 mr-2" />
-                              Approve
-                            </DropdownMenuItem>
-                          )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

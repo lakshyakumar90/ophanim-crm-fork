@@ -1,16 +1,65 @@
 import { supabaseAdmin } from "../../config/supabase.js";
 import { logger } from "../../utils/logger.js";
 import { getISTDate, getISTTimestamp } from "../../utils/date-utils.js";
+import { randomUUID } from "node:crypto";
+
+const PAYMENT_PROOFS_BUCKET = "payment-proofs";
 
 // Types
 export interface CreatePaymentInput {
   invoice_id: string;
   amount: number;
   payment_date?: string;
-  payment_mode: "cash" | "bank_transfer" | "upi" | "card" | "cheque" | "other";
+  payment_mode:
+    | "cash"
+    | "bank_transfer"
+    | "upi"
+    | "card"
+    | "credit_card"
+    | "debit_card"
+    | "paypal"
+    | "stripe"
+    | "cheque"
+    | "other";
   transaction_id?: string;
+  transaction_proof_url?: string;
+  transaction_proof_name?: string;
   status?: "success" | "pending" | "failed";
   notes?: string;
+}
+
+export async function uploadPaymentProof(
+  input: {
+    fileBuffer: Buffer;
+    originalName: string;
+    mimeType: string;
+  },
+  uploadedBy: string,
+) {
+  const safeName = input.originalName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filePath = `${uploadedBy}/${Date.now()}-${randomUUID()}-${safeName}`;
+
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from(PAYMENT_PROOFS_BUCKET)
+    .upload(filePath, input.fileBuffer, {
+      contentType: input.mimeType,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    logger.error({ error: uploadError }, "Error uploading payment proof");
+    throw uploadError;
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabaseAdmin.storage.from(PAYMENT_PROOFS_BUCKET).getPublicUrl(filePath);
+
+  return {
+    url: publicUrl,
+    file_name: input.originalName,
+    storage_path: filePath,
+  };
 }
 
 export interface PaymentFilters {
@@ -134,6 +183,8 @@ export async function recordPayment(
       payment_date: input.payment_date || getISTDate(),
       payment_mode: input.payment_mode,
       transaction_id: input.transaction_id,
+      transaction_proof_url: input.transaction_proof_url,
+      transaction_proof_name: input.transaction_proof_name,
       status: input.status || "success",
       notes: input.notes,
       recorded_by: recordedBy,
@@ -178,6 +229,10 @@ export async function updatePayment(
   if (input.payment_mode) updateData.payment_mode = input.payment_mode;
   if (input.transaction_id !== undefined)
     updateData.transaction_id = input.transaction_id;
+  if (input.transaction_proof_url !== undefined)
+    updateData.transaction_proof_url = input.transaction_proof_url;
+  if (input.transaction_proof_name !== undefined)
+    updateData.transaction_proof_name = input.transaction_proof_name;
   if (input.status) updateData.status = input.status;
   if (input.notes !== undefined) updateData.notes = input.notes;
 
