@@ -14,7 +14,7 @@ import {
 import { ChevronDown, ChevronRight, Receipt } from "lucide-react";
 import { usePayslips } from "@/hooks/use-payroll";
 import { formatINR, formatPayrollMonthLabel } from "@/lib/payroll-format";
-import { PayslipView } from "@/components/payroll/payslip-view";
+import { PayslipView } from "@/components/hr/payroll/payslip-view";
 import { useAnyPermission } from "@/hooks/use-permission";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";

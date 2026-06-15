@@ -1,0 +1,96 @@
+import {
+  LayoutDashboard,
+  Users,
+  Clock,
+  UsersRound,
+  Bell,
+  Settings,
+  Activity,
+  Mail,
+  CheckSquare,
+  CalendarClock,
+  CalendarDays,
+  Wallet,
+  ClipboardCheck,
+  FileText,
+  Shield,
+} from "lucide-react";
+import type { NavItem } from "./types";
+
+export const globalItems: NavItem[] = [
+  {
+    title: "Dashboard",
+    href: "/global",
+    icon: LayoutDashboard,
+    roles: ["admin"],
+  },
+  { title: "Attendance", href: "/attendance", icon: Clock },
+  { title: "Email", href: "/email", icon: Mail },
+  { title: "Users", href: "/global/users", icon: Users, roles: ["admin"] },
+  {
+    title: "Teams",
+    href: "/global/teams",
+    icon: UsersRound,
+    roles: ["admin"],
+  },
+  {
+    title: "Roles",
+    href: "/global/roles",
+    icon: Shield,
+    roles: ["admin"],
+  },
+  {
+    title: "Activity",
+    href: "/activity",
+    icon: Activity,
+  },
+  {
+    title: "Tasks",
+    href: "/tasks",
+    icon: CheckSquare,
+  },
+  {
+    title: "Notifications",
+    href: "/notifications",
+    icon: Bell,
+    showBadge: true,
+  },
+  {
+    title: "Reminders",
+    href: "/reminders",
+    icon: CalendarClock,
+    showReminderBadge: true,
+  },
+  {
+    title: "Calendar",
+    href: "/calendar",
+    icon: CalendarDays,
+  },
+  {
+    title: "My payslips",
+    href: "/hr/payroll/my-payslips",
+    icon: Wallet,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    title: "My review",
+    href: "/performance/my-review",
+    icon: ClipboardCheck,
+    roles: ["admin", "manager", "employee"],
+    showMyReviewBadge: true,
+  },
+  {
+    title: "Peer feedback",
+    href: "/performance/peer-feedback",
+    icon: UsersRound,
+    roles: ["admin", "manager", "employee"],
+    showPeerFeedbackBadge: true,
+  },
+  {
+    title: "My documents",
+    href: "/documents/my-documents",
+    icon: FileText,
+    roles: ["admin", "manager", "employee"],
+  },
+  { title: "Settings", href: "/settings", icon: Settings },
+];

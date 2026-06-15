@@ -13,11 +13,11 @@ import { usePayrollRun, usePayrollRecords, payrollMutations } from "@/hooks/use-
 import { fetchHrEmployees, getPayrollErrorMessage } from "@/lib/payroll-client";
 import { formatINR, formatPayrollMonthLabel } from "@/lib/payroll-format";
 import type { PayrollRecord } from "@/types/payroll";
-import { DisburseConfirmDialog } from "@/components/payroll/disburse-confirm-dialog";
-import { CorrectionRunModal } from "@/components/payroll/correction-run-modal";
-import { PayrollRecordsTable } from "@/components/payroll/payroll-records-table";
-import { EditPayrollRecordModal } from "@/components/payroll/edit-payroll-record-modal";
-import { DepartmentCostBar, type DeptCostSegment } from "@/components/payroll/department-cost-bar";
+import { DisburseConfirmDialog } from "@/components/hr/payroll/disburse-confirm-dialog";
+import { CorrectionRunModal } from "@/components/hr/payroll/correction-run-modal";
+import { PayrollRecordsTable } from "@/components/hr/payroll/payroll-records-table";
+import { EditPayrollRecordModal } from "@/components/hr/payroll/edit-payroll-record-modal";
+import { DepartmentCostBar, type DeptCostSegment } from "@/components/hr/payroll/department-cost-bar";
 import { parseNum } from "@/lib/payroll-format";
 import type { PayrollRun } from "@/types/payroll";
 

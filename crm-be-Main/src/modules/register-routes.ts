@@ -1,0 +1,54 @@
+import type { Application } from "express";
+import { API_PREFIX } from "../config/constants.js";
+import healthRoutes from "./system/health/health.routes.js";
+import authRoutes from "./auth/auth/auth.routes.js";
+import usersRoutes from "./core/users/users.routes.js";
+import teamsRoutes from "./core/teams/teams.routes.js";
+import teamNotesRoutes from "./core/team-notes/team-notes.routes.js";
+import leadsRoutes from "./sales/leads/leads.routes.js";
+import tasksRoutes from "./sales/tasks/tasks.routes.js";
+import attendanceRoutes from "./operations/attendance/attendance.routes.js";
+import notificationsRoutes from "./operations/notifications/notifications.routes.js";
+import dashboardRoutes from "./operations/dashboard/dashboard.routes.js";
+import csvRoutes from "./operations/csv/csv.routes.js";
+import activityRoutes from "./operations/activity/activity.routes.js";
+import emailRoutes from "./operations/email/email.routes.js";
+import departmentsRoutes from "./core/departments/departments.routes.js";
+import financeRoutes from "./finance/finance.routes.js";
+import searchRoutes from "./operations/search/search.routes.js";
+import projectsRoutes from "./projects/projects/projects.routes.js";
+import hrRoutes from "./hr/employees/hr.routes.js";
+import cronRoutes from "./system/cron/cron.routes.js";
+import internalRoutes from "./system/internal/internal.routes.js";
+import adminRoutes from "./core/admin/admin.routes.js";
+import rolesRoutes from "./core/roles/roles.routes.js";
+import payrollRoutes from "./hr/payroll/payroll.routes.js";
+import performanceRoutes from "./hr/performance/performance.routes.js";
+
+/** Mount all domain route modules on the Express app */
+export function registerRoutes(app: Application): void {
+  app.use("/health", healthRoutes);
+  app.use(`${API_PREFIX}/auth`, authRoutes);
+  app.use(`${API_PREFIX}/users`, usersRoutes);
+  app.use(`${API_PREFIX}/teams`, teamsRoutes);
+  app.use(`${API_PREFIX}/teams`, teamNotesRoutes);
+  app.use(`${API_PREFIX}/leads`, leadsRoutes);
+  app.use(`${API_PREFIX}/tasks`, tasksRoutes);
+  app.use(`${API_PREFIX}/attendance`, attendanceRoutes);
+  app.use(`${API_PREFIX}/notifications`, notificationsRoutes);
+  app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
+  app.use(`${API_PREFIX}/csv`, csvRoutes);
+  app.use(`${API_PREFIX}/activities`, activityRoutes);
+  app.use(`${API_PREFIX}/email`, emailRoutes);
+  app.use(`${API_PREFIX}/departments`, departmentsRoutes);
+  app.use(`${API_PREFIX}/finance`, financeRoutes);
+  app.use(`${API_PREFIX}/search`, searchRoutes);
+  app.use(`${API_PREFIX}/projects`, projectsRoutes);
+  app.use(`${API_PREFIX}/hr`, hrRoutes);
+  app.use(`${API_PREFIX}/cron`, cronRoutes);
+  app.use(`${API_PREFIX}/internal`, internalRoutes);
+  app.use(`${API_PREFIX}/admin`, adminRoutes);
+  app.use(`${API_PREFIX}/roles`, rolesRoutes);
+  app.use(`${API_PREFIX}/payroll`, payrollRoutes);
+  app.use(`${API_PREFIX}/performance`, performanceRoutes);
+}

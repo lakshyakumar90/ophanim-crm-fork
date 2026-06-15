@@ -534,9 +534,12 @@ Readiness check.
 
 ## Rate Limits
 
+
 | Endpoint Type   | Limit         |
 | --------------- | ------------- |
 | Default         | 100 req/15min |
 | Auth            | 10 req/15min  |
 | Bulk Operations | 10 req/hour   |
 | Export          | 5 req/hour    |
+
+

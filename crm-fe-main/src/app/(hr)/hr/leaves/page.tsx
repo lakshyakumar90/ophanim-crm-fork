@@ -16,7 +16,7 @@ import { PendingApprovalsTab } from "@/components/hr/leaves/PendingApprovalsTab"
 import { AllRequestsTab } from "@/components/hr/leaves/AllRequestsTab";
 import { LeaveKPICards } from "@/components/hr/leaves/LeaveKPICards";
 import { CreateLeaveModal } from "@/components/hr/leaves/CreateLeaveModal";
-import { HRTeamLeaveCalendar } from "@/components/hr/hr-team-leave-calendar";
+import { HRTeamLeaveCalendar } from "@/components/hr/leaves/team-leave-calendar";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
@@ -87,7 +87,7 @@ export default function HrLeavesPage() {
     void refreshAll();
   }, [canView, refreshAll]);
 
-  const calRows: import("@/components/hr/hr-team-leave-calendar").HrApprovedLeaveRow[] =
+  const calRows: import("@/components/hr/leaves/team-leave-calendar").HrApprovedLeaveRow[] =
     useMemo(
       () =>
         calendarLeaves.map((l) => ({

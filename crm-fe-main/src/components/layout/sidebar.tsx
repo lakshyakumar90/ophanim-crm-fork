@@ -2,330 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import useSWR, { mutate as globalMutate } from "swr";
 import { cn } from "@/lib/utils";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
-import { notificationsApi, leadsApi } from "@/lib/api";
-import { usePollingCoordinator } from "@/lib/polling-coordinator";
-import {
-  LayoutDashboard,
-  Users,
-  Target,
-  CheckSquare,
-  Clock,
-  UsersRound,
-  Bell,
-  Settings,
-  LogOut,
-  Activity,
-  Mail,
-  PieChart,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Briefcase,
-  Wallet,
-  Receipt,
-  FileText,
-  CircleDollarSign,
-  ClipboardCheck,
-  CalendarClock,
-  CalendarDays,
-  BarChart3,
-  FolderKanban,
-  ListTodo,
-  Users2,
-  ClipboardList,
-  Copy,
-  Shield,
-} from "lucide-react";
+import { Target, ChevronDown, ChevronLeft, ChevronRight, Briefcase, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Fragment, useEffect, useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Fragment, useState } from "react";
 import type { Department } from "@/types";
-import { Badge } from "@/components/ui/badge";
-import { fetchPerformanceReminderCounts } from "@/lib/performance-api";
-
-interface NavItem {
-  title: string;
-  href: string;
-  icon: React.ElementType;
-  roles?: ("admin" | "manager" | "employee")[];
-  /** If set, item is visible when user has any of these permissions (or crm:admin) */
-  anyPermission?: string[];
-  showBadge?: boolean; // For notification count
-  showReminderBadge?: boolean; // For reminder count
-  showMyReviewBadge?: boolean;
-  showPeerFeedbackBadge?: boolean;
-}
-
-function NavLink({
-  item,
-  isActive,
-  collapsed,
-  badgeCount,
-  badgeColor = "red", // "red" for notifications, "amber" for reminders
-}: {
-  item: NavItem;
-  isActive: boolean;
-  collapsed?: boolean;
-  badgeCount?: number;
-  badgeColor?: "red" | "amber";
-}) {
-  const badgeBgClass = badgeColor === "amber" ? "bg-amber-500" : "bg-red-500";
-
-  return (
-    <Link
-      href={item.href}
-      title={collapsed ? item.title : undefined}
-      className={cn(
-        "flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 group",
-        isActive
-          ? "bg-primary/10 text-primary font-medium"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-        collapsed ? "justify-center px-2" : "",
-      )}
-    >
-      <div className="relative">
-        <item.icon
-          className={cn(
-            "w-4 h-4 shrink-0 transition-colors",
-            isActive
-              ? "text-primary"
-              : "text-muted-foreground group-hover:text-foreground",
-          )}
-        />
-        {collapsed && badgeCount && badgeCount > 0 && (
-          <span
-            className={cn(
-              "absolute -top-1.5 -right-1.5 min-w-3.5 h-3.5 flex items-center justify-center px-0.5 text-[9px] font-medium text-white rounded-full",
-              badgeBgClass,
-            )}
-          >
-            {badgeCount > 9 ? "9+" : badgeCount}
-          </span>
-        )}
-      </div>
-      {!collapsed && (
-        <>
-          <span className="truncate flex-1">{item.title}</span>
-          {badgeCount && badgeCount > 0 && (
-            <Badge
-              className={cn(
-                "h-5 min-w-5 flex items-center justify-center px-1.5 text-[10px] text-white",
-                badgeBgClass,
-                `hover:${badgeBgClass}`,
-              )}
-            >
-              {badgeCount > 9 ? "9+" : badgeCount}
-            </Badge>
-          )}
-        </>
-      )}
-    </Link>
-  );
-}
-
-const getDepartmentNavItems = (slug: string): NavItem[] => {
-  switch (slug) {
-    case "finance":
-      return financeItems;
-    case "hr":
-      return hrItems;
-    case "project-management":
-      return deliveryItems;
-    default:
-      return [
-        { title: "Dashboard", href: `/sales`, icon: LayoutDashboard },
-        { title: "Leads", href: `/sales/leads`, icon: Target },
-        { title: "Tasks", href: `/sales/tasks`, icon: CheckSquare },
-        { title: "Teams", href: `/sales/teams`, icon: UsersRound },
-        {
-          title: "Analytics",
-          href: `/sales/analytics`,
-          icon: PieChart,
-          roles: ["admin", "manager", "employee"],
-        },
-        {
-          title: "Duplicate Leads",
-          href: "/sales/duplicate-leads",
-          icon: Copy,
-          roles: ["admin", "manager", "employee"],
-        },
-      ];
-  }
-};
-
-// Define these item arrays outside the component so they can be used by the helper function
-const deliveryItems: NavItem[] = [
-  {
-    title: "All Projects",
-    href: "/projects",
-    icon: FolderKanban,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "My Projects",
-    href: "/projects/my-projects",
-    icon: FolderKanban,
-    roles: ["employee"],
-  },
-  {
-    title: "My Tasks",
-    href: "/projects/my-tasks",
-    icon: CheckSquare,
-    roles: ["employee"],
-  },
-  {
-    title: "Tasks",
-    href: "/projects/tasks",
-    icon: ListTodo,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Members",
-    href: "/projects/members",
-    icon: Users2,
-    roles: ["admin", "manager", "employee"],
-  },
-  {
-    title: "Analytics",
-    href: "/projects/analytics",
-    icon: PieChart,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Notes",
-    href: "/projects/notes",
-    icon: FileText,
-    roles: ["admin", "manager", "employee"],
-  },
-  {
-    title: "Calendar",
-    href: "/projects/calendar",
-    icon: CalendarClock,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Activity",
-    href: "/projects/activity",
-    icon: Activity,
-    roles: ["admin", "manager"],
-  },
-];
-
-const financeItems: NavItem[] = [
-  {
-    title: "Dashboard",
-    href: "/finance",
-    icon: Wallet,
-    roles: ["admin", "manager", "employee"],
-  },
-  {
-    title: "Invoices",
-    href: "/finance/invoices",
-    icon: FileText,
-    roles: ["admin", "manager", "employee"],
-  },
-  {
-    title: "Payments",
-    href: "/finance/payments",
-    icon: CircleDollarSign,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Expenses",
-    href: "/finance/expenses",
-    icon: Receipt,
-    roles: ["admin", "manager", "employee"],
-  },
-  {
-    title: "Approvals",
-    href: "/finance/approvals",
-    icon: ClipboardCheck,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Recurring",
-    href: "/finance/recurring",
-    icon: CalendarClock,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Emails",
-    href: "/finance/emails",
-    icon: Mail,
-    roles: ["admin", "manager", "employee"],
-  },
-  {
-    title: "Analytics",
-    href: "/finance/analytics",
-    icon: BarChart3,
-    roles: ["admin", "manager"],
-  },
-];
-
-const hrItems: NavItem[] = [
-  {
-    title: "Overview",
-    href: "/hr",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Employees",
-    href: "/hr/employees",
-    icon: Users,
-  },
-  {
-    title: "Attendance",
-    href: "/hr/attendance",
-    icon: Clock,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Leaves",
-    href: "/hr/leaves",
-    icon: ClipboardList,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Documents",
-    href: "/hr/documents",
-    icon: FileText,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Payroll",
-    href: "/hr/payroll",
-    icon: Receipt,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Performance",
-    href: "/hr/performance",
-    icon: Target,
-    roles: ["admin", "manager"],
-    anyPermission: ["performance:view", "performance:manage", "performance:review"],
-  },
-  {
-    title: "Holidays",
-    href: "/hr/holidays",
-    icon: CalendarClock,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Analytics",
-    href: "/hr/analytics",
-    icon: BarChart3,
-    roles: ["admin", "manager", "employee"],
-  },
-];
+import { globalItems } from "@/config/sidebar-nav/global";
+import { getDepartmentNavItems } from "@/config/sidebar-nav/shared";
+import type { NavItem } from "@/config/sidebar-nav/types";
+import { SidebarNavLink } from "@/components/layout/SidebarNavLink";
+import { useSidebarBadges } from "@/hooks/layout/useSidebarBadges";
 
 function DepartmentDropdown({
   department,
@@ -462,111 +152,18 @@ function GlobalSidebar({
     const stored = window.localStorage.getItem("sidebar:departments:open");
     return stored !== null ? stored === "1" : false;
   });
-  const { isLeader: isPollingLeader, publish } = usePollingCoordinator(
-    (payload) => {
-      if (typeof payload.unreadCount === "number") {
-        void globalMutate(
-          "notifications-unread-count",
-          { count: payload.unreadCount },
-          { revalidate: false },
-        );
-      }
-      if (typeof payload.remindersCount === "number") {
-        void globalMutate(
-          "sidebar-reminders-count",
-          { count: payload.remindersCount },
-          { revalidate: false },
-        );
-      }
-    },
-  );
+  const {
+    unreadCount,
+    remindersCount,
+    myReviewReminderCount,
+    peerFeedbackReminderCount,
+  } = useSidebarBadges();
 
   // Check if user is a project-only user (PM/employee without department assignment)
   const isProjectOnlyUser =
     !user?.departmentSlug &&
     !isAdmin &&
     (isManager || user?.role === "employee");
-
-  // Global items - for project-only users, show only common items
-  const globalItems: NavItem[] = [
-    {
-      title: "Dashboard",
-      href: "/global",
-      icon: LayoutDashboard,
-      roles: ["admin"],
-    },
-    { title: "Attendance", href: "/attendance", icon: Clock },
-    { title: "Email", href: "/email", icon: Mail },
-    { title: "Users", href: "/global/users", icon: Users, roles: ["admin"] },
-    {
-      title: "Teams",
-      href: "/global/teams",
-      icon: UsersRound,
-      roles: ["admin"],
-    },
-    {
-      title: "Roles",
-      href: "/global/roles",
-      icon: Shield,
-      roles: ["admin"],
-    },
-    {
-      title: "Activity",
-      href: "/activity",
-      icon: Activity,
-    },
-    {
-      title: "Tasks",
-      href: "/tasks",
-      icon: CheckSquare,
-    },
-    {
-      title: "Notifications",
-      href: "/notifications",
-      icon: Bell,
-      showBadge: true,
-    },
-    {
-      title: "Reminders",
-      href: "/reminders",
-      icon: CalendarClock,
-      showReminderBadge: true,
-    },
-    {
-      title: "Calendar",
-      href: "/calendar",
-      icon: CalendarDays,
-    },
-    {
-      title: "My payslips",
-      href: "/hr/payroll/my-payslips",
-      icon: Wallet,
-      roles: ["admin", "manager", "employee"],
-    },
-    {
-      title: "My review",
-      href: "/performance/my-review",
-      icon: ClipboardCheck,
-      roles: ["admin", "manager", "employee"],
-      showMyReviewBadge: true,
-    },
-    {
-      title: "Peer feedback",
-      href: "/performance/peer-feedback",
-      icon: UsersRound,
-      roles: ["admin", "manager", "employee"],
-      showPeerFeedbackBadge: true,
-    },
-    {
-      title: "My documents",
-      href: "/documents/my-documents",
-      icon: FileText,
-      roles: ["admin", "manager", "employee"],
-    },
-    { title: "Settings", href: "/settings", icon: Settings },
-  ];
-
-  // Finance items (Manager/Admin only)
 
   const filterNav = (items: NavItem[]) =>
     items.filter((item) => {
@@ -596,53 +193,6 @@ function GlobalSidebar({
     setIsDepartmentsOpen(open);
     window.localStorage.setItem("sidebar:departments:open", open ? "1" : "0");
   };
-
-  // Fetch unread notification count for badge - use same key as header for shared cache
-  const { data: unreadData } = useSWR(
-    user ? "notifications-unread-count" : null,
-    () => notificationsApi.getUnreadCount(),
-    {
-      refreshInterval: isPollingLeader ? 120000 : 0,
-      refreshWhenHidden: false,
-      refreshWhenOffline: false,
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
-  );
-  const unreadCount = unreadData?.count || 0;
-
-  // Fetch active reminders count (not-done reminders, including overdue)
-  const { data: remindersData } = useSWR(
-    user ? "sidebar-reminders-count" : null,
-    () => leadsApi.getRemindersCount({ status: "pending" }),
-    {
-      refreshInterval: 0,
-      refreshWhenHidden: false,
-      refreshWhenOffline: false,
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
-  );
-  const remindersCount = remindersData?.count || 0;
-
-  const { data: perfReminderCounts } = useSWR(
-    user ? "performance-reminder-counts" : null,
-    () => fetchPerformanceReminderCounts(),
-    {
-      refreshInterval: 0,
-      refreshWhenHidden: false,
-      refreshWhenOffline: false,
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
-  );
-  const myReviewReminderCount = perfReminderCounts?.myReview || 0;
-  const peerFeedbackReminderCount = perfReminderCounts?.peerFeedback || 0;
-
-  useEffect(() => {
-    if (!user || !isPollingLeader) return;
-    publish({ unreadCount, remindersCount });
-  }, [isPollingLeader, publish, remindersCount, unreadCount, user]);
 
   const getInitials = (name: string) => {
     return name
@@ -779,7 +329,7 @@ function GlobalSidebar({
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1 overflow-x-hidden">
         {filteredGlobal.map((item) => (
           <Fragment key={item.href}>
-            <NavLink
+            <SidebarNavLink
               item={item}
               collapsed={collapsed}
               isActive={

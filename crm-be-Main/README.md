@@ -3,15 +3,15 @@
 A full-featured CRM backend built with Node.js, Express, and Supabase.  
 
 ## Features
- 
-- 🔐 **JWT Authentication** - Access + refresh token strategy  
-- 👥 **Role-Based Access Control** - Admin, Manager, Employee roles 
-- 📊 **Lead Management** - Full CRUD, bulk operations, pipeline tracking  
-- ✅ **Task Management** - Assignments, comments, status tracking 
-- ⏰ **Attendance System** - Clock in/out, rules, holidays
-- 🔔 **Notifications** - In-app + email notifications   
-- 📈 **Dashboard Analytics** - Role-based dashboards 
-- 📤 **CSV Import/Export** - Bulk data operations 
+
+- **JWT Authentication** — Access + refresh token strategy
+- **Role-Based Access Control** — Admin, Manager, Employee roles
+- **Lead Management** — Full CRUD, bulk operations, pipeline tracking
+- **Task Management** — Assignments, comments, status tracking
+- **Attendance System** — Clock in/out, rules, holidays
+- **Notifications** — In-app + email notifications
+- **Dashboard Analytics** — Role-based dashboards
+- **CSV Import/Export** — Bulk data operations
  
 ## Tech Stack
 
@@ -36,6 +36,24 @@ pnpm build
 
 # Start production server
 pnpm start
+```
+
+## Testing (Vitest)
+
+```bash
+pnpm test              # unit + integration (+ skipped db tests)
+pnpm test:unit         # middleware + validators
+pnpm test:integration  # HTTP RBAC + validation (mocked services)
+pnpm test:db           # live Supabase (requires .env + RUN_DB_TESTS=true)
+pnpm test:watch        # watch mode
+```
+
+See [tests/README.md](tests/README.md) for structure and how to add tests.
+
+For DB tests against your Supabase project:
+
+```bash
+RUN_DB_TESTS=true pnpm test:db
 ```
 
 ## Environment Variables
@@ -179,12 +197,22 @@ JWT_REFRESH_SECRET=your-refresh-secret
 
 ```
 src/
-├── config/          # Configuration files
-├── middleware/      # Express middleware
-├── routes/          # API route handlers
-├── services/        # Business logic
-├── types/           # TypeScript types
-├── utils/           # Utility functions
-├── validators/      # Zod validation schemas
-└── index.ts         # Entry point
+├── config/              # env, Supabase client, shared constants
+├── middleware/          # auth, validation, rate limiting, errors
+├── modules/             # Domain modules (routes → controllers → services)
+│   ├── register-routes.ts   # mounts all domain routers on the Express app
+│   ├── auth/            # login, register, 2FA, sessions
+│   ├── core/            # users, teams, departments, roles, admin
+│   ├── sales/           # leads, tasks
+│   ├── hr/              # employees, payroll, performance, documents, leave
+│   ├── finance/         # invoices, expenses, payments, approvals
+│   ├── operations/      # attendance, dashboard, email, csv, notifications
+│   ├── projects/        # projects, notes, files
+│   ├── system/          # health, cron, internal
+│   └── shared/          # cross-module services (cache, activity events)
+├── types/               # Shared TypeScript types
+├── utils/               # Logger and helpers
+└── index.ts             # Express entry point
 ```
+
+See [src/modules/README.md](src/modules/README.md) for the controller → service pattern and per-domain docs.

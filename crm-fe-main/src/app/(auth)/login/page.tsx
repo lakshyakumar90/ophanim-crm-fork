@@ -1,16 +1,9 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { Suspense } from "react";
+import Link from "next/link";
 import { Loader2, Mail, Lock, LogIn, ShieldCheck } from "lucide-react";
-import { toast } from "sonner";
-
-import { tokens, twoFactorApi } from "@/lib/api";
-import { useAuth } from "@/providers/auth-provider";
-import { syncSupabaseSession } from "@/lib/supabase-auth";
+import { useLoginForm } from "@/hooks/auth/useLoginForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -28,126 +21,23 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
-import Link from "next/link";
 
-const loginSchema = z.object({
-  email: z.string().email("Please enter a valid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
+const otpSlotClassName = "bg-slate-700/50 border-slate-600 text-white";
 
-type LoginFormData = z.infer<typeof loginSchema>;
-
-const LoginForm = () => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { login: authLogin, refreshUser, completeTwoFactorLogin } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
-
-  // 2FA state
-  const [requires2FA, setRequires2FA] = useState(false);
-  const [twoFAUserId, setTwoFAUserId] = useState<string | null>(null);
-  const [twoFACode, setTwoFACode] = useState("");
-  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
-  // Store credentials temporarily for Supabase session sync after 2FA
-  const [pendingCredentials, setPendingCredentials] = useState<{
-    email: string;
-    password: string;
-  } | null>(null);
-
-  // Clear sensitive credentials from memory on unmount
-  useEffect(() => {
-    return () => {
-      setPendingCredentials(null);
-    };
-  }, []);
-
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
-
+function LoginForm() {
   const {
+    requires2FA,
+    twoFACode,
+    setTwoFACode,
+    isVerifying2FA,
+    isLoading,
     register,
     handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
-  });
+    errors,
+    handleVerify2FA,
+    handleBack,
+  } = useLoginForm();
 
-  const onSubmit = async (data: LoginFormData) => {
-    setIsLoading(true);
-    try {
-      const result = await authLogin(data.email, data.password);
-
-      // Check if 2FA is required
-      if (result.requires2FA) {
-        setRequires2FA(true);
-        setTwoFAUserId(result.userId || null);
-        // Store credentials for Supabase session sync after 2FA
-        setPendingCredentials({ email: data.email, password: data.password });
-        toast.info("Please enter your 2FA code");
-        return;
-      }
-
-      // Normal login succeeded (tokens saved by auth provider)
-      toast.success("Welcome back!");
-      router.push(callbackUrl);
-    } catch (error: any) {
-      const message =
-        error.response?.data?.error?.message ||
-        "Login failed. Please check your credentials.";
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVerify2FA = async () => {
-    if (twoFACode.length !== 6 || !twoFAUserId) {
-      toast.error("Please enter a valid 6-digit code");
-      return;
-    }
-
-    setIsVerifying2FA(true);
-    try {
-      const response = await twoFactorApi.login(twoFAUserId, twoFACode);
-      const result = response.data;
-
-      // Save tokens
-      tokens.set(result.tokens.accessToken, result.tokens.refreshToken);
-
-      // Sync Supabase session with the stored credentials
-      if (pendingCredentials) {
-        completeTwoFactorLogin(
-          pendingCredentials.email,
-          pendingCredentials.password,
-        );
-        setPendingCredentials(null);
-      }
-
-      // Force update auth state before redirect
-      await refreshUser();
-
-      toast.success("Welcome back!");
-      router.push(callbackUrl);
-    } catch (error: any) {
-      const message =
-        error.response?.data?.error?.message || "Invalid 2FA code";
-      toast.error(message);
-    } finally {
-      setIsVerifying2FA(false);
-    }
-  };
-
-  const handleBack = () => {
-    setRequires2FA(false);
-    setTwoFAUserId(null);
-    setTwoFACode("");
-    setPendingCredentials(null);
-  };
-
-  // 2FA Verification Step
   if (requires2FA) {
     return (
       <Card className="shadow-2xl border-slate-700/50 bg-slate-800/80 backdrop-blur-sm">
@@ -166,30 +56,13 @@ const LoginForm = () => {
           <div className="flex justify-center">
             <InputOTP maxLength={6} value={twoFACode} onChange={setTwoFACode}>
               <InputOTPGroup>
-                <InputOTPSlot
-                  index={0}
-                  className="bg-slate-700/50 border-slate-600 text-white"
-                />
-                <InputOTPSlot
-                  index={1}
-                  className="bg-slate-700/50 border-slate-600 text-white"
-                />
-                <InputOTPSlot
-                  index={2}
-                  className="bg-slate-700/50 border-slate-600 text-white"
-                />
-                <InputOTPSlot
-                  index={3}
-                  className="bg-slate-700/50 border-slate-600 text-white"
-                />
-                <InputOTPSlot
-                  index={4}
-                  className="bg-slate-700/50 border-slate-600 text-white"
-                />
-                <InputOTPSlot
-                  index={5}
-                  className="bg-slate-700/50 border-slate-600 text-white"
-                />
+                {[0, 1, 2, 3, 4, 5].map((index) => (
+                  <InputOTPSlot
+                    key={index}
+                    index={index}
+                    className={otpSlotClassName}
+                  />
+                ))}
               </InputOTPGroup>
             </InputOTP>
           </div>
@@ -223,22 +96,19 @@ const LoginForm = () => {
     );
   }
 
-  // Normal Login Step
   return (
     <Card className="shadow-2xl border-slate-700/50 bg-slate-800/80 backdrop-blur-sm">
       <CardHeader className="space-y-1 text-center">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-600">
           <LogIn className="h-7 w-7 text-white" />
         </div>
-        <CardTitle className="text-2xl font-bold text-white">
-          Welcome back
-        </CardTitle>
+        <CardTitle className="text-2xl font-bold text-white">Welcome back</CardTitle>
         <CardDescription className="text-slate-400">
           Enter your credentials to access your account
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email" className="text-slate-200">
               Email
@@ -307,11 +177,10 @@ const LoginForm = () => {
       </CardFooter>
     </Card>
   );
-};
+}
 
 export default function LoginPage() {
   return (
-    // Wrap the component that uses useSearchParams in Suspense
     <Suspense
       fallback={<div className="text-white text-center">Loading...</div>}
     >

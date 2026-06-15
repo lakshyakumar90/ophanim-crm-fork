@@ -11,44 +11,12 @@ import {
 import { defaultRateLimiter } from "./middleware/rate-limiter.middleware.js";
 import { logger } from "./utils/logger.js";
 import { supabaseAdmin } from "./config/supabase.js";
+import { registerRoutes } from "./modules/register-routes.js";
 
-// Import routes
-import healthRoutes from "./routes/health.routes.js";
-import authRoutes from "./routes/auth.routes.js";
-import usersRoutes from "./routes/users.routes.js";
-import teamsRoutes from "./routes/teams.routes.js";
-import teamNotesRoutes from "./routes/team-notes.routes.js";
-
-// ...
-import leadsRoutes from "./routes/leads.routes.js";
-import tasksRoutes from "./routes/tasks.routes.js";
-import attendanceRoutes from "./routes/attendance.routes.js";
-import notificationsRoutes from "./routes/notifications.routes.js";
-import dashboardRoutes from "./routes/dashboard.routes.js";
-import csvRoutes from "./routes/csv.routes.js";
-import activityRoutes from "./routes/activity.routes.js";
-import emailRoutes from "./routes/email.routes.js";
-import departmentsRoutes from "./routes/departments.routes.js";
-import financeRoutes from "./routes/finance.routes.js";
-import searchRoutes from "./routes/search.routes.js";
-import projectsRoutes from "./routes/projects.routes.js";
-import hrRoutes from "./routes/hr.routes.js";
-import cronRoutes from "./routes/cron.routes.js";
-import internalRoutes from "./routes/internal.routes.js";
-import adminRoutes from "./routes/admin.routes.js";
-import rolesRoutes from "./routes/roles.routes.js";
-import payrollRoutes from "./routes/payroll.routes.js";
-import performanceRoutes from "./routes/performance.routes.js";
-// Create Express app
 const app: Application = express();
 
-// Trust proxy (for rate limiting behind reverse proxy)
 app.set("trust proxy", 1);
-
-// Security middleware
 app.use(helmet());
-
-// CORS configuration
 app.use(
   cors({
     origin: config.frontend.url,
@@ -58,18 +26,11 @@ app.use(
     exposedHeaders: ["X-Exported-Count", "X-Removed-Count"],
   }),
 );
-
-// Body parsing
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// Request ID and logging middleware
 app.use(requestIdMiddleware);
-
-// Rate limiting
 app.use(defaultRateLimiter);
 
-// Root route - required for serverless platforms
 app.get("/", (req, res) => {
   const requestId = (req as Express.Request & { requestId?: string }).requestId;
   res.status(200).json({
@@ -84,39 +45,11 @@ app.get("/", (req, res) => {
   });
 });
 
-// Health check routes (no API prefix)
-app.use("/health", healthRoutes);
+registerRoutes(app);
 
-// API v1 routes
-app.use(`${API_PREFIX}/auth`, authRoutes);
-app.use(`${API_PREFIX}/users`, usersRoutes);
-app.use(`${API_PREFIX}/teams`, teamsRoutes);
-app.use(`${API_PREFIX}/teams`, teamNotesRoutes);
-app.use(`${API_PREFIX}/leads`, leadsRoutes);
-app.use(`${API_PREFIX}/tasks`, tasksRoutes);
-app.use(`${API_PREFIX}/attendance`, attendanceRoutes);
-app.use(`${API_PREFIX}/notifications`, notificationsRoutes);
-app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
-app.use(`${API_PREFIX}/csv`, csvRoutes);
-app.use(`${API_PREFIX}/activities`, activityRoutes);
-app.use(`${API_PREFIX}/email`, emailRoutes);
-app.use(`${API_PREFIX}/departments`, departmentsRoutes);
-app.use(`${API_PREFIX}/finance`, financeRoutes);
-app.use(`${API_PREFIX}/search`, searchRoutes);
-app.use(`${API_PREFIX}/projects`, projectsRoutes);
-app.use(`${API_PREFIX}/hr`, hrRoutes);
-app.use(`${API_PREFIX}/cron`, cronRoutes);
-app.use(`${API_PREFIX}/internal`, internalRoutes);
-app.use(`${API_PREFIX}/admin`, adminRoutes);
-app.use(`${API_PREFIX}/roles`, rolesRoutes);
-app.use(`${API_PREFIX}/payroll`, payrollRoutes);
-app.use(`${API_PREFIX}/performance`, performanceRoutes);
-// 404 handler
 app.use(notFoundMiddleware);
-
-// Global error handler
 app.use(errorMiddleware);
-// Start server (only when not running as serverless function)
+
 const PORT = config.server.port;
 
 async function verifyAttendanceSchema(): Promise<void> {
@@ -139,15 +72,13 @@ async function verifyAttendanceSchema(): Promise<void> {
   }
 }
 
-// Check if running in Vercel serverless environment
 if (!process.env.VERCEL) {
   (async () => {
     try {
       await verifyAttendanceSchema();
 
       if (config.workers.enableReminderWorker) {
-        // Import and start reminder service only when explicitly enabled.
-        import("./services/reminder.service.js").then(
+        import("./modules/operations/workers/reminder.service.js").then(
           ({ startReminderService }) => {
             startReminderService();
           },
@@ -165,7 +96,6 @@ if (!process.env.VERCEL) {
         logger.info(`Environment: ${config.server.nodeEnv}`);
       });
 
-      // Set timeout to 5 minutes for long-running imports
       server.setTimeout(300000);
     } catch (error) {
       logger.error(
@@ -177,5 +107,4 @@ if (!process.env.VERCEL) {
   })();
 }
 
-// Export for Vercel serverless
 export default app;

@@ -29,8 +29,8 @@ import { useSalaryBands } from "@/hooks/use-payroll";
 import { deleteSalaryBand, fetchHrEmployees, getPayrollErrorMessage } from "@/lib/payroll-client";
 import { formatINR } from "@/lib/payroll-format";
 import type { HrEmployeeOption, SalaryBand } from "@/types/payroll";
-import { SalaryBandModal } from "@/components/payroll/salary-band-modal";
-import { SetCTCForEmployeeModal } from "@/components/payroll/set-ctc-for-employee-modal";
+import { SalaryBandModal } from "@/components/hr/payroll/salary-band-modal";
+import { SetCTCForEmployeeModal } from "@/components/hr/payroll/set-ctc-for-employee-modal";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
