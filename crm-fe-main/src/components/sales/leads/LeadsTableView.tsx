@@ -28,7 +28,7 @@ import {
 import { ChevronLeft, ChevronRight, Eye, Pencil, MoreHorizontal, Users } from "lucide-react";
 import type { Lead } from "@/types";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { ALL_COLUMNS } from "@/components/leads/leads-list-constants";
+import { ALL_COLUMNS } from "@/components/sales/leads/leads-list-constants";
 
 interface LeadsTableMeta {
   page: number;

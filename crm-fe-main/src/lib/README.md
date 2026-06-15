@@ -8,13 +8,29 @@ Parent: [Frontend README](../../README.md)
 
 ```
 lib/
-├── api/                 # Axios client and domain API modules
-├── supabase/            # Direct Supabase read modules
-├── auth/                # Login schema and server actions
-├── finance/             # Finance form schemas and server actions
-├── hr/                  # HR helpers and barrel exports
-├── sales/               # Sales-specific constants
-└── *.ts                 # Root utilities and domain *-api.ts shims
+├── api/
+│   ├── client.ts          # Axios instance, JWT, interceptors
+│   ├── unwrap.ts          # Normalizes API responses
+│   ├── index.ts           # Re-exports all domain modules
+│   └── modules/
+│       ├── auth.ts        # Login, logout, refresh
+│       ├── core.ts        # Users, teams, departments, roles
+│       ├── sales.ts       # Leads, tasks, pipeline
+│       ├── operations.ts  # Attendance, notifications, dashboard
+│       ├── projects.ts    # Projects CRUD and types
+│       ├── hr.ts          # HR analytics endpoints
+│       ├── finance.ts     # Invoices, expenses, payments, emails
+│       ├── payroll.ts     # Payroll runs, salary bands, payslips
+│       ├── hr-employees.ts
+│       ├── hr-leaves.ts
+│       ├── hr-documents.ts
+│       └── hr-performance.ts
+├── supabase/              # Direct Supabase read modules
+├── auth/                  # Login schema and server actions
+├── finance/               # Finance form schemas and server actions
+├── hr/                    # HR helpers and barrel exports
+├── sales/                 # Sales-specific constants
+└── *-api.ts               # Deprecated shims → use `api/modules/*`
 ```
 
 ## `api/` — REST client
@@ -49,19 +65,7 @@ Base URL: `NEXT_PUBLIC_API_URL` or `http://localhost:5000/api/v1` in development
 
 Used by `smart-read.ts` patterns: try Supabase first in dev/non-production, fall back to API on failure.
 
-## Domain `*-api.ts` files (root)
-
-Legacy and specialized API wrappers that pages/hooks import directly:
-
-| File | Domain |
-|------|--------|
-| `finance-api.ts` | Finance aggregates |
-| `projects-api.ts` | Project-specific endpoints |
-| `hr-employee-api.ts`, `hr-leave-api.ts`, `hr-document-api.ts` | HR subdomains |
-| `performance-api.ts` | Performance reviews |
-| `payroll-client.ts` | Payroll operations |
-
-Prefer `api/modules/*` for new code unless a dedicated wrapper already exists.
+Prefer `api/modules/*` for all REST calls. Root `*-api.ts` files are deprecated shims that re-export from `api/modules/`.
 
 ## `auth/`
 

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import type { Lead } from "@/types";
 import { getStatusColor, getStatusLabel } from "@/lib/lead-status-config";
-import { SetReminderButton } from "@/components/leads/lead-reminder-widget";
+import { SetReminderButton } from "@/components/sales/leads/lead-reminder-widget";
 
 interface LeadHeaderProps {
   lead: Lead;

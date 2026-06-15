@@ -38,7 +38,7 @@ import {
 import { useRouter } from "next/navigation";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
 import type { Task } from "@/types";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { CreateTaskDialog } from "@/components/projects/create-task-dialog";
 
 const priorityConfig = {

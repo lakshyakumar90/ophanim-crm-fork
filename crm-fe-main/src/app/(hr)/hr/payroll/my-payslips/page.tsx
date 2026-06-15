@@ -12,10 +12,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ChevronDown, ChevronRight, Receipt } from "lucide-react";
-import { usePayslips } from "@/hooks/use-payroll";
+import { usePayslips } from "@/hooks/hr/usePayroll";
 import { formatINR, formatPayrollMonthLabel } from "@/lib/payroll-format";
 import { PayslipView } from "@/components/hr/payroll/payslip-view";
-import { useAnyPermission } from "@/hooks/use-permission";
+import { useAnyPermission } from "@/hooks/auth/usePermission";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/providers/auth-provider";

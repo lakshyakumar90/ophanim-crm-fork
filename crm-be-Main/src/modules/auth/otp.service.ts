@@ -1,8 +1,8 @@
-import { supabaseAdmin } from "../../../config/supabase.js";
-import { ApiError } from "../../../utils/responses.js";
-import { ERROR_CODES } from "../../../utils/error-codes.js";
-import { logger } from "../../../utils/logger.js";
-import { nowIST, getTimestampIST } from "../../../utils/date-utils.js";
+import { supabaseAdmin } from "../../config/supabase.js";
+import { ApiError } from "../../utils/responses.js";
+import { ERROR_CODES } from "../../utils/error-codes.js";
+import { logger } from "../../utils/logger.js";
+import { nowIST, getTimestampIST } from "../../utils/date-utils.js";
 import crypto from "crypto";
 
 const OTP_EXPIRY_MINUTES = 10;

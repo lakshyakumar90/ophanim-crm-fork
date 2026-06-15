@@ -7,7 +7,7 @@ import type { EmployeeDocumentDto } from "@/types/hr-documents";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { DEFAULT_REQUIRED_DOCUMENT_SLUGS } from "@/components/hr/documents/document-utils";
-import { usePermission } from "@/hooks/use-permission";
+import { usePermission } from "@/hooks/auth/usePermission";
 import { openDocumentUrl } from "@/lib/documentService";
 
 function unwrapDocs(raw: unknown): EmployeeDocumentDto[] {

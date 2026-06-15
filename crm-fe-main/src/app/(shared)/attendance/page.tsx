@@ -11,7 +11,7 @@ import type { UsersTodayItem } from "@/lib/attendance-types";
 import { useAttendanceDateRange } from "@/hooks/attendance/useAttendanceDateRange";
 import { useAttendanceSWR } from "@/hooks/attendance/useAttendanceSWR";
 import { useMyAttendanceHistory } from "@/hooks/attendance/useMyAttendanceHistory";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { AttendanceClockCard } from "@/components/attendance/AttendanceClockCard";
 import { AttendanceSummaryCards } from "@/components/attendance/AttendanceSummaryCards";
 import {

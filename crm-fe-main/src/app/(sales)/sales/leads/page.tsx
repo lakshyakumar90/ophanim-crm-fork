@@ -1,6 +1,6 @@
 "use client";
 
-import { LeadsPageShell } from "@/components/leads/LeadsPageShell";
+import { LeadsPageShell } from "@/components/sales/leads/LeadsPageShell";
 
 export default function LeadsPage() {
   return <LeadsPageShell />;

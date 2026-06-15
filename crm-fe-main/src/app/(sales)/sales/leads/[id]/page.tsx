@@ -3,12 +3,12 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLeadDetail } from "@/hooks/sales/useLeadDetail";
-import { LeadHeader } from "@/components/leads/detail/LeadHeader";
-import { LeadStatusBar } from "@/components/leads/detail/LeadStatusBar";
-import { LeadDetailSkeleton } from "@/components/leads/detail/LeadDetailSkeleton";
-import { LeadInfoTab } from "@/components/leads/detail/LeadInfoTab";
-import { LeadActivityTab } from "@/components/leads/detail/LeadActivityTab";
-import { LeadDetailDialogs } from "@/components/leads/detail/LeadDetailDialogs";
+import { LeadHeader } from "@/components/sales/leads/detail/LeadHeader";
+import { LeadStatusBar } from "@/components/sales/leads/detail/LeadStatusBar";
+import { LeadDetailSkeleton } from "@/components/sales/leads/detail/LeadDetailSkeleton";
+import { LeadInfoTab } from "@/components/sales/leads/detail/LeadInfoTab";
+import { LeadActivityTab } from "@/components/sales/leads/detail/LeadActivityTab";
+import { LeadDetailDialogs } from "@/components/sales/leads/detail/LeadDetailDialogs";
 
 export default function LeadDetailPage() {
   const detail = useLeadDetail();

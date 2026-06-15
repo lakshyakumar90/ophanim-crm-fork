@@ -35,7 +35,7 @@ import type { Team } from "@/types";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { useDepartment } from "@/providers/department-context";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 export default function TeamsPage() {
   const router = useRouter();

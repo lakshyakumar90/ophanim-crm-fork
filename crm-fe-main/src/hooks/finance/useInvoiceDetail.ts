@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { toast } from "sonner";
 import { invoicesApi, paymentsApi, type CurrencyCode, type Invoice, type PaymentMode } from "@/lib/finance-api";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import {
   CURRENCY_OPTIONS,
   createInvoiceEditForm,

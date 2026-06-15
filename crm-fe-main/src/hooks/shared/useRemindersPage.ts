@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { tasksApi, usersApi, leadsApi } from "@/lib/api";
 import { getDepartments } from "@/lib/supabase-queries";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { toast } from "sonner";
 
 export function useRemindersPage() {

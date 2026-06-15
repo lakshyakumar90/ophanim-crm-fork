@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { toLocaleStringIST } from "@/lib/date-utils";
 import { useAuth } from "@/providers/auth-provider";
 import { usePollingCoordinator } from "@/lib/polling-coordinator";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 interface Notification {
   id: string;

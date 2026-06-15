@@ -62,7 +62,7 @@ import { toast } from "sonner";
 import type { Project } from "@/types";
 import { projectsApi } from "@/lib/projects-api";
 import { useAuth } from "@/providers/auth-provider";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 function getRoleBadgeColor(role: string): string {
   switch (role) {

@@ -35,7 +35,7 @@ import { format, addDays, differenceInDays, isPast } from "date-fns";
 import type { Project, Task } from "@/types";
 import { projectsApi } from "@/lib/projects-api";
 import { tasksApi } from "@/lib/api";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { nowIST } from "@/lib/date-utils";
 
 const API_URL =

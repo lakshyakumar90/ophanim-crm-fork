@@ -24,9 +24,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { usePermission } from "@/hooks/use-permission";
-import { useSalaryBands } from "@/hooks/use-payroll";
-import { deleteSalaryBand, fetchHrEmployees, getPayrollErrorMessage } from "@/lib/payroll-client";
+import { usePermission } from "@/hooks/auth/usePermission";
+import { useSalaryBands } from "@/hooks/hr/usePayroll";
+import { deleteSalaryBand, getPayrollErrorMessage } from "@/lib/payroll-client";
+import { fetchHrEmployees } from "@/lib/hr-employee-api";
 import { formatINR } from "@/lib/payroll-format";
 import type { HrEmployeeOption, SalaryBand } from "@/types/payroll";
 import { SalaryBandModal } from "@/components/hr/payroll/salary-band-modal";
@@ -76,17 +77,17 @@ export default function SalaryBandsPage() {
 
   const refreshEmployees = async () => {
     try {
-      const list = (await fetchHrEmployees()) as Record<string, unknown>[];
+      const list = await fetchHrEmployees();
       setEmployees(
-        (Array.isArray(list) ? list : []).map((e) => ({
+        list.map((e) => ({
           id: String(e.id),
-          fullName: String((e as any).fullName ?? (e as any).full_name ?? "Unknown"),
-          full_name: (e as any).full_name as string | undefined,
-          email: String((e as any).email ?? ""),
-          departmentName: ((e as any).departmentName ?? (e as any).department_name) as string | null,
-          teamName: ((e as any).teamName ?? (e as any).team_name) as string | null,
-          current_ctc: ((e as any).current_ctc as number | null) ?? null,
-          jobTitle: ((e as any).jobTitle ?? (e as any).job_title) as string | null,
+          fullName: e.fullName,
+          full_name: e.fullName,
+          email: e.email ?? "",
+          departmentName: e.departmentName,
+          teamName: e.teamName,
+          current_ctc: e.currentCtc ?? null,
+          jobTitle: e.jobTitle ?? null,
         })),
       );
     } catch {

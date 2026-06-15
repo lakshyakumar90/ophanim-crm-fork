@@ -7,7 +7,7 @@ import { leadsApi, csvApi } from "@/lib/api";
 import { useAuth, useIsAdmin } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import type { Lead, LeadActivity } from "@/types";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 interface LeadReminderRecord {
   id: string;

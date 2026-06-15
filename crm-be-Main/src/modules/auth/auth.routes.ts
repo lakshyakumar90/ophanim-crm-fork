@@ -1,9 +1,9 @@
 import { Router, type RequestHandler, type Router as RouterType } from "express";
-import { authenticate } from "../../../middleware/auth.middleware.js";
-import { requireAdmin } from "../../../middleware/authorization.middleware.js";
-import { validateBody } from "../../../middleware/validation.middleware.js";
-import { authRateLimiter } from "../../../middleware/rate-limiter.middleware.js";
-import { asyncHandler } from "../../../middleware/error.middleware.js";
+import { authenticate } from "../../middleware/auth.middleware.js";
+import { requireAdmin } from "../../middleware/authorization.middleware.js";
+import { validateBody } from "../../middleware/validation.middleware.js";
+import { authRateLimiter } from "../../middleware/rate-limiter.middleware.js";
+import { asyncHandler } from "../../middleware/error.middleware.js";
 import {
   loginSchema,
   registerSchema,

@@ -30,7 +30,7 @@ import {
   Bar,
   Legend,
 } from "recharts";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 const COLORS = [
   "#10b981",

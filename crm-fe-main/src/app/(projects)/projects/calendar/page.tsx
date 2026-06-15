@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { projectsApi, tasksApi } from "@/lib/api";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 

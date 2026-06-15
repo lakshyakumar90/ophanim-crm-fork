@@ -1,26 +1,26 @@
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { config } from "../../../config/env.js";
-import { supabaseAdmin } from "../../../config/supabase.js";
-import { ApiError } from "../../../utils/responses.js";
-import { ERROR_CODES } from "../../../utils/error-codes.js";
+import { config } from "../../config/env.js";
+import { supabaseAdmin } from "../../config/supabase.js";
+import { ApiError } from "../../utils/responses.js";
+import { ERROR_CODES } from "../../utils/error-codes.js";
 import * as otpService from "./otp.service.js";
-import * as emailService from "../../operations/email/email.service.js";
-import { logActivity } from "../../shared/activity-events.service.js";
+import * as emailService from "../operations/email/email.service.js";
+import { logActivity } from "../shared/activity-events.service.js";
 import {
   hashPassword,
   comparePassword,
   generateId,
   parseDuration,
   getCurrentTimestamp,
-} from "../../../utils/helpers.js";
-import { nowIST, getTimestampIST } from "../../../utils/date-utils.js";
-import { deriveMostSeniorJobTitle } from "../../../utils/job-title.utils.js";
+} from "../../utils/helpers.js";
+import { nowIST, getTimestampIST } from "../../utils/date-utils.js";
+import { deriveMostSeniorJobTitle } from "../../utils/job-title.utils.js";
 import {
   generateTOTPSecret,
   generateQRCode,
   verifyTOTP,
-} from "../../../utils/2fa.utils.js";
+} from "../../utils/2fa.utils.js";
 import type {
   LoginInput,
   RegisterInput,
@@ -32,8 +32,8 @@ import type {
   RefreshTokenResponse,
   AccessTokenPayload,
   RefreshTokenPayload,
-} from "../../../types/api.types.js";
-import type { UserRole } from "../../../config/constants.js";
+} from "../../types/api.types.js";
+import type { UserRole } from "../../config/constants.js";
 
 import {
   hasEmployeeProfilesSalaryBandColumn,

@@ -5,7 +5,7 @@ export * from "./useLeaveStats";
 export * from "./useEmployees";
 export * from "./useEmployeesPage";
 export * from "./useBulkEmployeeActions";
-export * from "./use-payroll";
+export * from "./usePayroll";
 export * from "./usePerformance";
 export * from "./useHrDashboard";
 export * from "./useHrAnalytics";

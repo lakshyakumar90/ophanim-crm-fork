@@ -20,7 +20,7 @@ import {
   uuidParamSchema,
   bulkUpdateUsersSchema,
 } from "../users/users.validator.js";
-import { adminResetPasswordSchema } from "../../auth/auth/auth.validator.js";
+import { adminResetPasswordSchema } from "../../auth/auth.validator.js";
 import * as usersController from "./users.controller.js";
 
 const upload = multer({

@@ -23,16 +23,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { usePermission } from "@/hooks/use-permission";
+import { usePermission } from "@/hooks/auth/usePermission";
 import {
   deletePerformanceCycle,
   fetchPerformanceAnalytics,
   updatePerformanceCycle,
 } from "@/lib/performance-api";
 import type { ReviewCycleRow } from "@/types/performance";
-import { useReviewCycles } from "@/hooks/usePerformance";
-import { ReviewCycleCard } from "@/components/performance/ReviewCycleCard";
-import { HRPerformanceDashboardWidgets } from "@/components/performance/PerformanceAnalytics";
+import { useReviewCycles } from "@/hooks/hr/usePerformance";
+import { ReviewCycleCard } from "@/components/hr/performance/ReviewCycleCard";
+import { HRPerformanceDashboardWidgets } from "@/components/hr/performance/PerformanceAnalytics";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 

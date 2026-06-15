@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LeadActivity } from "@/types";
-import { LeadActivityTimeline } from "@/components/leads/detail/LeadActivityTimeline";
+import { LeadActivityTimeline } from "@/components/sales/leads/detail/LeadActivityTimeline";
 
 interface LeadActivityTabProps {
   activities: LeadActivity[];

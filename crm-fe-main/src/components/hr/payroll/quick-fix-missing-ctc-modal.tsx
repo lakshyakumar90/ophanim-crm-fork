@@ -26,7 +26,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { proposeIncrement, getPayrollErrorMessage } from "@/lib/payroll-client";
 import { fetchHrEmployees } from "@/lib/hr-employee-api";
-import { useSalaryBands } from "@/hooks/use-payroll";
+import { useSalaryBands } from "@/hooks/hr/usePayroll";
 import type { HREmployee } from "@/types/hr.types";
 import type { SalaryBand } from "@/types/payroll";
 

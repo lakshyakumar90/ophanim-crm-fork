@@ -36,7 +36,7 @@ import {
 import { tasksApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import type { Task } from "@/types";
 
 const priorityConfig = {

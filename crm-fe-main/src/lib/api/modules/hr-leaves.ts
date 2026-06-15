@@ -1,5 +1,4 @@
 import { api } from "@/lib/api";
-import { fetchHrEmployees as fetchCanonicalHrEmployees } from "@/lib/hr-employee-api";
 import * as sq from "@/lib/supabase-queries";
 import { smartRead, type QueryStrategy } from "@/lib/smart-read";
 import type {
@@ -187,11 +186,6 @@ export async function rejectLeave(id: string, notes?: string): Promise<LeaveRequ
     notes,
   });
   return unwrap(res);
-}
-
-export async function fetchHrEmployees(): Promise<HrEmployeeDirectoryRow[]> {
-  // Canonical source lives in hr-employee-api; keep this wrapper for compatibility.
-  return (await fetchCanonicalHrEmployees()) as HrEmployeeDirectoryRow[];
 }
 
 /** Approved leaves for calendar — filter client-side from full list or dedicated fetch */

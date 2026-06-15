@@ -57,9 +57,9 @@ ophanim-crm/
 ├── crm-fe-main/          # Next.js UI — route groups by domain
 │   └── src/
 │       ├── app/          # (auth), (sales), (hr), (finance), (projects), (global), (shared)
-│       ├── components/   # Domain UI components
-│       ├── hooks/        # Page and form hooks
-│       ├── lib/          # API client, Supabase reads, schemas
+│       ├── components/   # Domain UI (sales/leads, hr/payroll, hr/performance, …)
+│       ├── hooks/        # Domain hooks (auth/, hr/, sales/, layout/, …)
+│       ├── lib/api/      # REST client modules per domain
 │       └── config/       # Sidebar nav, shared constants
 └── crm-be-Main/          # Express API
     └── src/modules/      # auth, sales, hr, finance, operations, projects, core, system, shared

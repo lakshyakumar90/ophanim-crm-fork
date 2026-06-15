@@ -1,6 +1,5 @@
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { fetchHrEmployees as fetchCanonicalHrEmployees } from "@/lib/hr-employee-api";
 import type {
   IncrementProposal,
   PayrollEmployeeSelection,
@@ -156,9 +155,4 @@ export async function fetchPayrollAnalytics(): Promise<PayrollAnalytics> {
     return { monthlyTrend: [], departmentCosts: {}, anomalies: [] };
   }
   return d as PayrollAnalytics;
-}
-
-export async function fetchHrEmployees(): Promise<unknown[]> {
-  // Canonical source lives in hr-employee-api; keep this wrapper for compatibility.
-  return fetchCanonicalHrEmployees();
 }

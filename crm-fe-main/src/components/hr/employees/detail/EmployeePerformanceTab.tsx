@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePermission } from "@/hooks/use-permission";
+import { usePermission } from "@/hooks/auth/usePermission";
 import { fetchPerformanceCycles, fetchCycleReviews } from "@/lib/performance-api";
 import type { PerformanceReviewRow } from "@/types/performance";
 import { Skeleton } from "@/components/ui/skeleton";

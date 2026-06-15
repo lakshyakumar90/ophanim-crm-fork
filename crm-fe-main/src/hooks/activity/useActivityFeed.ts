@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { activitiesApi, teamsApi, usersApi } from "@/lib/api";
 import { useDepartment } from "@/providers/department-context";
 import { useAuth } from "@/providers/auth-provider";

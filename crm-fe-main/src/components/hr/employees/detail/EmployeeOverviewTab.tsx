@@ -21,7 +21,7 @@ import { formatJoinedDisplay, formatCTC, canSeeFullCTC } from "@/lib/employeeHel
 import { useAuth } from "@/providers/auth-provider";
 import { Copy } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { useSalaryBands } from "@/hooks/use-payroll";
+import { useSalaryBands } from "@/hooks/hr/usePayroll";
 
 type TeamOpt = {
   id: string;

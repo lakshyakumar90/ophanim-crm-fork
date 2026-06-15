@@ -26,7 +26,7 @@ import {
 import { CircleDollarSign, ExternalLink, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 const STATUS_COLORS: Record<string, string> = {
   success:

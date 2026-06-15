@@ -58,7 +58,7 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 const statusColors: Record<string, string> = {
   present: "bg-green-100 text-green-700",

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ALL_JOB_TITLES } from "../../../config/constants.js";
+import { ALL_JOB_TITLES } from "../../config/constants.js";
 
 // Password requirements
 const passwordSchema = z

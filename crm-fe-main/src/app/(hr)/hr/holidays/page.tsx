@@ -46,7 +46,7 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { useAuth } from "@/providers/auth-provider";
 import {
   type CalEvent,

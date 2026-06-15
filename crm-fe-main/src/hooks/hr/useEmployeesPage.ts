@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
-import { usePermission } from "@/hooks/use-permission";
-import { useEmployees } from "@/hooks/useEmployees";
-import { useBulkDeactivate, activateOne, deactivateOne } from "@/hooks/useBulkEmployeeActions";
+import { usePermission } from "@/hooks/auth/usePermission";
+import { useEmployees } from "@/hooks/hr/useEmployees";
+import { useBulkDeactivate, activateOne, deactivateOne } from "@/hooks/hr/useBulkEmployeeActions";
 import {
   buildEmployeeCSV,
   canFetchCompensationHistory,

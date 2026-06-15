@@ -30,7 +30,7 @@ import {
   Search,
 } from "lucide-react";
 import Link from "next/link";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 export default function EmailComposePage() {
   const router = useRouter();

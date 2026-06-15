@@ -31,7 +31,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TeamDiscussion } from "@/app/(shared)/components/TeamDiscussion";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 export default function TeamDetailPage() {
   const { id } = useParams();

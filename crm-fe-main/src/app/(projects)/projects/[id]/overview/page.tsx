@@ -32,7 +32,7 @@ import type { Project } from "@/types";
 import { projectsApi } from "@/lib/projects-api";
 import { leadsApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";

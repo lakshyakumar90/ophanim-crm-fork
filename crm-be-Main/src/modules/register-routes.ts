@@ -1,7 +1,7 @@
 import type { Application } from "express";
 import { API_PREFIX } from "../config/constants.js";
 import healthRoutes from "./system/health/health.routes.js";
-import authRoutes from "./auth/auth/auth.routes.js";
+import authRoutes from "./auth/auth.routes.js";
 import usersRoutes from "./core/users/users.routes.js";
 import teamsRoutes from "./core/teams/teams.routes.js";
 import teamNotesRoutes from "./core/team-notes/team-notes.routes.js";

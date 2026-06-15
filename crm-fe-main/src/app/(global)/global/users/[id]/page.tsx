@@ -29,7 +29,7 @@ import {
   Tag,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { useAuth } from "@/providers/auth-provider";
 import { canSeeFullCTC, formatCTC } from "@/lib/employeeHelpers";
 

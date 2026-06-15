@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { usersApi, teamsApi } from "@/lib/api";
 import { useIsAdmin } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import type { EmployeeBulkUpdate } from "@/components/hr/employees/BulkEditTable";
 import { toast } from "sonner";
 

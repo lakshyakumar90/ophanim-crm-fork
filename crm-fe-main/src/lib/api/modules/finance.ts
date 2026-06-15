@@ -1,7 +1,8 @@
-import api from "./api";
+import { api } from "../client";
+import { unwrap as unwrapResponse } from "../unwrap";
 
 function unwrap(res: any) {
-  return res?.data?.data ?? res?.data ?? res;
+  return res?.data?.data ?? res?.data ?? unwrapResponse(res);
 }
 
 export type CurrencyCode = "USD" | "CAD" | "GBP" | "EUR" | "INR";

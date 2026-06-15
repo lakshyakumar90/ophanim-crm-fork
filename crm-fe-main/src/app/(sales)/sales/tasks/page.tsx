@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import type { Task } from "@/types";
 import { toLocaleDateStringIST, nowIST } from "@/lib/date-utils";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 const statusColors = {
   todo: "bg-muted text-foreground",

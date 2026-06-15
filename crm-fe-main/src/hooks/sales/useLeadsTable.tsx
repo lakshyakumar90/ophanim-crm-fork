@@ -13,7 +13,7 @@ import { formatIST } from "@/lib/date-utils";
 import type { Lead } from "@/types";
 import { getStatusColor, getStatusLabel } from "@/lib/lead-status-config";
 import { User, FolderKanban, Copy } from "lucide-react";
-import { DEFAULT_COLUMNS } from "@/components/leads/leads-list-constants";
+import { DEFAULT_COLUMNS } from "@/components/sales/leads/leads-list-constants";
 
 export type AssignmentFilter = "all" | "assigned" | "unassigned";
 

@@ -3,19 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
-import { usePermission, useAnyPermission } from "@/hooks/use-permission";
+import { usePermission, useAnyPermission } from "@/hooks/auth/usePermission";
 import {
   usePayrollRuns,
   useIncrements,
   usePayrollAnalytics,
-} from "@/hooks/hr/use-payroll";
+} from "@/hooks/hr/usePayroll";
 import {
-  fetchHrEmployees,
   approvePayrollRun,
   getPayrollErrorMessage,
   approveIncrement,
   rejectIncrement,
 } from "@/lib/payroll-client";
+import { fetchHrEmployees } from "@/lib/hr-employee-api";
 import { formatINR, parseNum } from "@/lib/payroll-format";
 import type { HrEmployeeOption, PayrollRun } from "@/types/payroll";
 import { toast } from "sonner";
@@ -85,18 +85,18 @@ export function usePayrollPage() {
     try {
       const list = await fetchHrEmployees();
       setEmployees(
-        (list as Record<string, unknown>[]).map((e) => ({
+        list.map((e) => ({
           id: String(e.id),
-          fullName: String(e.fullName ?? e.full_name ?? "Unknown"),
-          full_name: e.full_name as string | undefined,
-          email: String(e.email ?? ""),
-          departmentId: (e.departmentId ?? e.department_id) as string | null,
-          teamId: (e.teamId ?? e.team_id) as string | null,
-          departmentName: (e.departmentName ?? e.department_name) as string | null,
-          teamName: (e.teamName ?? e.team_name) as string | null,
-          currentCtc: (e.currentCtc as number | null) ?? null,
-          current_ctc: ((e.current_ctc ?? e.currentCtc) as number | null) ?? null,
-          jobTitle: (e.jobTitle ?? e.job_title) as string | null,
+          fullName: e.fullName,
+          full_name: e.fullName,
+          email: e.email ?? "",
+          departmentId: e.departmentId,
+          teamId: e.teamId,
+          departmentName: e.departmentName,
+          teamName: e.teamName,
+          currentCtc: e.currentCtc ?? null,
+          current_ctc: e.currentCtc ?? null,
+          jobTitle: e.jobTitle ?? null,
         })),
       );
     } catch {

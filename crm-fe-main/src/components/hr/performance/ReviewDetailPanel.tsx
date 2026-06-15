@@ -11,8 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/providers/auth-provider";
-import { useAnyPermission, usePermission } from "@/hooks/use-permission";
-import { usePerformanceReview } from "@/hooks/usePerformance";
+import { useAnyPermission, usePermission } from "@/hooks/auth/usePermission";
+import { usePerformanceReview } from "@/hooks/hr/usePerformance";
 import {
   canSeeCalibratedRating,
   goalsWeightTotal,

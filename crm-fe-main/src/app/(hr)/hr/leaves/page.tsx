@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { usePermission } from "@/hooks/use-permission";
-import { useLeaveStats } from "@/hooks/useLeaveStats";
+import { usePermission } from "@/hooks/auth/usePermission";
+import { useLeaveStats } from "@/hooks/hr/useLeaveStats";
 import {
   fetchApprovedLeavesForCalendar,
-  fetchHrEmployees,
   fetchLeaveRequests,
   fetchLeaveTypes,
   fetchPendingLeaves,
 } from "@/lib/hr-leave-api";
+import { fetchHrEmployees } from "@/lib/hr-employee-api";
 import type { HrEmployeeDirectoryRow, LeaveRequestDto, LeaveTypeDto } from "@/types/hr-leaves";
 import { PendingApprovalsTab } from "@/components/hr/leaves/PendingApprovalsTab";
 import { AllRequestsTab } from "@/components/hr/leaves/AllRequestsTab";

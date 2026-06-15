@@ -31,8 +31,8 @@ import {
 import { toLocaleDateStringIST } from "@/lib/date-utils";
 import type { Lead } from "@/types";
 import type { LeadDetailState } from "@/hooks/sales/useLeadDetail";
-import { LeadNotesSection } from "@/components/leads/detail/LeadNotesSection";
-import { LeadReminderWidget } from "@/components/leads/lead-reminder-widget";
+import { LeadNotesSection } from "@/components/sales/leads/detail/LeadNotesSection";
+import { LeadReminderWidget } from "@/components/sales/leads/lead-reminder-widget";
 
 interface LeadInfoTabProps {
   detail: LeadDetailState;

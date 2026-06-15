@@ -30,7 +30,7 @@ import {
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TeamDiscussion } from "@/app/(shared)/components/TeamDiscussion";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 export default function GlobalTeamDetailPage() {
   const { id } = useParams();

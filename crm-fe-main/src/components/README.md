@@ -15,15 +15,12 @@ Parent: [Frontend README](../../README.md)
 | `dashboard/` | Generic dashboard cards and stats | Domain dashboards |
 | `finance/` | Invoices, expenses, emails, recurring forms and tables | `/finance/*` |
 | `global/` | Admin users, teams, roles UI | `/global/*` |
-| `hr/` | Employees, payroll, leaves, documents, analytics, performance | `/hr/*` |
+| `hr/` | Employees, payroll, leaves, documents, analytics, performance | `/hr/*`, `/performance/*` |
 | `layout/` | Sidebar, header, nav links | All authenticated layouts |
-| `leads/` | Lead list, kanban, detail tabs, forms | `/sales/leads/*` |
-| `notifications/` | Notification list, startup alerts | `/notifications` |
-| `performance/` | Peer feedback, review widgets | `/performance/*` |
+| `sales/` | Sales dashboard, analytics, and leads UI | `/sales`, `/sales/leads/*` |
 | `projects/` | Project cards, tabs, member management | `/projects/*` |
+| `notifications/` | Notification list, startup alerts | `/notifications` |
 | `reminders/` | Reminder filters and sections | `/reminders` |
-| `sales/` | Sales dashboard and analytics widgets | `/sales`, `/sales/analytics` |
-| `search/` | Global search UI | Header search |
 | `settings/` | Profile, password, notification settings | `/settings/*` |
 | `shared/` | Cross-domain selectors and small widgets | Multiple domains |
 | `ui/` | shadcn/Radix primitives (Button, Dialog, etc.) | All domains |

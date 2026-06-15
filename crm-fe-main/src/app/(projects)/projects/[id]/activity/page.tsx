@@ -27,7 +27,7 @@ import { activitiesApi } from "@/lib/api";
 import { getProjectActivities } from "@/lib/supabase-queries";
 import { formatIST, formatDistanceToNowIST } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { useAuth } from "@/providers/auth-provider";
 import { subDays, startOfDay, endOfDay } from "date-fns";
 import { nowIST } from "@/lib/date-utils";

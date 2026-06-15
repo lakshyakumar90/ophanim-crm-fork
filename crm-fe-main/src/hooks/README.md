@@ -14,14 +14,17 @@ React hooks organized by domain. Pages should stay thin and delegate data, forms
 
 | Folder | Domain |
 |--------|--------|
+| `auth/` | Login form, permission hooks |
 | `hr/` | Documents, leaves, employees, payroll, performance |
 | `sales/` | Leads list, kanban, lead detail |
 | `finance/` | Invoices and finance forms |
 | `attendance/` | Clock-in, team overview, date ranges |
 | `activity/` | Activity feed |
-| `layout/` | Sidebar badges and layout helpers |
+| `layout/` | Sidebar badges, header refresh, layout helpers |
+| `core/` | Global users page |
+| `shared/` | Cross-domain page hooks (reminders) |
 
-Root-level shims (`useEmployees.ts`, etc.) re-export from `hr/` for backward compatibility. Prefer importing from `@/hooks/hr` in new code.
+Import from domain folders directly (e.g. `@/hooks/hr/useEmployees`). The `hr/index.ts` barrel re-exports common HR hooks.
 
 ## Related
 

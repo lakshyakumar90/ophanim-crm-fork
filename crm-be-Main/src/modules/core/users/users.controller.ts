@@ -322,7 +322,7 @@ export const resetUserPassword = async (
 ) => {
   try {
     const { newPassword } = req.body;
-    const authService = await import("../../auth/auth/auth.service.js");
+    const authService = await import("../../auth/auth.service.js");
     await authService.adminResetPassword(
       req.params["id"] as string,
       newPassword,

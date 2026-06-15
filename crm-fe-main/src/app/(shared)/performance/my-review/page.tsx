@@ -11,10 +11,10 @@ import {
   submitSelfAssessment,
 } from "@/lib/performance-api";
 import type { PerformanceReviewRow, ReviewGoal } from "@/types/performance";
-import { StatusTracker } from "@/components/performance/StatusTracker";
-import { RatingDisplay } from "@/components/performance/RatingDisplay";
-import { PeerFeedbackRadar } from "@/components/performance/PeerFeedbackRadar";
-import { PIPNotification } from "@/components/performance/PIPNotification";
+import { StatusTracker } from "@/components/hr/performance/StatusTracker";
+import { RatingDisplay } from "@/components/hr/performance/RatingDisplay";
+import { PeerFeedbackRadar } from "@/components/hr/performance/PeerFeedbackRadar";
+import { PIPNotification } from "@/components/hr/performance/PIPNotification";
 import {
   canSeeCalibratedRating,
   goalsWeightTotal,

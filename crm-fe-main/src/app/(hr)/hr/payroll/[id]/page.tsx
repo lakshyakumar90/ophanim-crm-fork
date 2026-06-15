@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { usePermission } from "@/hooks/use-permission";
-import { usePayrollRun, usePayrollRecords, payrollMutations } from "@/hooks/use-payroll";
-import { fetchHrEmployees, getPayrollErrorMessage } from "@/lib/payroll-client";
+import { usePermission } from "@/hooks/auth/usePermission";
+import { usePayrollRun, usePayrollRecords, payrollMutations } from "@/hooks/hr/usePayroll";
+import { getPayrollErrorMessage } from "@/lib/payroll-client";
+import { fetchHrEmployees } from "@/lib/hr-employee-api";
 import { formatINR, formatPayrollMonthLabel } from "@/lib/payroll-format";
 import type { PayrollRecord } from "@/types/payroll";
 import { DisburseConfirmDialog } from "@/components/hr/payroll/disburse-confirm-dialog";
@@ -49,9 +50,9 @@ export default function PayrollRunDetailPage() {
       try {
         const list = await fetchHrEmployees();
         const map: Record<string, string> = {};
-        for (const e of list as Record<string, unknown>[]) {
+        for (const e of list) {
           const uid = String(e.id);
-          const dept = (e.departmentName ?? e.department_name ?? "Unknown") as string;
+          const dept = e.departmentName ?? "Unknown";
           map[uid] = dept || "Unknown";
         }
         setDeptByUser(map);

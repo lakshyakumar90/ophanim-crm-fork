@@ -22,7 +22,7 @@ import {
   updatePerformanceCycle,
 } from "@/lib/performance-api";
 import { usersApi } from "@/lib/api";
-import { usePermission } from "@/hooks/use-permission";
+import { usePermission } from "@/hooks/auth/usePermission";
 import { cn } from "@/lib/utils";
 import type { ReviewFrequency } from "@/types/performance";
 

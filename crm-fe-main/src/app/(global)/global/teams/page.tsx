@@ -42,7 +42,7 @@ import { toast } from "sonner";
 import type { Team } from "@/types";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 export default function GlobalTeamsPage() {
   const router = useRouter();

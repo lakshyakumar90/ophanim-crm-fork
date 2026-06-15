@@ -18,7 +18,7 @@ import {
   getStatusColor,
   getStatusLabel,
 } from "@/lib/lead-status-config";
-import { KANBAN_STATUSES } from "@/components/leads/leads-list-constants";
+import { KANBAN_STATUSES } from "@/components/sales/leads/leads-list-constants";
 
 interface LeadsKanbanBoardProps {
   onDragEnd: (result: DropResult) => void;

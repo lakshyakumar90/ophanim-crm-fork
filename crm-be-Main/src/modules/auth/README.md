@@ -4,26 +4,20 @@ Authentication, registration, password management, OTP, and two-factor auth.
 
 Parent: [Modules README](../README.md)
 
-## Subfolders
-
-| Folder | Purpose |
-|--------|---------|
-| `auth/` | Routes, controller, validators, and auth services |
-
 ## Key entry files
 
 | File | Role |
 |------|------|
-| `auth/auth.routes.ts` | POST `/login`, `/register`, `/refresh`, `/logout`, 2FA and password routes |
-| `auth/auth.controller.ts` | HTTP handlers delegating to services |
-| `auth/auth.service.ts` | Facade over specialized auth services |
-| `auth/auth-session.service.ts` | Token issue, refresh, logout |
-| `auth/auth-registration.service.ts` | User registration |
-| `auth/auth-password.service.ts` | Password change and OTP reset |
-| `auth/auth-2fa.service.ts` | TOTP setup, verify, disable |
-| `auth/otp.service.ts` | OTP generation and verification |
-| `auth/auth.validator.ts` | Zod schemas for auth payloads |
-| `auth/auth.shared.ts` | Shared types and helpers |
+| `auth.routes.ts` | POST `/login`, `/register`, `/refresh`, `/logout`, 2FA and password routes |
+| `auth.controller.ts` | HTTP handlers delegating to services |
+| `auth.service.ts` | Facade over specialized auth services |
+| `auth-session.service.ts` | Token issue, refresh, logout |
+| `auth-registration.service.ts` | User registration |
+| `auth-password.service.ts` | Password change and OTP reset |
+| `auth-2fa.service.ts` | TOTP setup, verify, disable |
+| `otp.service.ts` | OTP generation and verification |
+| `auth.validator.ts` | Zod schemas for auth payloads |
+| `auth.shared.ts` | Shared types and helpers |
 
 ## API prefix
 

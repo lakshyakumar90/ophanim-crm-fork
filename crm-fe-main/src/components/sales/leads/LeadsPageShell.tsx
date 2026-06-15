@@ -29,21 +29,21 @@ import {
   Users,
   Bell,
 } from "lucide-react";
-import { ImportLeadsDialog } from "@/components/leads/import-leads-dialog";
-import { ExportLeadsDialog } from "@/components/leads/export-leads-dialog";
-import { BulkEditLeadsDialog } from "@/components/leads/bulk-edit-leads-dialog";
-import { LeadsColumnPicker } from "@/components/leads/LeadsColumnPicker";
-import { LeadsFiltersToolbar } from "@/components/leads/LeadsFiltersToolbar";
-import { LeadsTableView } from "@/components/leads/LeadsTableView";
-import { LeadsKanbanBoard } from "@/components/leads/LeadsKanbanBoard";
+import { ImportLeadsDialog } from "@/components/sales/leads/import-leads-dialog";
+import { ExportLeadsDialog } from "@/components/sales/leads/export-leads-dialog";
+import { BulkEditLeadsDialog } from "@/components/sales/leads/bulk-edit-leads-dialog";
+import { LeadsColumnPicker } from "@/components/sales/leads/LeadsColumnPicker";
+import { LeadsFiltersToolbar } from "@/components/sales/leads/LeadsFiltersToolbar";
+import { LeadsTableView } from "@/components/sales/leads/LeadsTableView";
+import { LeadsKanbanBoard } from "@/components/sales/leads/LeadsKanbanBoard";
 import { useLeadsTable } from "@/hooks/sales/useLeadsTable";
 import { useLeadsKanban } from "@/hooks/sales/useLeadsKanban";
 import {
   getReminderLeadId,
   getReminderAt,
-} from "@/components/leads/leads-reminder-utils";
+} from "@/components/sales/leads/leads-reminder-utils";
 import type { Lead } from "@/types";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 export function LeadsPageShell() {
   const router = useRouter();

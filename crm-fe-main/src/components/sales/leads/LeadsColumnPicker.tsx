@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Filter } from "lucide-react";
-import { ALL_COLUMNS } from "@/components/leads/leads-list-constants";
+import { ALL_COLUMNS } from "@/components/sales/leads/leads-list-constants";
 
 interface LeadsColumnPickerProps {
   visibleColumns: string[];

@@ -33,8 +33,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/providers/auth-provider";
-import { useAnyPermission, usePermission } from "@/hooks/use-permission";
-import { useCycleDetail } from "@/hooks/usePerformance";
+import { useAnyPermission, usePermission } from "@/hooks/auth/usePermission";
+import { useCycleDetail } from "@/hooks/hr/usePerformance";
 import {
   canSeeCalibratedRating,
   deadlineUrgency,
@@ -47,11 +47,11 @@ import {
   releaseCycleResults,
 } from "@/lib/performance-api";
 import type { PerformanceReviewRow, ReviewStatus } from "@/types/performance";
-import { ReviewDetailPanel } from "@/components/performance/ReviewDetailPanel";
-import { CalibrationModal } from "@/components/performance/CalibrationModal";
-import { ReleaseConfirmDialog } from "@/components/performance/ReleaseConfirmDialog";
-import { CyclePerformanceAnalytics } from "@/components/performance/PerformanceAnalytics";
-import { RatingDisplay } from "@/components/performance/RatingDisplay";
+import { ReviewDetailPanel } from "@/components/hr/performance/ReviewDetailPanel";
+import { CalibrationModal } from "@/components/hr/performance/CalibrationModal";
+import { ReleaseConfirmDialog } from "@/components/hr/performance/ReleaseConfirmDialog";
+import { CyclePerformanceAnalytics } from "@/components/hr/performance/PerformanceAnalytics";
+import { RatingDisplay } from "@/components/hr/performance/RatingDisplay";
 import { toast } from "sonner";
 
 export default function CycleDetailPage() {

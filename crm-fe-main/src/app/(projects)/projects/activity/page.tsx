@@ -42,7 +42,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 // --- Types & Constants (Reused) ---
 

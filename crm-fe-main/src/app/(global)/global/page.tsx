@@ -28,7 +28,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { TodayReminders } from "@/components/dashboard/today-reminders";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";

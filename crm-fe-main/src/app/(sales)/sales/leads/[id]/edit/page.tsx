@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { leadsApi } from "@/lib/api";
 import { useIsAdmin } from "@/providers/auth-provider";
-import { LeadForm } from "@/components/leads/lead-form";
+import { LeadForm } from "@/components/sales/leads/lead-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Lead } from "@/types";
 

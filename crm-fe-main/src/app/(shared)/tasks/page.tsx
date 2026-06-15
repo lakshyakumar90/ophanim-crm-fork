@@ -31,7 +31,7 @@ import {
   Trash2,
   Check,
 } from "lucide-react";
-import { useHeaderRefresh } from "@/hooks/use-header-refresh";
+import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 type StatusFilter = "all" | "todo" | "in_progress" | "completed" | "cancelled";
 type PriorityFilter = "all" | "low" | "medium" | "high";

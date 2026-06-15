@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { usePermission } from "@/hooks/use-permission";
-import { useDocumentsList } from "@/hooks/useDocumentsList";
-import { useDocumentTypes } from "@/hooks/useDocumentTypes";
-import { useDocumentStats } from "@/hooks/useDocumentStats";
-import { fetchHrEmployees } from "@/lib/hr-leave-api";
+import { usePermission } from "@/hooks/auth/usePermission";
+import { useDocumentsList } from "@/hooks/hr/useDocumentsList";
+import { useDocumentTypes } from "@/hooks/hr/useDocumentTypes";
+import { useDocumentStats } from "@/hooks/hr/useDocumentStats";
+import { fetchHrEmployees } from "@/lib/hr-employee-api";
 import type { HrEmployeeDirectoryRow } from "@/types/hr-leaves";
 import type { EmployeeDocumentDto } from "@/types/hr-documents";
 import { DocumentKPICards } from "@/components/hr/documents/DocumentKPICards";

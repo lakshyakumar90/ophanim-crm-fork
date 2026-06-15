@@ -12,7 +12,7 @@ import {
   SALES_KANBAN_LOAD_MORE_STEP,
 } from "@/lib/kanban-contract";
 import type { DropResult } from "@hello-pangea/dnd";
-import { KANBAN_STATUSES } from "@/components/leads/leads-list-constants";
+import { KANBAN_STATUSES } from "@/components/sales/leads/leads-list-constants";
 
 export interface UseLeadsKanbanOptions {
   enabled: boolean;
