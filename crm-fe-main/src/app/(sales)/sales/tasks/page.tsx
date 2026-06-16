@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Suspense, useState, useCallback } from "react";
 import useSWR, { mutate } from "swr";
-import { useRouter } from "next/navigation";
+import { CreateTaskSheet } from "@/components/sales/tasks/CreateTaskSheet";
+import { TaskDetailSheet } from "@/components/sales/tasks/TaskDetailSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { tasksApi, usersApi } from "@/lib/api";
 import { useAuth, useIsManager } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -42,8 +44,8 @@ const priorityColors = {
   low: "bg-green-100 text-green-700",
 };
 
-export default function TasksPage() {
-  const router = useRouter();
+function TasksPageContent() {
+  const sheet = useSheetQuery();
   const isManager = useIsManager();
   const { user } = useAuth();
 
@@ -88,6 +90,7 @@ export default function TasksPage() {
   };
 
   return (
+    <>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
@@ -99,7 +102,7 @@ export default function TasksPage() {
         </div>
         {/* New Task Button - visible to all users */}
         <Button
-          onClick={() => router.push("/sales/tasks/new")}
+          onClick={sheet.openCreate}
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -195,7 +198,7 @@ export default function TasksPage() {
             <Card
               key={task.id}
               className="hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => router.push(`/sales/tasks/${task.id}`)}
+              onClick={() => sheet.openDetail(task.id)}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
@@ -287,5 +290,27 @@ export default function TasksPage() {
         </div>
       )}
     </div>
+
+    <CreateTaskSheet
+      open={sheet.createOpen}
+      onOpenChange={(open) => (open ? sheet.openCreate() : sheet.closeCreate())}
+      onCreated={() => refreshTasksData()}
+    />
+
+    <TaskDetailSheet
+      taskId={sheet.selectedId}
+      open={Boolean(sheet.selectedId)}
+      onOpenChange={(open) => !open && sheet.closeDetail()}
+      onUpdated={() => refreshTasksData()}
+    />
+    </>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <TasksPageContent />
+    </Suspense>
   );
 }

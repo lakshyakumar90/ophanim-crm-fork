@@ -17,7 +17,7 @@ import {
   submitExpense,
 } from "@/lib/finance/expense-actions";
 
-export function useCreateExpenseForm() {
+export function useCreateExpenseForm(options?: { onSuccess?: () => void }) {
   const { user } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,7 +46,11 @@ export function useCreateExpenseForm() {
     try {
       await submitExpense(values);
       toast.success("Expense submitted for approval");
-      router.push("/finance/expenses");
+      if (options?.onSuccess) {
+        options.onSuccess();
+      } else {
+        router.push("/finance/expenses");
+      }
     } catch (error: unknown) {
       toast.error(getSubmitExpenseErrorMessage(error));
     } finally {

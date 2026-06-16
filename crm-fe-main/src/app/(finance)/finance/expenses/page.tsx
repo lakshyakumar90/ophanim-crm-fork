@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Suspense, useState, useCallback } from "react";
 import useSWR from "swr";
 import {
   expensesApi,
-  expenseCategoriesApi,
   type Expense,
 } from "@/lib/finance-api";
 import { useAuth } from "@/providers/auth-provider";
+import { CreateExpenseSheet } from "@/components/finance/expenses/CreateExpenseSheet";
+import { ExpenseDetailSheet } from "@/components/finance/expenses/ExpenseDetailSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,10 +58,19 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ExpensesPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <ExpensesPageContent />
+    </Suspense>
+  );
+}
+
+function ExpensesPageContent() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const sheet = useSheetQuery();
 
   const { data, isLoading, mutate } = useSWR(
     user ? ["expenses", statusFilter, search] : null,
@@ -109,6 +120,7 @@ export default function ExpensesPage() {
   const expenses = data?.data || [];
 
   return (
+    <>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -128,12 +140,10 @@ export default function ExpensesPage() {
             />
             Refresh
           </Button>
-          <Link href="/finance/expenses/new">
-            <Button size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Submit Expense
-            </Button>
-          </Link>
+          <Button size="sm" onClick={sheet.openCreate}>
+            <Plus className="w-4 h-4 mr-2" />
+            Submit Expense
+          </Button>
         </div>
       </div>
 
@@ -172,11 +182,9 @@ export default function ExpensesPage() {
         <div className="text-center py-12 text-muted-foreground">
           <Receipt className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>No expenses found</p>
-          <Link href="/finance/expenses/new">
-            <Button variant="link" className="mt-2">
-              Submit your first expense
-            </Button>
-          </Link>
+          <Button variant="link" className="mt-2" onClick={sheet.openCreate}>
+            Submit your first expense
+          </Button>
         </div>
       ) : (
         <div className="border rounded-lg">
@@ -194,7 +202,11 @@ export default function ExpensesPage() {
             </TableHeader>
             <TableBody>
               {expenses.map((expense: Expense) => (
-                <TableRow key={expense.id}>
+                <TableRow
+                  key={expense.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => sheet.openDetail(expense.id)}
+                >
                   <TableCell className="font-medium">
                     {expense.expense_number}
                   </TableCell>
@@ -219,7 +231,7 @@ export default function ExpensesPage() {
                       {expense.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -227,11 +239,9 @@ export default function ExpensesPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/finance/expenses/${expense.id}`}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </Link>
+                        <DropdownMenuItem onClick={() => sheet.openDetail(expense.id)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
                         </DropdownMenuItem>
                         {expense.status === "pending" &&
                           (user?.role === "admin" ||
@@ -262,5 +272,18 @@ export default function ExpensesPage() {
         </div>
       )}
     </div>
+
+    <CreateExpenseSheet
+      open={sheet.createOpen}
+      onOpenChange={(open) => (open ? sheet.openCreate() : sheet.closeCreate())}
+      onCreated={() => mutate()}
+    />
+    <ExpenseDetailSheet
+      expenseId={sheet.selectedId}
+      open={Boolean(sheet.selectedId)}
+      onOpenChange={(open) => !open && sheet.closeDetail()}
+      onUpdated={() => mutate()}
+    />
+    </>
   );
 }

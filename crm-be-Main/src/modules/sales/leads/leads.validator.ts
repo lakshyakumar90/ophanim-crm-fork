@@ -157,3 +157,57 @@ export const leadCommentParamSchema = z.object({
   id: z.string().uuid("Invalid lead ID format"),
   commentId: z.string().uuid("Invalid comment ID format"),
 });
+
+const convertProjectSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().optional().nullable(),
+  managerId: z.string().uuid().optional(),
+  clientName: z.string().optional().nullable(),
+  priority: z.enum(["low", "medium", "high"]).optional(),
+  startDate: z.string().optional().nullable(),
+  endDate: z.string().optional().nullable(),
+  teamMembers: z
+    .array(
+      z.object({
+        userId: z.string().uuid(),
+        role: z.string().min(1),
+      }),
+    )
+    .optional(),
+});
+
+const convertInvoiceLineSchema = z.object({
+  description: z.string().min(1),
+  quantity: z.number().positive(),
+  unit_price: z.number().min(0),
+  total: z.number().min(0).optional(),
+});
+
+const convertInvoiceSchema = z.object({
+  client_name: z.string().optional(),
+  client_email: z.string().email().optional(),
+  client_phone: z.string().optional(),
+  due_date: z.string().optional(),
+  currency: z.enum(["USD", "CAD", "GBP", "EUR", "INR"]).optional(),
+  status: z
+    .enum(["draft", "pending_approval", "sent", "paid", "overdue", "cancelled"])
+    .optional(),
+  notes: z.string().optional(),
+  department_id: z.string().uuid().optional(),
+  line_items: z.array(convertInvoiceLineSchema).optional(),
+});
+
+export const convertLeadSchema = z
+  .object({
+    createInvoice: z.boolean().optional(),
+    invoice: convertInvoiceSchema.optional(),
+    createProject: z.boolean().optional(),
+    project: convertProjectSchema.optional(),
+    notifyFinance: z.boolean().optional(),
+    notifyPM: z.boolean().optional(),
+  })
+  .refine((data) => data.createInvoice || data.createProject, {
+    message: "At least one of createInvoice or createProject must be true",
+  });
+
+export type ConvertLeadInput = z.infer<typeof convertLeadSchema>;

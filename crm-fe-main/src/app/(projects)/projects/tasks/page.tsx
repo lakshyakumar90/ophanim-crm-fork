@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { CreateProjectTaskSheet } from "@/components/projects/CreateProjectTaskSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { tasksApi, projectsApi } from "@/lib/api";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import {
@@ -34,12 +36,12 @@ import {
   ArrowDownCircle,
   Loader2,
   ArrowRight,
+  Plus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
 import type { Task } from "@/types";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
-import { CreateTaskDialog } from "@/components/projects/create-task-dialog";
 
 const priorityConfig = {
   high: {
@@ -66,7 +68,8 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   cancelled: { label: "Cancelled", color: "bg-red-100 text-red-700" },
 };
 
-export default function ProjectTasksPage() {
+function ProjectTasksPageContent() {
+  const sheet = useSheetQuery();
   const router = useRouter();
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
@@ -238,7 +241,10 @@ export default function ProjectTasksPage() {
                 Clear Filter
               </Button>
             )}
-            <CreateTaskDialog onSuccess={fetchTasks} />
+            <Button size="sm" onClick={sheet.openCreate}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Task
+            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -435,6 +441,21 @@ export default function ProjectTasksPage() {
           </Card>
         )}
       </div>
+
+      <CreateProjectTaskSheet
+        open={sheet.createOpen}
+        onOpenChange={(open) => (open ? sheet.openCreate() : sheet.closeCreate())}
+        onCreated={fetchTasks}
+        defaultProjectId={projectId || null}
+      />
     </div>
+  );
+}
+
+export default function ProjectTasksPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading…</div>}>
+      <ProjectTasksPageContent />
+    </Suspense>
   );
 }

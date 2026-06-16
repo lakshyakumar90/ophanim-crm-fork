@@ -383,7 +383,7 @@ export default function ProjectNotesPage() {
   const id = params.id as string;
 
   return (
-    <div className="flex flex-col gap-6 p-4 lg:p-6">
+    <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <StickyNote className="h-5 w-5" />

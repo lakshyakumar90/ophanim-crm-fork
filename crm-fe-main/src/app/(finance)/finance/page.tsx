@@ -8,16 +8,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/invoice-line-item-math";
 import {
   Wallet,
   TrendingUp,
-  TrendingDown,
   AlertTriangle,
   Clock,
   Receipt,
   FileText,
   RefreshCw,
-  IndianRupee,
   ArrowUpRight,
   ArrowDownRight,
 } from "lucide-react";
@@ -64,6 +63,30 @@ export default function FinanceDashboardPage() {
   }
 
   const summary = data?.summary || {};
+  const byCurrency = (summary.by_currency || {}) as Record<string, number>;
+  const currencyKeys = Object.keys(byCurrency);
+  const primaryCurrency = (
+    currencyKeys.length === 1
+      ? currencyKeys[0]
+      : currencyKeys.includes("USD")
+        ? "USD"
+        : summary.base_currency || "INR"
+  ) as "USD" | "CAD" | "GBP" | "EUR" | "INR";
+  const baseCurrency = (summary.base_currency || "INR") as
+    | "USD"
+    | "CAD"
+    | "GBP"
+    | "EUR"
+    | "INR";
+  const displayCurrency = currencyKeys.length > 0 ? primaryCurrency : baseCurrency;
+  const displayRevenue =
+    currencyKeys.length > 0 ? byCurrency[displayCurrency] ?? summary.total_revenue : summary.total_revenue;
+  const currencyNote =
+    currencyKeys.length > 1
+      ? `Totals shown in ${displayCurrency}; also: ${currencyKeys.filter((c) => c !== displayCurrency).join(", ")}`
+      : currencyKeys.length === 1
+        ? `All amounts in ${displayCurrency}`
+        : undefined;
 
   return (
     <div className="space-y-6">
@@ -90,14 +113,14 @@ export default function FinanceDashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Revenue"
-          value={formatCurrency(summary.total_revenue || 0)}
+          value={formatCurrency(displayRevenue || 0, displayCurrency)}
           icon={TrendingUp}
-          trend={{ label: "All time", isPositive: true }}
+          trend={{ label: currencyNote || "All time", isPositive: true }}
           color="emerald"
         />
         <StatCard
           title="Outstanding"
-          value={formatCurrency(summary.outstanding_amount || 0)}
+          value={formatCurrency(summary.outstanding_amount || 0, displayCurrency)}
           icon={Clock}
           trend={{
             label: `${summary.overdue_invoices || 0} overdue`,
@@ -107,13 +130,13 @@ export default function FinanceDashboardPage() {
         />
         <StatCard
           title="This Month Expenses"
-          value={formatCurrency(summary.this_month_expenses || 0)}
+          value={formatCurrency(summary.this_month_expenses || 0, displayCurrency)}
           icon={Receipt}
           color="rose"
         />
         <StatCard
           title="Net Balance"
-          value={formatCurrency(summary.net_balance || 0)}
+          value={formatCurrency(summary.net_balance || 0, displayCurrency)}
           icon={Wallet}
           trend={{
             label: "Revenue - Expenses",
@@ -164,7 +187,7 @@ export default function FinanceDashboardPage() {
                   {summary.overdue_invoices > 1 ? "s" : ""}
                 </p>
                 <p className="text-sm text-rose-600 dark:text-rose-400">
-                  Total overdue: {formatCurrency(summary.overdue_amount || 0)}
+                  Total overdue: {formatCurrency(summary.overdue_amount || 0, displayCurrency)}
                 </p>
               </div>
             </div>
@@ -199,7 +222,7 @@ export default function FinanceDashboardPage() {
                         {category}
                       </span>
                       <span className="font-medium">
-                        {formatCurrency(amount as number)}
+                        {formatCurrency(amount as number, displayCurrency)}
                       </span>
                     </div>
                   ),
@@ -256,7 +279,10 @@ export default function FinanceDashboardPage() {
                       </p>
                       {activity.amount && (
                         <p className="text-muted-foreground text-xs">
-                          {formatCurrency(activity.amount)}
+                          {formatCurrency(
+                            activity.amount,
+                            (activity.currency || displayCurrency) as typeof displayCurrency,
+                          )}
                         </p>
                       )}
                     </div>
@@ -288,7 +314,7 @@ export default function FinanceDashboardPage() {
                 <span>New Invoice</span>
               </Button>
             </Link>
-            <Link href="/finance/expenses/new">
+            <Link href="/finance/expenses?create=1">
               <Button
                 variant="outline"
                 className="w-full h-auto py-4 flex flex-col gap-2"
@@ -372,14 +398,6 @@ function StatCard({
       </CardContent>
     </Card>
   );
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
 }
 
 function DashboardSkeleton() {

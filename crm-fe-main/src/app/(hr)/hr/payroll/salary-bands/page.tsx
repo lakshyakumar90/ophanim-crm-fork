@@ -30,7 +30,7 @@ import { deleteSalaryBand, getPayrollErrorMessage } from "@/lib/payroll-client";
 import { fetchHrEmployees } from "@/lib/hr-employee-api";
 import { formatINR } from "@/lib/payroll-format";
 import type { HrEmployeeOption, SalaryBand } from "@/types/payroll";
-import { SalaryBandModal } from "@/components/hr/payroll/salary-band-modal";
+import { SalaryBandSheet } from "@/components/hr/payroll/salary-band-modal";
 import { SetCTCForEmployeeModal } from "@/components/hr/payroll/set-ctc-for-employee-modal";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -219,7 +219,7 @@ export default function SalaryBandsPage() {
         </Table>
       </div>
 
-      <SalaryBandModal
+      <SalaryBandSheet
         open={modalOpen}
         onOpenChange={setModalOpen}
         band={editing}

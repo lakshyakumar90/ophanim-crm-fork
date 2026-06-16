@@ -16,6 +16,17 @@ export const PERMISSIONS = {
       "leads:edit": "Edit leads",
       "leads:delete": "Delete leads",
       "leads:assign": "Assign leads to users",
+      "leads:convert": "Convert won leads to projects and invoices",
+    } as const,
+  },
+  tasks: {
+    label: "Tasks",
+    keys: {
+      "tasks:view": "View tasks",
+      "tasks:create": "Create tasks",
+      "tasks:edit": "Edit tasks",
+      "tasks:delete": "Delete tasks",
+      "tasks:assign": "Assign and reassign tasks",
     } as const,
   },
   projects: {
@@ -50,6 +61,61 @@ export const PERMISSIONS = {
     keys: {
       "finance:view": "View finance records",
       "finance:manage": "Manage finance (create, edit, approve)",
+      "invoices:view": "View invoices",
+      "invoices:manage": "Create and edit invoices",
+      "invoices:approve": "Approve or reject invoices",
+      "payments:view": "View payments",
+      "payments:manage": "Record and manage payments",
+      "expenses:view": "View expenses",
+      "expenses:manage": "Create and edit expenses",
+      "expenses:approve": "Approve or reject expenses",
+      "budgets:view": "View budgets",
+      "budgets:manage": "Manage budgets",
+    } as const,
+  },
+  quotes: {
+    label: "Quotes",
+    keys: {
+      "quotes:view": "View quotes",
+      "quotes:manage": "Create and edit quotes",
+      "quotes:approve": "Approve quotes",
+      "quotes:send": "Send quotes to clients",
+    } as const,
+  },
+  timesheets: {
+    label: "Timesheets",
+    keys: {
+      "timesheets:view": "View time entries",
+      "timesheets:manage": "Create and edit time entries",
+      "timesheets:approve": "Approve time entries",
+    } as const,
+  },
+  milestones: {
+    label: "Milestones",
+    keys: {
+      "milestones:view": "View project milestones",
+      "milestones:manage": "Manage project milestones",
+    } as const,
+  },
+  assets: {
+    label: "Assets",
+    keys: {
+      "assets:view": "View company assets",
+      "assets:manage": "Manage company assets",
+    } as const,
+  },
+  skills: {
+    label: "Skills",
+    keys: {
+      "skills:view": "View skills matrix",
+      "skills:manage": "Manage skills and certifications",
+    } as const,
+  },
+  benefits: {
+    label: "Benefits",
+    keys: {
+      "benefits:view": "View benefit plans",
+      "benefits:manage": "Manage benefit enrollments",
     } as const,
   },
   hr: {

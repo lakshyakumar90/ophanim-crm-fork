@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Suspense, useState, useCallback } from "react";
 import useSWR from "swr";
-import { useRouter, useParams } from "next/navigation";
+import { CreateTeamSheet } from "@/components/teams/CreateTeamSheet";
+import { TeamDetailSheet } from "@/components/teams/TeamDetailSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { teamsApi } from "@/lib/api";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -37,9 +39,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useDepartment } from "@/providers/department-context";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
-export default function TeamsPage() {
-  const router = useRouter();
-  
+function TeamsPageContent() {
+  const sheet = useSheetQuery();
   const getInitials = (name: string) => {
     if (!name) return "?";
     return name.split(" ").map((n) => n[0]).join("").toUpperCase().substring(0, 2);
@@ -95,6 +96,7 @@ export default function TeamsPage() {
   };
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
@@ -105,7 +107,7 @@ export default function TeamsPage() {
         </div>
         {isAdmin && (
           <Button
-            onClick={() => router.push(`/sales/teams/new`)}
+            onClick={sheet.openCreate}
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -134,7 +136,7 @@ export default function TeamsPage() {
             <Card
               key={team.id}
               className="hover:shadow-lg transition-shadow cursor-pointer group"
-              onClick={() => router.push(`/sales/teams/${team.id}`)}
+              onClick={() => sheet.openDetail(team.id)}
             >
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="flex items-center gap-3">
@@ -166,7 +168,7 @@ export default function TeamsPage() {
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(`/sales/teams/${team.id}/edit`);
+                          sheet.openDetail(team.id);
                         }}
                       >
                         <Pencil className="mr-2 h-4 w-4" />
@@ -227,5 +229,30 @@ export default function TeamsPage() {
         onConfirm={() => deleteTeamId && handleDelete(deleteTeamId)}
       />
     </div>
+
+    {isAdmin && (
+      <CreateTeamSheet
+        open={sheet.createOpen}
+        onOpenChange={(open) => (open ? sheet.openCreate() : sheet.closeCreate())}
+        onCreated={() => mutate()}
+        variant="sales"
+      />
+    )}
+
+    <TeamDetailSheet
+      teamId={sheet.selectedId}
+      open={Boolean(sheet.selectedId)}
+      onOpenChange={(open) => !open && sheet.closeDetail()}
+      onUpdated={() => mutate()}
+    />
+    </>
+  );
+}
+
+export default function TeamsPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <TeamsPageContent />
+    </Suspense>
   );
 }

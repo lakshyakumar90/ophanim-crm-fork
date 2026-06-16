@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Receipt, FileText, TrendingDown, TrendingUp, Wallet, Users, AlertCircle } from "lucide-react";
 import { formatINR, formatPayrollMonthLabel } from "@/lib/payroll-format";
-import { InitiateRunModal } from "@/components/hr/payroll/initiate-run-modal";
+import { InitiatePayrollRunSheet } from "@/components/hr/payroll/initiate-run-modal";
 import { CorrectionRunModal } from "@/components/hr/payroll/correction-run-modal";
 import { PayrollRunsTab } from "@/components/hr/payroll/PayrollRunsTab";
 import { IncrementsTab } from "@/components/hr/payroll/IncrementsTab";
@@ -31,10 +31,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { PayrollPageState } from "@/hooks/hr/usePayrollPage";
 
-type PayrollPageShellProps = PayrollPageState;
+type PayrollPageShellProps = PayrollPageState & {
+  onViewRun?: (runId: string) => void;
+};
 
 export function PayrollPageShell(props: PayrollPageShellProps) {
   const {
+    onViewRun,
     router,
     payslipOnly,
     canView,
@@ -230,6 +233,7 @@ export function PayrollPageShell(props: PayrollPageShellProps) {
               setCorrRun(run);
               setCorrOpen(true);
             }}
+            onViewRun={(runId) => onViewRun?.(runId)}
           />
         </TabsContent>
 
@@ -257,7 +261,7 @@ export function PayrollPageShell(props: PayrollPageShellProps) {
         )}
       </Tabs>
 
-      <InitiateRunModal
+      <InitiatePayrollRunSheet
         open={initOpen}
         onOpenChange={setInitOpen}
         runs={runs}

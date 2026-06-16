@@ -14,8 +14,9 @@ import {
   ArrowDownCircle,
   ExternalLink,
   RefreshCw,
+  Plus,
 } from "lucide-react";
-import { CreateTaskDialog } from "@/components/projects/create-task-dialog";
+import { CreateTaskSheet } from "@/components/projects/CreateTaskSheet";
 import {
   Card,
   CardContent,
@@ -78,6 +79,7 @@ export default function ProjectTasksPage() {
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
 
   const fetchTasks = useCallback(
     async (quiet = false) => {
@@ -155,7 +157,7 @@ export default function ProjectTasksPage() {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex flex-col gap-4 p-4 lg:p-6 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
+      <div className="flex flex-col gap-4 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Tasks</h1>
@@ -180,7 +182,16 @@ export default function ProjectTasksPage() {
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
-            <CreateTaskDialog projectId={id} onSuccess={() => fetchTasks(true)} />
+            <Button size="sm" className="gap-1" onClick={() => setCreateTaskOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Create Task
+            </Button>
+            <CreateTaskSheet
+              open={createTaskOpen}
+              onOpenChange={setCreateTaskOpen}
+              projectId={id}
+              onCreated={() => fetchTasks(true)}
+            />
           </div>
         </div>
 
@@ -223,7 +234,7 @@ export default function ProjectTasksPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 lg:p-6 overflow-y-auto space-y-6">
+      <div className="flex-1 overflow-y-auto space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
@@ -285,7 +296,10 @@ export default function ProjectTasksPage() {
                 : "No tasks assigned to this project yet"}
             </p>
             {!search && priorityFilter === "all" && statusFilter === "all" && (
-              <CreateTaskDialog projectId={id} onSuccess={() => fetchTasks(true)} />
+              <Button size="sm" className="gap-1" onClick={() => setCreateTaskOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Create Task
+              </Button>
             )}
           </div>
         ) : (

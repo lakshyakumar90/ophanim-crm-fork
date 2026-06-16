@@ -30,6 +30,7 @@ import {
   verifyDocumentSchema,
 } from "../documents/documents.validator.js";
 import * as hrController from "./hr.controller.js";
+import * as orgChartController from "../org-chart/org-chart.controller.js";
 
 const hrDocumentUpload = multer({
   storage: multer.memoryStorage(),
@@ -39,6 +40,12 @@ const hrDocumentUpload = multer({
 const router: RouterType = Router();
 
 router.use(authenticate as any);
+
+router.get(
+  "/org-chart",
+  requireAnyPermission(["hr:employees_view", "hr:view", "hr:manage"]) as any,
+  asyncHandler(orgChartController.getOrgChart) as RequestHandler,
+);
 
 router.get(
   "/employees",
@@ -81,8 +88,7 @@ router.get(
 
 router.get(
   "/on-leave-today",
-  requireAnyPermission(["hr:compensation_view", "hr:view", "hr:manage"]) as any,
-  validateParams(hrEmployeeIdParamSchema),
+  requireAnyPermission(["hr:leave_view", "hr:view", "hr:manage"]) as any,
   asyncHandler(hrController.get_on_leave_today) as RequestHandler,
 );
 

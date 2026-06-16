@@ -22,15 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { AddProjectMemberSheet } from "@/components/projects/AddProjectMemberSheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,15 +41,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import type { Project } from "@/types";
 import { projectsApi } from "@/lib/projects-api";
@@ -99,157 +82,6 @@ function getRoleLabel(role: string): string {
   );
 }
 
-function AddMemberDialog({
-  projectId,
-  onMemberAdded,
-}: {
-  projectId: string;
-  onMemberAdded: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [resources, setResources] = useState<any>(null);
-  const [formData, setFormData] = useState({
-    userId: "",
-    role: "developer",
-    allocation: "100",
-  });
-
-  useEffect(() => {
-    if (open && !resources) {
-      projectsApi.getResources().then((data) => {
-        if (data) setResources(data);
-      });
-    }
-  }, [open, resources]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.userId) {
-      toast.error("Please select a user");
-      return;
-    }
-    setLoading(true);
-    try {
-      await projectsApi.addMember(
-        projectId,
-        formData.userId,
-        formData.role,
-        parseInt(formData.allocation),
-      );
-      toast.success("Member added successfully");
-      setOpen(false);
-      setFormData({ userId: "", role: "developer", allocation: "100" });
-      onMemberAdded();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error?.message || err?.message || "";
-      if (msg.toLowerCase().includes("already has this role")) {
-        toast.error("This user already has that role on the project. Choose a different role.");
-      } else {
-        toast.error("Failed to add member");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const allUsers = resources
-    ? [
-        ...resources.projectManagers,
-        ...resources.developers,
-        ...resources.designers,
-        ...resources.seoSpecialists,
-        ...resources.contentWriters,
-      ]
-    : [];
-  const uniqueUsers = Array.from(
-    new Map(allUsers.map((u: any) => [u.id, u])).values(),
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-1">
-          <Plus className="h-4 w-4" /> Add Member
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Team Member</DialogTitle>
-          <DialogDescription>Add a member to this project. A user can have multiple roles.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>User</Label>
-            <Select
-              value={formData.userId}
-              onValueChange={(val) => setFormData({ ...formData, userId: val })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a user" />
-              </SelectTrigger>
-              <SelectContent>
-                {uniqueUsers.map((u: any) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    <div className="flex flex-col">
-                      <span>{u.full_name || u.fullName}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {u.email}
-                        {u.job_title ? ` · ${u.job_title.replace(/_/g, " ")}` : ""}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Project Role</Label>
-            <Select
-              value={formData.role}
-              onValueChange={(val) => setFormData({ ...formData, role: val })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="project_manager">Project Manager</SelectItem>
-                <SelectItem value="developer">Developer</SelectItem>
-                <SelectItem value="designer">Designer</SelectItem>
-                <SelectItem value="seo_specialist">SEO Specialist</SelectItem>
-                <SelectItem value="content_writer">Content Writer</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Allocation (%)</Label>
-            <Input
-              type="number"
-              min="0"
-              max="100"
-              value={formData.allocation}
-              onChange={(e) =>
-                setFormData({ ...formData, allocation: e.target.value })
-              }
-            />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding...
-                </>
-              ) : (
-                "Add Member"
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export default function ProjectResourcesPage() {
   const params = useParams();
   const id = params.id as string;
@@ -259,6 +91,7 @@ export default function ProjectResourcesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
 
   const fetchProject = async (quiet = false) => {
     if (!quiet) setIsLoading(true);
@@ -367,7 +200,7 @@ export default function ProjectResourcesPage() {
     : null;
 
   return (
-    <div className="p-4 lg:p-6">
+    <div>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -377,10 +210,17 @@ export default function ProjectResourcesPage() {
             </CardDescription>
           </div>
           {isManagerOrAbove && (
-            <AddMemberDialog
-              projectId={id}
-              onMemberAdded={() => fetchProject(true)}
-            />
+            <>
+              <Button size="sm" className="gap-1" onClick={() => setAddMemberOpen(true)}>
+                <Plus className="h-4 w-4" /> Add Member
+              </Button>
+              <AddProjectMemberSheet
+                open={addMemberOpen}
+                onOpenChange={setAddMemberOpen}
+                projectId={id}
+                onMemberAdded={() => fetchProject(true)}
+              />
+            </>
           )}
         </CardHeader>
         <CardContent>

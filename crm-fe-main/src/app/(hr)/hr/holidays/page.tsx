@@ -7,13 +7,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { CreateHolidaySheet } from "@/components/hr/holidays/CreateHolidaySheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,16 +18,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import {
   addDays,
@@ -58,23 +42,13 @@ import {
 } from "@/components/calendar/calendar-primitives";
 import { cn } from "@/lib/utils";
 
-const holidayTypes = ["national", "regional", "optional"] as const;
-
 export default function HRHolidaysPage() {
   const { user, can } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<"day" | "week" | "month">("month");
   const [addOpen, setAddOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [createDefaultDate, setCreateDefaultDate] = useState<Date | null>(null);
-
-  const [form, setForm] = useState({
-    name: "",
-    date: "",
-    isOptional: false,
-    holidayType: "national",
-  });
 
   const currentYear = currentDate.getFullYear();
 
@@ -197,32 +171,10 @@ export default function HRHolidaysPage() {
     can("hr:manage") ||
     can("hr:attendance_manage");
 
-  const handleAdd = async () => {
-    if (!form.name.trim()) {
-      toast.error("Holiday name is required");
-      return;
-    }
-    if (!form.date) {
-      toast.error("Date is required");
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const isOptional = form.holidayType === "optional" ? true : form.isOptional;
-      await attendanceApi.createHoliday({
-        name: form.name.trim(),
-        date: form.date,
-        isOptional,
-      });
-      toast.success("Holiday added successfully");
-      setAddOpen(false);
-      setForm({ name: "", date: "", isOptional: false, holidayType: "national" });
-      mutate(["hr-holidays", currentYear]);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error?.message || "Failed to add holiday");
-    } finally {
-      setIsSaving(false);
-    }
+  const openCreate = (d?: Date) => {
+    if (!canManageHolidays) return;
+    setCreateDefaultDate(d || currentDate);
+    setAddOpen(true);
   };
 
   const handleDelete = async () => {
@@ -247,13 +199,6 @@ export default function HRHolidaysPage() {
     if (viewMode === "day") setCurrentDate((d) => addDays(d, 1));
     else if (viewMode === "week") setCurrentDate((d) => addDays(d, 7));
     else setCurrentDate((d) => addMonths(d, 1));
-  };
-
-  const openCreate = (d?: Date) => {
-    if (!canManageHolidays) return;
-    setCreateDefaultDate(d || currentDate);
-    setForm((f) => ({ ...f, date: format(d || currentDate, "yyyy-MM-dd") }));
-    setAddOpen(true);
   };
 
   return (
@@ -354,61 +299,12 @@ export default function HRHolidaysPage() {
         </div>
       )}
 
-      {/* Add Holiday Dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Holiday</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="holiday-name">Name *</Label>
-              <Input
-                id="holiday-name"
-                placeholder="e.g. Republic Day"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="holiday-date">Date *</Label>
-              <Input
-                id="holiday-date"
-                type="date"
-                value={form.date || (createDefaultDate ? format(createDefaultDate, "yyyy-MM-dd") : "")}
-                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Holiday Type</Label>
-              <Select value={form.holidayType} onValueChange={(v) => setForm((f) => ({ ...f, holidayType: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {holidayTypes.map((t) => (
-                    <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="holiday-optional"
-                checked={form.isOptional}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, isOptional: v }))}
-              />
-              <Label htmlFor="holiday-optional">Optional holiday</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAdd} disabled={isSaving || !canManageHolidays}>
-              {isSaving ? "Adding..." : "Add Holiday"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateHolidaySheet
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        defaultDate={createDefaultDate}
+        onCreated={() => mutate(["hr-holidays", currentYear])}
+      />
 
       {/* Delete Confirmation */}
       <AlertDialog

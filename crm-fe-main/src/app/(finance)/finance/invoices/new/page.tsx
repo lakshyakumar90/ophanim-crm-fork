@@ -2,21 +2,20 @@
 
 import Link from "next/link";
 import { FileText, ArrowLeft } from "lucide-react";
-import { useIsAdmin, useIsManager } from "@/providers/auth-provider";
+import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { CreateInvoiceForm } from "@/components/finance/invoices/CreateInvoiceForm";
 
 export default function NewInvoicePage() {
-  const isAdmin = useIsAdmin();
-  const isManager = useIsManager();
-  const canCreateInvoice = isAdmin || isManager;
+  const { can } = useAuth();
+  const canCreateInvoice = can("invoices:manage");
 
   if (!canCreateInvoice) {
     return (
       <div className="max-w-3xl space-y-4">
         <h1 className="text-2xl font-bold text-foreground">Invoice Access Restricted</h1>
         <p className="text-muted-foreground">
-          Only admins and managers can create invoices.
+          You need invoice management permission to create invoices.
         </p>
         <Link href="/finance/invoices">
           <Button variant="outline">Back to Invoices</Button>

@@ -1,4 +1,4 @@
-export { InitiateRunModal } from "./initiate-run-modal";
+export { InitiatePayrollRunSheet } from "./initiate-run-modal";
 export { CorrectionRunModal } from "./correction-run-modal";
 export { PayrollRunTableRow } from "./payroll-run-table-row";
 export { CreateIncrementModal } from "./create-increment-modal";
@@ -8,6 +8,6 @@ export { PayrollRecordsTable } from "./payroll-records-table";
 export { EditPayrollRecordModal } from "./edit-payroll-record-modal";
 export { DepartmentCostBar, type DeptCostSegment } from "./department-cost-bar";
 export { PayslipView } from "./payslip-view";
-export { SalaryBandModal } from "./salary-band-modal";
+export { SalaryBandSheet } from "./salary-band-modal";
 export { SetCTCForEmployeeModal } from "./set-ctc-for-employee-modal";
 export { QuickFixMissingCTCModal } from "./quick-fix-missing-ctc-modal";

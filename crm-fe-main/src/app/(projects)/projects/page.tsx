@@ -18,7 +18,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { ProjectCard } from "@/components/projects/project-card";
-import { CreateProjectModal } from "@/components/projects/create-project-modal";
+import { CreateProjectSheet } from "@/components/projects/CreateProjectSheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { projectsApi, type ProjectStats } from "@/lib/projects-api";
@@ -59,6 +59,7 @@ export default function ProjectsPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [managerFilter, setManagerFilter] = useState<string>("all");
   const [dateRangeFilter, setDateRangeFilter] = useState<string>("all");
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   const fetchProjects = async () => {
     setIsLoading(true);
@@ -291,11 +292,16 @@ export default function ProjectsPage() {
               />
             </Button>
             {isManager && (
-              <CreateProjectModal onSuccess={fetchProjects}>
-                <Button className="gap-2">
+              <>
+                <Button className="gap-2" onClick={() => setCreateProjectOpen(true)}>
                   <Plus className="w-4 h-4" /> New Project
                 </Button>
-              </CreateProjectModal>
+                <CreateProjectSheet
+                  open={createProjectOpen}
+                  onOpenChange={setCreateProjectOpen}
+                  onSuccess={fetchProjects}
+                />
+              </>
             )}
           </div>
         </div>

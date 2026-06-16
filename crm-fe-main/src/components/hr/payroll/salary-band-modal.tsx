@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,7 +33,7 @@ function isPctTemplate(
   return t !== null && !Array.isArray(t) && typeof t === "object" && !("name" in (t as object));
 }
 
-export function SalaryBandModal({
+export function SalaryBandSheet({
   open,
   onOpenChange,
   band,
@@ -141,78 +134,76 @@ export function SalaryBandModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{band ? "Edit salary band" : "Create salary band"}</DialogTitle>
-          <DialogDescription>
-            Define CTC range and default component split (must total 100%).
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <div>
-            <Label>Designation</Label>
-            <Input value={designation} onChange={(e) => setDesignation(e.target.value)} />
-          </div>
-          <div>
-            <Label>Department</Label>
-            <Select value={department || "__none__"} onValueChange={(v) => setDepartment(v === "__none__" ? "" : v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Optional" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— None —</SelectItem>
-                {departments.map((d) => (
-                  <SelectItem key={d.id} value={d.name}>
-                    {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Min CTC (annual ₹)</Label>
-              <Input type="number" min={0} value={minCtc} onChange={(e) => setMinCtc(e.target.value)} />
-            </div>
-            <div>
-              <Label>Max CTC (annual ₹)</Label>
-              <Input type="number" min={0} value={maxCtc} onChange={(e) => setMaxCtc(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="rounded-md border p-3 space-y-2">
-            <p className="text-sm font-medium">Components template (% of split)</p>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <Label className="text-xs">Basic %</Label>
-                <Input type="number" value={basicPct} onChange={(e) => setBasicPct(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs">HRA %</Label>
-                <Input type="number" value={hraPct} onChange={(e) => setHraPct(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs">Allowance %</Label>
-                <Input type="number" value={allowancePct} onChange={(e) => setAllowancePct(e.target.value)} />
-              </div>
-            </div>
-            <p className={cn("text-xs font-medium", validPct ? "text-emerald-600" : "text-red-600")}>
-              Total: {sumPct.toFixed(1)}% / 100%
-            </p>
-          </div>
-        </div>
-
-        <DialogFooter>
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={band ? "Edit salary band" : "Create salary band"}
+      description="Define CTC range and default component split (must total 100%)."
+      size="lg"
+      footer={
+        <>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
           <Button disabled={loading || !validPct || !validRange} onClick={() => void submit()}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div>
+          <Label>Designation</Label>
+          <Input value={designation} onChange={(e) => setDesignation(e.target.value)} />
+        </div>
+        <div>
+          <Label>Department</Label>
+          <Select value={department || "__none__"} onValueChange={(v) => setDepartment(v === "__none__" ? "" : v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Optional" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">— None —</SelectItem>
+              {departments.map((d) => (
+                <SelectItem key={d.id} value={d.name}>
+                  {d.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label>Min CTC (annual ₹)</Label>
+            <Input type="number" min={0} value={minCtc} onChange={(e) => setMinCtc(e.target.value)} />
+          </div>
+          <div>
+            <Label>Max CTC (annual ₹)</Label>
+            <Input type="number" min={0} value={maxCtc} onChange={(e) => setMaxCtc(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="rounded-md border p-3 space-y-2">
+          <p className="text-sm font-medium">Components template (% of split)</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label className="text-xs">Basic %</Label>
+              <Input type="number" value={basicPct} onChange={(e) => setBasicPct(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">HRA %</Label>
+              <Input type="number" value={hraPct} onChange={(e) => setHraPct(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Allowance %</Label>
+              <Input type="number" value={allowancePct} onChange={(e) => setAllowancePct(e.target.value)} />
+            </div>
+          </div>
+          <p className={cn("text-xs font-medium", validPct ? "text-emerald-600" : "text-red-600")}>
+            Total: {sumPct.toFixed(1)}% / 100%
+          </p>
+        </div>
+      </div>
+    </FormSideSheet>
   );
 }

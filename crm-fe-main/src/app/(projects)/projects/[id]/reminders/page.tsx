@@ -12,6 +12,7 @@ import {
   ArrowUpCircle,
   ArrowRightCircle,
   ArrowDownCircle,
+  Plus,
 } from "lucide-react";
 import {
   Card,
@@ -21,10 +22,11 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { tasksApi } from "@/lib/api";
 import { formatIST } from "@/lib/date-utils";
-import { CreateTaskDialog } from "@/components/projects/create-task-dialog";
+import { CreateTaskSheet } from "@/components/projects/CreateTaskSheet";
 import type { Task } from "@/types";
 
 const priorityConfig = {
@@ -53,6 +55,7 @@ export default function ProjectRemindersPage() {
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
 
   const fetchTasks = useCallback(
     async (quiet = false) => {
@@ -105,7 +108,7 @@ export default function ProjectRemindersPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 lg:p-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -116,7 +119,16 @@ export default function ProjectRemindersPage() {
             Active tasks with reminder notifications set.
           </p>
         </div>
-        <CreateTaskDialog projectId={id} onSuccess={() => fetchTasks(true)} />
+        <Button size="sm" className="gap-1" onClick={() => setCreateTaskOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Create Task
+        </Button>
+        <CreateTaskSheet
+          open={createTaskOpen}
+          onOpenChange={setCreateTaskOpen}
+          projectId={id}
+          onCreated={() => fetchTasks(true)}
+        />
       </div>
 
       {/* With reminders */}

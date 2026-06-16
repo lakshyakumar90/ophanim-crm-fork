@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Suspense, useState, useCallback } from "react";
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
+import { CreateTeamSheet } from "@/components/teams/CreateTeamSheet";
+import { TeamDetailSheet } from "@/components/teams/TeamDetailSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { teamsApi } from "@/lib/api";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
@@ -44,8 +46,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
-export default function GlobalTeamsPage() {
-  const router = useRouter();
+function GlobalTeamsPageContent() {
+  const sheet = useSheetQuery();
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
@@ -110,6 +112,7 @@ export default function GlobalTeamsPage() {
   }
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
@@ -136,7 +139,7 @@ export default function GlobalTeamsPage() {
             </SelectContent>
           </Select>
           <Button
-            onClick={() => router.push("/global/teams/new")}
+            onClick={sheet.openCreate}
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -167,7 +170,7 @@ export default function GlobalTeamsPage() {
             <Card
               key={team.id}
               className="hover:shadow-lg transition-shadow cursor-pointer group"
-              onClick={() => router.push(`/global/teams/${team.id}`)}
+              onClick={() => sheet.openDetail(team.id)}
             >
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="flex items-center gap-3">
@@ -198,7 +201,7 @@ export default function GlobalTeamsPage() {
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
-                        router.push(`/global/teams/${team.id}/edit`);
+                        sheet.openDetail(team.id);
                       }}
                     >
                       <Pencil className="mr-2 h-4 w-4" />
@@ -247,5 +250,28 @@ export default function GlobalTeamsPage() {
         onConfirm={() => deleteTeamId && handleDelete(deleteTeamId)}
       />
     </div>
+
+    <CreateTeamSheet
+      open={sheet.createOpen}
+      onOpenChange={(open) => (open ? sheet.openCreate() : sheet.closeCreate())}
+      onCreated={() => mutate()}
+      variant="global"
+    />
+
+    <TeamDetailSheet
+      teamId={sheet.selectedId}
+      open={Boolean(sheet.selectedId)}
+      onOpenChange={(open) => !open && sheet.closeDetail()}
+      onUpdated={() => mutate()}
+    />
+    </>
+  );
+}
+
+export default function GlobalTeamsPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <GlobalTeamsPageContent />
+    </Suspense>
   );
 }

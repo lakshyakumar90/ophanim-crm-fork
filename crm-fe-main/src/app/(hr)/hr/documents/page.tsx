@@ -11,7 +11,7 @@ import type { HrEmployeeDirectoryRow } from "@/types/hr-leaves";
 import type { EmployeeDocumentDto } from "@/types/hr-documents";
 import { DocumentKPICards } from "@/components/hr/documents/DocumentKPICards";
 import { DocumentsListTab } from "@/components/hr/documents/DocumentsListTab";
-import { UploadDocumentModal } from "@/components/hr/documents/UploadDocumentModal";
+import { UploadDocumentSheet } from "@/components/hr/documents/UploadDocumentSheet";
 import { EditDocumentModal } from "@/components/hr/documents/EditDocumentModal";
 import { DeleteDocumentDialog } from "@/components/hr/documents/DeleteDocumentDialog";
 import { DocumentTypesTab } from "@/components/hr/documents/DocumentTypesTab";
@@ -141,7 +141,7 @@ export default function HrDocumentsPage() {
       </Tabs>
 
       {canManage ? (
-        <UploadDocumentModal
+        <UploadDocumentSheet
           open={uploadOpen}
           onOpenChange={setUploadOpen}
           employees={employees}

@@ -192,8 +192,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (permissions.includes(perm)) return true;
 
       // Legacy fallback: map old role enum to permission semantics
-      // This keeps existing UI working before all roles are seeded
-      if (permissions.length === 0) {
+      const legacyFallbackEnabled =
+        process.env.NEXT_PUBLIC_RBAC_LEGACY_FALLBACK === "true";
+      if (legacyFallbackEnabled && permissions.length === 0) {
         const role = user.role;
         if (
           role === "manager" &&

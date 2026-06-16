@@ -419,6 +419,40 @@ export const deleteLeadReminder = async (
   }
 };
 
+export const getLeadConversionStatus = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { getLeadConversionStatus: getStatus } = await import(
+      "./leads-convert.service.js"
+    );
+    const status = await getStatus(req.params["id"] as string);
+    sendSuccess(res, status);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const convertLead = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { convertLead: convert } = await import("./leads-convert.service.js");
+    const result = await convert(
+      req.params["id"] as string,
+      req.body,
+      req.user,
+    );
+    sendSuccess(res, result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const markReminderDone = async (
   req: AuthenticatedRequest,
   res: Response,

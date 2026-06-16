@@ -220,7 +220,7 @@ export default function ProjectActivityPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       {/* Filters row */}
       <div className="flex flex-wrap items-center gap-2">
         {/* Time presets */}

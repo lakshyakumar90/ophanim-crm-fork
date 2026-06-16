@@ -177,6 +177,19 @@ export const leadsApi = {
       backendQuery: async () => unwrap(await api.get("/leads/stats/by-user")),
     });
   },
+  getConversionStatus: async (id: string) =>
+    unwrap(await api.get(`/leads/${id}/conversion-status`)),
+  convert: (
+    id: string,
+    data: {
+      createInvoice?: boolean;
+      createProject?: boolean;
+      invoice?: Record<string, unknown>;
+      project?: Record<string, unknown>;
+      notifyFinance?: boolean;
+      notifyPM?: boolean;
+    },
+  ) => api.post(`/leads/${id}/convert`, data),
   getActivityCountsByUser: async (): Promise<Record<string, number>> => {
     try {
       return await sq.getLeadActivitiesCountByUser();
@@ -260,4 +273,54 @@ export const csvApi = {
   exportLeads: (params?: Record<string, unknown>) =>
     api.get("/csv/leads/export", { params, responseType: "blob" }),
   getDuplicateLeads: () => api.get("/csv/leads/duplicates"),
+};
+
+// =====================================================
+// QUOTES API
+// =====================================================
+
+export interface QuoteLineItem {
+  id?: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  taxRate?: number;
+  sortOrder?: number;
+  total?: number;
+}
+
+export interface Quote {
+  id: string;
+  quote_number: string;
+  lead_id?: string | null;
+  client_name: string;
+  client_email: string;
+  client_phone?: string | null;
+  client_address?: string | null;
+  quote_date: string;
+  valid_until?: string | null;
+  status: string;
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  discount_rate: number;
+  discount_amount: number;
+  total_amount: number;
+  payment_terms?: string;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  line_items?: QuoteLineItem[];
+}
+
+export const quotesApi = {
+  list: async (params?: Record<string, unknown>) =>
+    unwrap(await api.get("/quotes", { params })),
+  get: async (id: string) => unwrap(await api.get(`/quotes/${id}`)),
+  create: (data: Record<string, unknown>) => api.post("/quotes", data),
+  update: (id: string, data: Record<string, unknown>) =>
+    api.put(`/quotes/${id}`, data),
+  delete: (id: string) => api.delete(`/quotes/${id}`),
+  send: (id: string) => api.post(`/quotes/${id}/send`),
+  accept: (id: string) => api.post(`/quotes/${id}/accept`),
 };

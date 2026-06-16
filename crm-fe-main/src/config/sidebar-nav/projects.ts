@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderKanban, CheckSquare, ListTodo, Users2, PieChart, FileText, CalendarClock, Activity } from "lucide-react";
+import { FolderKanban, CheckSquare, ListTodo, Users2, PieChart, FileText, CalendarClock, Activity, Clock, Flag, Kanban, Gauge } from "lucide-react";
 import type { NavItem } from "./types";
 
 export const deliveryItems: NavItem[] = [
@@ -8,54 +8,87 @@ export const deliveryItems: NavItem[] = [
     title: "All Projects",
     href: "/projects",
     icon: FolderKanban,
-    roles: ["admin", "manager"],
+    anyPermission: ["projects:view", "projects:create"],
   },
   {
     title: "My Projects",
     href: "/projects/my-projects",
     icon: FolderKanban,
-    roles: ["employee"],
+    anyPermission: ["projects:view"],
   },
   {
     title: "My Tasks",
     href: "/projects/my-tasks",
     icon: CheckSquare,
-    roles: ["employee"],
+    anyPermission: ["projects:view", "tasks:view"],
+  },
+  {
+    title: "My Timesheet",
+    href: "/projects/my-timesheet",
+    icon: Clock,
+    anyPermission: ["timesheets:view", "timesheets:manage"],
   },
   {
     title: "Tasks",
     href: "/projects/tasks",
     icon: ListTodo,
-    roles: ["admin", "manager"],
+    anyPermission: ["projects:view", "projects:edit"],
+  },
+  {
+    title: "Time Approvals",
+    href: "/projects/time-approvals",
+    icon: Clock,
+    anyPermission: ["timesheets:approve", "timesheets:manage"],
+  },
+  {
+    title: "Capacity",
+    href: "/projects/capacity",
+    icon: Gauge,
+    anyPermission: ["projects:assign_member", "projects:edit"],
   },
   {
     title: "Members",
     href: "/projects/members",
     icon: Users2,
-    roles: ["admin", "manager", "employee"],
+    anyPermission: ["projects:view"],
   },
   {
     title: "Analytics",
     href: "/projects/analytics",
     icon: PieChart,
-    roles: ["admin", "manager"],
+    anyPermission: ["projects:view", "analytics:view_team"],
   },
   {
     title: "Notes",
     href: "/projects/notes",
     icon: FileText,
-    roles: ["admin", "manager", "employee"],
+    anyPermission: ["projects:view"],
   },
   {
     title: "Calendar",
     href: "/projects/calendar",
     icon: CalendarClock,
-    roles: ["admin", "manager"],
+    anyPermission: ["projects:view", "projects:edit"],
   },
   {
     title: "Activity",
     href: "/projects/activity",
     icon: Activity,
-    roles: ["admin", "manager"],
+    anyPermission: ["projects:view"],
+  },
+];
+
+export const projectDetailItems: NavItem[] = [
+  {
+    title: "Timeline",
+    href: "timeline",
+    icon: Flag,
+    anyPermission: ["milestones:view", "projects:view"],
+  },
+  {
+    title: "Sprints",
+    href: "sprints",
+    icon: Kanban,
+    anyPermission: ["projects:view"],
   },
 ];

@@ -9,6 +9,7 @@ import { LeadDetailSkeleton } from "@/components/sales/leads/detail/LeadDetailSk
 import { LeadInfoTab } from "@/components/sales/leads/detail/LeadInfoTab";
 import { LeadActivityTab } from "@/components/sales/leads/detail/LeadActivityTab";
 import { LeadDetailDialogs } from "@/components/sales/leads/detail/LeadDetailDialogs";
+import { LeadConversionPanel } from "@/components/sales/leads/detail/LeadConversionPanel";
 
 export default function LeadDetailPage() {
   const detail = useLeadDetail();
@@ -31,6 +32,8 @@ export default function LeadDetailPage() {
     canEditLead,
     setSelectedUserId,
     setIsReassignDialogOpen,
+    showConvertDialog,
+    setShowConvertDialog,
   } = detail;
 
   if (loadingLead) {
@@ -72,6 +75,13 @@ export default function LeadDetailPage() {
           onMarkReminderDone={handleMarkReminderDone}
           onStatusChange={handleStatusChange}
           isChangingStatus={isChangingStatus}
+        />
+
+        <LeadConversionPanel
+          lead={lead}
+          open={showConvertDialog}
+          onOpenChange={setShowConvertDialog}
+          onConverted={refreshLeadData}
         />
 
         <Tabs defaultValue="info" className="space-y-4">

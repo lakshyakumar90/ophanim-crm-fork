@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,7 +31,7 @@ function generatePassword() {
 type Dept = { id: string; name?: string };
 type Team = { id: string; name?: string; departmentId?: string; department_id?: string };
 
-export function AddEmployeeModal({
+export function AddEmployeeSheet({
   open,
   onOpenChange,
   onCreated,
@@ -134,107 +128,14 @@ export function AddEmployeeModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Add employee — step {step} of 2</DialogTitle>
-        </DialogHeader>
-
-        {step === 1 ? (
-          <div className="space-y-3 py-2">
-            <div className="space-y-2">
-              <Label>Full name</Label>
-              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as "manager" | "employee")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="employee">Employee</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Admin or HR roles are assigned separately by an administrator.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Temporary password</Label>
-              <div className="flex gap-2">
-                <Input readOnly value={password} className="font-mono text-sm" />
-                <Button type="button" size="icon" variant="outline" onClick={() => void copyPw()}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Employee should change password on first login.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Phone (optional)</Label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3 py-2">
-            <div className="space-y-2">
-              <Label>Department</Label>
-              <Select value={departmentId} onValueChange={(v) => { setDepartmentId(v); setTeamId(""); }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name || d.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Team (optional)</Label>
-              <Select value={teamId || "__none__"} onValueChange={(v) => setTeamId(v === "__none__" ? "" : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select team" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {teamsInDept.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name || t.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Shift</Label>
-              <Select value={shiftType} onValueChange={(v) => setShiftType(v as "day_shift" | "night_shift")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="day_shift">Day shift</SelectItem>
-                  <SelectItem value="night_shift">Night shift</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-xs text-muted-foreground rounded-md border p-2 bg-muted/40">
-              Joining date, CTC, and other HR profile fields can be updated after creation via the employee
-              profile (where supported by the API).
-            </p>
-          </div>
-        )}
-
-        <DialogFooter className="gap-2 sm:gap-0">
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Add employee — step ${step} of 2`}
+      description="Create a new employee account and assign department details."
+      size="lg"
+      footer={
+        <>
           {step === 2 ? (
             <Button type="button" variant="outline" onClick={() => setStep(1)}>
               Back
@@ -256,8 +157,102 @@ export function AddEmployeeModal({
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create employee"}
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      {step === 1 ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label>Full name</Label>
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Role</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as "manager" | "employee")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="employee">Employee</SelectItem>
+                <SelectItem value="manager">Manager</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Admin or HR roles are assigned separately by an administrator.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>Temporary password</Label>
+            <div className="flex gap-2">
+              <Input readOnly value={password} className="font-mono text-sm" />
+              <Button type="button" size="icon" variant="outline" onClick={() => void copyPw()}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Employee should change password on first login.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>Phone (optional)</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label>Department</Label>
+            <Select value={departmentId} onValueChange={(v) => { setDepartmentId(v); setTeamId(""); }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name || d.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Team (optional)</Label>
+            <Select value={teamId || "__none__"} onValueChange={(v) => setTeamId(v === "__none__" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select team" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {teamsInDept.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name || t.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Shift</Label>
+            <Select value={shiftType} onValueChange={(v) => setShiftType(v as "day_shift" | "night_shift")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day_shift">Day shift</SelectItem>
+                <SelectItem value="night_shift">Night shift</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground rounded-md border p-2 bg-muted/40">
+            Joining date, CTC, and other HR profile fields can be updated after creation via the employee
+            profile (where supported by the API).
+          </p>
+        </div>
+      )}
+    </FormSideSheet>
   );
 }

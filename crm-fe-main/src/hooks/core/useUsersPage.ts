@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
 import { usersApi, teamsApi } from "@/lib/api";
 import { useIsAdmin } from "@/providers/auth-provider";
 import { useDepartment } from "@/providers/department-context";
@@ -9,7 +8,6 @@ import type { EmployeeBulkUpdate } from "@/components/hr/employees/BulkEditTable
 import { toast } from "sonner";
 
 export function useUsersPage() {
-  const router = useRouter();
   const isAdmin = useIsAdmin();
   const { currentDepartment } = useDepartment();
   const [search, setSearch] = useState("");
@@ -135,24 +133,6 @@ export function useUsersPage() {
     setTimeout(scrollToBulkTable, 80);
   }, [scrollToBulkTable]);
 
-  const goToAddUser = useCallback(() => {
-    router.push("/global/new");
-  }, [router]);
-
-  const goToUserDetails = useCallback(
-    (userId: string) => {
-      router.push(`/global/users/${userId}`);
-    },
-    [router],
-  );
-
-  const goToEditUser = useCallback(
-    (userId: string) => {
-      router.push(`/global/users/${userId}/edit`);
-    },
-    [router],
-  );
-
   return {
     isAdmin,
     search,
@@ -177,8 +157,6 @@ export function useUsersPage() {
     saveBulkUsers,
     scrollToBulkTable,
     openBulkEdit,
-    goToAddUser,
-    goToUserDetails,
-    goToEditUser,
+    refreshUsers: refreshUsersData,
   };
 }

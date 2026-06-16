@@ -103,26 +103,26 @@ export default function HrLeavesPage() {
 
   if (!canView) {
     return (
-      <div className="p-6 text-muted-foreground">
+      <div className="text-muted-foreground">
         You do not have permission to view HR leaves.
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="-m-4 flex h-full min-h-0 lg:-m-6">
         <aside
           className={cn(
-            "relative flex h-full min-h-0 flex-col shrink-0 border-r bg-muted/30 transition-all duration-300",
-            sidebarCollapsed ? "w-14" : "w-55",
+            "relative flex h-full min-h-0 shrink-0 flex-col border-r bg-muted/30 transition-all duration-300",
+            sidebarCollapsed ? "w-12" : "w-56",
           )}
         >
-          <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden p-2">
+          <nav className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden p-1.5">
             <button
               type="button"
               onClick={() => setTab("overview")}
               className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
                 tab === "overview" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted",
               )}
               title="Leave overview"
@@ -134,7 +134,7 @@ export default function HrLeavesPage() {
               type="button"
               onClick={() => setTab("calendar")}
               className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
                 tab === "calendar" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted",
               )}
               title="Team calendar"
@@ -146,7 +146,7 @@ export default function HrLeavesPage() {
               type="button"
               onClick={() => setTab("pending")}
               className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
                 tab === "pending" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted",
               )}
               title="Pending approvals"
@@ -158,7 +158,7 @@ export default function HrLeavesPage() {
               type="button"
               onClick={() => setTab("all")}
               className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
                 tab === "all" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted",
               )}
               title="All requests"
@@ -172,7 +172,7 @@ export default function HrLeavesPage() {
             type="button"
             variant="ghost"
             size="icon"
-            className="m-2 h-8 w-8 shrink-0 self-end"
+            className="m-1.5 h-7 w-7 shrink-0 self-end"
             onClick={() => setSidebarCollapsed((v) => !v)}
             aria-label={sidebarCollapsed ? "Expand leave sidebar" : "Collapse leave sidebar"}
           >
@@ -182,7 +182,7 @@ export default function HrLeavesPage() {
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {tab !== "calendar" ? (
-            <div className="shrink-0 border-b bg-background/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 md:px-6">
+            <div className="shrink-0 border-b bg-background/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-background/80">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Leave management</h1>
@@ -200,7 +200,7 @@ export default function HrLeavesPage() {
             </div>
           ) : null}
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 lg:p-6">
           {tab === "overview" ? (
             <div className="mb-4 shrink-0">
               <LeaveKPICards

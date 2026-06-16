@@ -19,6 +19,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDistanceToNowIST } from "@/lib/date-utils";
+import {
+  ProjectMemberDetailSheet,
+  type ProjectMemberDetail,
+} from "@/components/projects/ProjectMemberDetailSheet";
+import {
+  ProjectTeamDetailSheet,
+  type ProjectTeamDetail,
+} from "@/components/projects/ProjectTeamDetailSheet";
 
 interface ProjectMember {
   id: string;
@@ -110,6 +118,10 @@ export default function GlobalMembersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<string>("projects");
+  const [selectedProject, setSelectedProject] = useState<ProjectTeamDetail | null>(null);
+  const [selectedMember, setSelectedMember] = useState<ProjectMemberDetail | null>(null);
+  const [teamSheetOpen, setTeamSheetOpen] = useState(false);
+  const [memberSheetOpen, setMemberSheetOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -221,12 +233,33 @@ export default function GlobalMembersPage() {
   const filteredProjects = filterProjects(projects);
   const filteredAllMembers = filterMembers(aggregateMembers);
 
+  const openMemberSheet = (member: AggregateMember) => {
+    setSelectedMember({
+      id: member.id,
+      fullName: member.fullName,
+      email: member.email,
+      avatarUrl: member.avatarUrl,
+      primaryRole: member.primaryRole,
+      projectRoles: member.projectRoles,
+    });
+    setMemberSheetOpen(true);
+  };
+
+  const openMemberById = (userId: string) => {
+    const member = aggregateMembers.find((m) => m.id === userId);
+    if (member) openMemberSheet(member);
+  };
+
   const renderMemberCard = (member: AggregateMember) => {
     const config = getRoleConfig(member.primaryRole);
     const Icon = config.icon;
 
     return (
-      <Card key={member.id} className="hover:shadow-md transition-shadow flex flex-col">
+      <Card
+        key={member.id}
+        className="hover:shadow-md transition-shadow flex flex-col cursor-pointer"
+        onClick={() => openMemberSheet(member)}
+      >
         <CardHeader className="pb-2">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
@@ -276,7 +309,7 @@ export default function GlobalMembersPage() {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex flex-col gap-4 p-6 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
+      <div className="flex flex-col gap-4 px-4 py-4 lg:px-6 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Teams & Members</h1>
           <p className="text-muted-foreground">Project team members across all your projects</p>
@@ -293,7 +326,7 @@ export default function GlobalMembersPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-6 overflow-y-auto">
+      <div className="flex-1 px-4 py-4 lg:px-6 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center h-40">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -334,7 +367,14 @@ export default function GlobalMembersPage() {
                   {filteredProjects.map((project) => {
                     const totalMembers = (project.members?.length ?? 0) + (project.manager ? 1 : 0);
                     return (
-                      <Card key={project.id} className="flex flex-col hover:shadow-md transition-shadow">
+                      <Card
+                        key={project.id}
+                        className="flex flex-col hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setTeamSheetOpen(true);
+                        }}
+                      >
                         <CardHeader className="pb-3">
                           <div className="flex justify-between items-start gap-2">
                             <div className="min-w-0">
@@ -448,6 +488,22 @@ export default function GlobalMembersPage() {
           </Tabs>
         )}
       </div>
+
+      <ProjectTeamDetailSheet
+        project={selectedProject}
+        open={teamSheetOpen}
+        onOpenChange={setTeamSheetOpen}
+        onMemberClick={(userId) => {
+          setTeamSheetOpen(false);
+          openMemberById(userId);
+        }}
+      />
+
+      <ProjectMemberDetailSheet
+        member={selectedMember}
+        open={memberSheetOpen}
+        onOpenChange={setMemberSheetOpen}
+      />
     </div>
   );
 }

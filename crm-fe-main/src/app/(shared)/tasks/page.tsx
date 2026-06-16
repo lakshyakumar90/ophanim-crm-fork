@@ -20,7 +20,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatIST, formatDistanceToNowIST } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { CreateTaskDialog } from "@/components/projects/create-task-dialog";
+import { CreateTaskSheet } from "@/components/projects/CreateTaskSheet";
+import { Plus } from "lucide-react";
 import {
   CheckSquare,
   Search,
@@ -58,6 +59,7 @@ export default function GlobalTasksPage() {
   const [priority, setPriority] = useState<PriorityFilter>("all");
   const [departmentId, setDepartmentId] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
 
   const { data: deptData } = useSWR("departments", () => getDepartments(), {
     revalidateOnFocus: false,
@@ -182,7 +184,19 @@ export default function GlobalTasksPage() {
             All tasks you have access to, across departments.
           </p>
         </div>
-        {canCreate && <CreateTaskDialog onSuccess={() => mutate()} />}
+        {canCreate && (
+          <>
+            <Button className="gap-1" onClick={() => setCreateTaskOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Create Task
+            </Button>
+            <CreateTaskSheet
+              open={createTaskOpen}
+              onOpenChange={setCreateTaskOpen}
+              onCreated={() => mutate()}
+            />
+          </>
+        )}
       </div>
 
       <Card>

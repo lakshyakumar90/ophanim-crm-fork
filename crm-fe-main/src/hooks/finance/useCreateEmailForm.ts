@@ -22,7 +22,7 @@ import {
   normalizeLeads,
 } from "@/lib/finance/email-actions";
 
-export function useCreateEmailForm() {
+export function useCreateEmailForm(options?: { onSuccess?: () => void }) {
   const { user } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,7 +83,11 @@ export function useCreateEmailForm() {
         toast.success("Email request saved as draft");
       }
 
-      router.push("/finance/emails");
+      if (options?.onSuccess) {
+        options.onSuccess();
+      } else {
+        router.push("/finance/emails");
+      }
     } catch (error: unknown) {
       toast.error(getCreateEmailErrorMessage(error));
     } finally {

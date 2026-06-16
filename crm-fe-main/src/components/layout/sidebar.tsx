@@ -42,13 +42,12 @@ function DepartmentDropdown({
     items.filter((item) => {
       const p = user?.permissions ?? [];
       const permGate = item.anyPermission ?? [];
-      const permOk =
-        permGate.length > 0 &&
-        (p.includes("crm:admin") || permGate.some((x) => p.includes(x)));
+      const hasAdmin = user?.role === "admin" || p.includes("crm:admin");
 
-      if (permGate.length && !item.roles?.length) {
-        return permOk;
-      }
+      if (hasAdmin) return true;
+
+      const permOk =
+        permGate.length > 0 && permGate.some((x) => p.includes(x));
 
       let roleOk = true;
       if (item.roles?.length) {
@@ -58,11 +57,14 @@ function DepartmentDropdown({
         if (item.roles.includes("employee") && user?.role === "employee")
           roleOk = true;
       } else if (!item.roles) {
-        roleOk = true;
+        roleOk = permGate.length === 0;
       }
 
       if (permGate.length && item.roles?.length) {
         return permOk || roleOk;
+      }
+      if (permGate.length) {
+        return permOk;
       }
       return roleOk;
     });

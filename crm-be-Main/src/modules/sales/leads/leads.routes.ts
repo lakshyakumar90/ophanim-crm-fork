@@ -4,6 +4,7 @@ import {
   requireAdmin,
   requireManager,
   requirePermission,
+  requireAnyPermission,
   checkResourceAccess,
   checkLeadEditAccess,
 } from "../../../middleware/authorization.middleware.js";
@@ -28,6 +29,7 @@ import {
   updateCommentSchema,
   createLeadReminderSchema,
   leadCommentParamSchema,
+  convertLeadSchema,
 } from "./leads.validator.js";
 import { uuidParamSchema } from "../../core/users/users.validator.js";
 import * as leadsController from "./leads.controller.js";
@@ -82,6 +84,22 @@ router.post(
 router.get("/reminders/all", asyncHandler(leadsController.getAllReminders) as RequestHandler);
 
 router.get("/reminders/count", asyncHandler(leadsController.getRemindersCount) as RequestHandler);
+
+router.get(
+  "/:id/conversion-status",
+  validateParams(uuidParamSchema),
+  checkResourceAccess("lead") as any,
+  asyncHandler(leadsController.getLeadConversionStatus) as RequestHandler,
+);
+
+router.post(
+  "/:id/convert",
+  requirePermission("leads:convert") as any,
+  validateParams(uuidParamSchema),
+  validateBody(convertLeadSchema),
+  checkResourceAccess("lead") as any,
+  asyncHandler(leadsController.convertLead) as RequestHandler,
+);
 
 router.get(
   "/:id",

@@ -10,7 +10,7 @@ import {
   ActivateConfirmDialog,
   DeactivateConfirmDialog,
 } from "@/components/hr/employees/DeactivateConfirmDialog";
-import { AddEmployeeModal } from "@/components/hr/employees/AddEmployeeModal";
+import { AddEmployeeSheet } from "@/components/hr/employees/AddEmployeeSheet";
 import { EmployeeDetailDrawer } from "@/components/hr/employees/detail/EmployeeDetailDrawer";
 
 export function EmployeesPageContent() {
@@ -201,7 +201,7 @@ export function EmployeesPageContent() {
       />
 
       {canEdit ? (
-        <AddEmployeeModal open={addOpen} onOpenChange={setAddOpen} onCreated={(id) => void onCreated(id)} />
+        <AddEmployeeSheet open={addOpen} onOpenChange={setAddOpen} onCreated={(id) => void onCreated(id)} />
       ) : null}
 
       <DeactivateConfirmDialog

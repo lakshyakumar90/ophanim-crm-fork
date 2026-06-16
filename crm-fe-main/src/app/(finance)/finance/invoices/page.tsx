@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Suspense, useState, useCallback } from "react";
 import useSWR from "swr";
 import { invoicesApi, type CurrencyCode, type Invoice } from "@/lib/finance-api";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
+import { InvoiceDetailSheet } from "@/components/finance/invoices/InvoiceDetailSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,12 +65,21 @@ function formatCurrency(amount: number, currency: CurrencyCode = "INR") {
 }
 
 export default function InvoicesPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <InvoicesPageContent />
+    </Suspense>
+  );
+}
+
+function InvoicesPageContent() {
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const sheet = useSheetQuery();
 
   const { data, isLoading, mutate } = useSWR(
     user ? ["invoices", statusFilter, search] : null,
@@ -113,6 +124,7 @@ export default function InvoicesPage() {
   const invoices = data?.data || [];
 
   return (
+    <>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -203,14 +215,13 @@ export default function InvoicesPage() {
             </TableHeader>
             <TableBody>
               {invoices.map((invoice: Invoice) => (
-                <TableRow key={invoice.id}>
+                <TableRow
+                  key={invoice.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => sheet.openDetail(invoice.id)}
+                >
                   <TableCell className="font-medium">
-                    <Link
-                      href={`/finance/invoices/${invoice.id}`}
-                      className="hover:text-primary"
-                    >
-                      {invoice.invoice_number}
-                    </Link>
+                    {invoice.invoice_number}
                   </TableCell>
                   <TableCell>
                     <div>
@@ -239,7 +250,7 @@ export default function InvoicesPage() {
                       {invoice.status.replace("_", " ")}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -247,11 +258,9 @@ export default function InvoicesPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/finance/invoices/${invoice.id}`}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </Link>
+                        <DropdownMenuItem onClick={() => sheet.openDetail(invoice.id)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
                         </DropdownMenuItem>
                         {user?.role === "admin" && (
                           <DropdownMenuItem
@@ -272,5 +281,12 @@ export default function InvoicesPage() {
         </div>
       )}
     </div>
+
+    <InvoiceDetailSheet
+      invoiceId={sheet.selectedId}
+      open={Boolean(sheet.selectedId)}
+      onOpenChange={(open) => !open && sheet.closeDetail()}
+    />
+    </>
   );
 }

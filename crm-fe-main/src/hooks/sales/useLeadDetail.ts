@@ -50,6 +50,7 @@ export function useLeadDetail() {
   // Status change state
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [showNlaDialog, setShowNlaDialog] = useState(false);
+  const [showConvertDialog, setShowConvertDialog] = useState(false);
   const [nlaReason, setNlaReason] = useState("");
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
 
@@ -288,6 +289,14 @@ export function useLeadDetail() {
     if (newStatus === "not_a_lead") {
       setPendingStatus(newStatus);
       setShowNlaDialog(true);
+      return;
+    }
+
+    // If changing to won, prompt conversion after update
+    if (newStatus === "won") {
+      setPendingStatus(newStatus);
+      await performStatusChange(newStatus);
+      setShowConvertDialog(true);
       return;
     }
 
@@ -540,6 +549,8 @@ export function useLeadDetail() {
     handleUpdateComment,
     handleDeleteComment,
     canEditLead,
+    showConvertDialog,
+    setShowConvertDialog,
   };
 }
 

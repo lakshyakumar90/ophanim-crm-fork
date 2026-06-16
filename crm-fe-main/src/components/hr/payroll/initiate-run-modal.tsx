@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -48,7 +41,7 @@ function currentYm(): { y: number; m: number } {
   return { y: d.getFullYear(), m: d.getMonth() + 1 };
 }
 
-export function InitiateRunModal({
+export function InitiatePayrollRunSheet({
   open,
   onOpenChange,
   runs,
@@ -255,17 +248,35 @@ export function InitiateRunModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Initiate Payroll Run</DialogTitle>
-          <DialogDescription>
-            This will calculate payroll for all active employees based on their current CTC and
-            attendance data.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-2">
+    <>
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Initiate Payroll Run"
+      description="Calculate payroll for active employees based on their current CTC and attendance data."
+      size="xl"
+      footer={
+        <>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            {missingCtc ? "Reject run" : "Cancel"}
+          </Button>
+          <Button
+            disabled={!canSubmit || (missingCtc && !proceedWithMissingCtc)}
+            onClick={() => void handleSubmit()}
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Initiating…
+              </>
+            ) : (
+              missingCtc ? "Initiate Run (OK)" : "Initiate Run"
+            )}
+          </Button>
+        </>
+      }
+    >
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="cohort-name">Cohort label (optional)</Label>
             <Input
@@ -453,26 +464,7 @@ export function InitiateRunModal({
             </Alert>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            {missingCtc ? "Reject run" : "Cancel"}
-          </Button>
-          <Button
-            disabled={!canSubmit || (missingCtc && !proceedWithMissingCtc)}
-            onClick={() => void handleSubmit()}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Initiating…
-              </>
-            ) : (
-              missingCtc ? "Initiate Run (OK)" : "Initiate Run"
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+    </FormSideSheet>
 
       <QuickFixMissingCTCModal
         open={fixOpen}
@@ -482,6 +474,6 @@ export function InitiateRunModal({
           onFixMissingCtcSubmitted?.();
         }}
       />
-    </Dialog>
+    </>
   );
 }

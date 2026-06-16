@@ -7,6 +7,7 @@ import teamsRoutes from "./core/teams/teams.routes.js";
 import teamNotesRoutes from "./core/team-notes/team-notes.routes.js";
 import leadsRoutes from "./sales/leads/leads.routes.js";
 import tasksRoutes from "./sales/tasks/tasks.routes.js";
+import quotesRoutes from "./sales/quotes/quotes.routes.js";
 import attendanceRoutes from "./operations/attendance/attendance.routes.js";
 import notificationsRoutes from "./operations/notifications/notifications.routes.js";
 import dashboardRoutes from "./operations/dashboard/dashboard.routes.js";
@@ -17,6 +18,8 @@ import departmentsRoutes from "./core/departments/departments.routes.js";
 import financeRoutes from "./finance/finance.routes.js";
 import searchRoutes from "./operations/search/search.routes.js";
 import projectsRoutes from "./projects/projects/projects.routes.js";
+import timeEntriesRoutes from "./projects/time/time.routes.js";
+import projectPortalPublicRoutes from "./projects/portal/portal.public.routes.js";
 import hrRoutes from "./hr/employees/hr.routes.js";
 import cronRoutes from "./system/cron/cron.routes.js";
 import internalRoutes from "./system/internal/internal.routes.js";
@@ -24,6 +27,11 @@ import adminRoutes from "./core/admin/admin.routes.js";
 import rolesRoutes from "./core/roles/roles.routes.js";
 import payrollRoutes from "./hr/payroll/payroll.routes.js";
 import performanceRoutes from "./hr/performance/performance.routes.js";
+import assetsRoutes from "./hr/assets/assets.routes.js";
+import skillsRoutes from "./hr/skills/skills.routes.js";
+import benefitsRoutes from "./hr/benefits/benefits.routes.js";
+import exitRoutes from "./hr/exit/exit.routes.js";
+import shiftsRoutes from "./hr/shifts/shifts.routes.js";
 
 /** Mount all domain route modules on the Express app */
 export function registerRoutes(app: Application): void {
@@ -34,6 +42,7 @@ export function registerRoutes(app: Application): void {
   app.use(`${API_PREFIX}/teams`, teamNotesRoutes);
   app.use(`${API_PREFIX}/leads`, leadsRoutes);
   app.use(`${API_PREFIX}/tasks`, tasksRoutes);
+  app.use(`${API_PREFIX}/quotes`, quotesRoutes);
   app.use(`${API_PREFIX}/attendance`, attendanceRoutes);
   app.use(`${API_PREFIX}/notifications`, notificationsRoutes);
   app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
@@ -44,7 +53,14 @@ export function registerRoutes(app: Application): void {
   app.use(`${API_PREFIX}/finance`, financeRoutes);
   app.use(`${API_PREFIX}/search`, searchRoutes);
   app.use(`${API_PREFIX}/projects`, projectsRoutes);
+  app.use(`${API_PREFIX}/time-entries`, timeEntriesRoutes);
+  app.use(`${API_PREFIX}/portal`, projectPortalPublicRoutes);
   app.use(`${API_PREFIX}/hr`, hrRoutes);
+  app.use(`${API_PREFIX}/hr/assets`, assetsRoutes);
+  app.use(`${API_PREFIX}/hr/skills`, skillsRoutes);
+  app.use(`${API_PREFIX}/hr/benefits`, benefitsRoutes);
+  app.use(`${API_PREFIX}/hr/exit`, exitRoutes);
+  app.use(`${API_PREFIX}/hr/shifts`, shiftsRoutes);
   app.use(`${API_PREFIX}/cron`, cronRoutes);
   app.use(`${API_PREFIX}/internal`, internalRoutes);
   app.use(`${API_PREFIX}/admin`, adminRoutes);

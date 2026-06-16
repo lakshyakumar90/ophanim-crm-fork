@@ -50,13 +50,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "#6b7280",
 };
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+import { formatCurrency } from "@/lib/invoice-line-item-math";
 
 function formatMonth(month: string): string {
   const date = new Date(month + "-01");
@@ -79,6 +73,13 @@ export default function FinanceAnalyticsPage() {
     user && user.role !== "employee" ? "finance-analytics" : null,
     () => financeAnalyticsApi.get(),
   );
+
+  const baseCurrency = ((data as any)?.base_currency || "INR") as
+    | "USD"
+    | "CAD"
+    | "GBP"
+    | "EUR"
+    | "INR";
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -168,7 +169,7 @@ export default function FinanceAnalyticsPage() {
                 <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
                   formatter={(value: number | undefined) =>
-                    formatCurrency(value || 0)
+                    formatCurrency(value || 0, baseCurrency)
                   }
                   labelFormatter={(label) =>
                     new Date(label + "-01").toLocaleDateString("en-IN", {
@@ -281,7 +282,7 @@ export default function FinanceAnalyticsPage() {
                   />
                   <Tooltip
                     formatter={(value: number | undefined) =>
-                      formatCurrency(value || 0)
+                      formatCurrency(value || 0, baseCurrency)
                     }
                   />
                   <Bar

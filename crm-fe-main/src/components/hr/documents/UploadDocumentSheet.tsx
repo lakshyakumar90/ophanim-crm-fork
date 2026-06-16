@@ -1,13 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -29,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { Upload, FileUp } from "lucide-react";
 import { UPLOAD_MAX_BYTES, UPLOAD_ACCEPT, isAllowedUploadFile } from "./document-utils";
 
-export function UploadDocumentModal({
+export function UploadDocumentSheet({
   open,
   onOpenChange,
   employees,
@@ -135,83 +129,14 @@ export function UploadDocumentModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Upload document</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label>Employee</Label>
-            <UserSelector users={userOptions} value={userId} onValueChange={setUserId} />
-          </div>
-          <div className="space-y-2">
-            <Label>Document type</Label>
-            <Select value={documentType} onValueChange={setDocumentType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                {activeTypes.map((t) => (
-                  <SelectItem key={t.id} value={t.slug}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Display name</Label>
-            <Input
-              value={documentName}
-              onChange={(e) => setDocumentName(e.target.value)}
-              placeholder="e.g. Passport scan"
-            />
-          </div>
-          <div
-            className={cn(
-              "border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer",
-              dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25",
-            )}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            onClick={() => document.getElementById("hr-doc-file")?.click()}
-          >
-            <input
-              id="hr-doc-file"
-              type="file"
-              accept={UPLOAD_ACCEPT}
-              className="hidden"
-              onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
-            />
-            <FileUp className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">
-              Drop file here or click to browse (PDF, images, DOCX — max 10MB)
-            </p>
-            {file ? (
-              <p className="text-sm font-medium mt-2">
-                {file.name} ({(file.size / 1024).toFixed(1)} KB)
-              </p>
-            ) : null}
-            {uploading ? (
-              <div className="mt-3 h-2 w-full bg-muted rounded overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            ) : null}
-          </div>
-          <div className="space-y-2">
-            <Label>Notes (optional)</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-          </div>
-        </div>
-        <DialogFooter>
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Upload document"
+      description="Attach a file to an employee's document record."
+      size="lg"
+      footer={
+        <>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -225,8 +150,80 @@ export function UploadDocumentModal({
               </>
             )}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Employee</Label>
+          <UserSelector users={userOptions} value={userId} onValueChange={setUserId} />
+        </div>
+        <div className="space-y-2">
+          <Label>Document type</Label>
+          <Select value={documentType} onValueChange={setDocumentType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeTypes.map((t) => (
+                <SelectItem key={t.id} value={t.slug}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Display name</Label>
+          <Input
+            value={documentName}
+            onChange={(e) => setDocumentName(e.target.value)}
+            placeholder="e.g. Passport scan"
+          />
+        </div>
+        <div
+          className={cn(
+            "border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer",
+            dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25",
+          )}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          onClick={() => document.getElementById("hr-doc-file")?.click()}
+        >
+          <input
+            id="hr-doc-file"
+            type="file"
+            accept={UPLOAD_ACCEPT}
+            className="hidden"
+            onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+          />
+          <FileUp className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+          <p className="text-sm text-muted-foreground">
+            Drop file here or click to browse (PDF, images, DOCX — max 10MB)
+          </p>
+          {file ? (
+            <p className="text-sm font-medium mt-2">
+              {file.name} ({(file.size / 1024).toFixed(1)} KB)
+            </p>
+          ) : null}
+          {uploading ? (
+            <div className="mt-3 h-2 w-full bg-muted rounded overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          ) : null}
+        </div>
+        <div className="space-y-2">
+          <Label>Notes (optional)</Label>
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        </div>
+      </div>
+    </FormSideSheet>
   );
 }

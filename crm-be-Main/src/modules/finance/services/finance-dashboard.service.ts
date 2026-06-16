@@ -34,6 +34,8 @@ export async function getFinanceDashboard(
 
   return {
     summary: {
+      base_currency: invoiceStats.base_currency,
+      by_currency: invoiceStats.by_currency,
       total_revenue: invoiceStats.total_revenue,
       outstanding_amount: invoiceStats.outstanding_amount,
       this_month_expenses: expenseStats.total_expenses,
@@ -194,13 +196,14 @@ export async function getRecentFinanceActivity(
     type: string;
     description: string;
     amount?: number;
+    currency?: string | null;
     timestamp: string;
   }> = [];
 
   // Get recent invoices
   let invoiceQuery = supabaseAdmin
     .from("invoices")
-    .select("invoice_number, client_name, total_amount, status, created_at")
+    .select("invoice_number, client_name, total_amount, currency, status, created_at")
     .order("created_at", { ascending: false })
     .limit(5);
 
@@ -217,6 +220,7 @@ export async function getRecentFinanceActivity(
       type: "invoice",
       description: `Invoice ${inv.invoice_number} for ${inv.client_name} (${inv.status})`,
       amount: Number(inv.total_amount),
+      currency: inv.currency || null,
       timestamp: inv.created_at,
     });
   });

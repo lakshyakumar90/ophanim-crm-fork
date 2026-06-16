@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +18,7 @@ type Props = {
   approvingId: string | null;
   onQuickApprove: (run: PayrollRun) => void | Promise<void>;
   onCorrection: (run: PayrollRun) => void;
+  onViewRun: (runId: string) => void;
 };
 
 export function PayrollRunsTab({
@@ -31,8 +31,8 @@ export function PayrollRunsTab({
   approvingId,
   onQuickApprove,
   onCorrection,
+  onViewRun,
 }: Props) {
-  const router = useRouter();
 
   return (
     <div className="mt-4 space-y-4">
@@ -96,7 +96,7 @@ export function PayrollRunsTab({
                           canApprove={canApprove}
                           canManage={canManage}
                           approvingId={approvingId}
-                          onView={() => router.push(`/hr/payroll/${run.id}`)}
+                          onView={() => onViewRun(run.id)}
                           onApprove={() => void onQuickApprove(run)}
                           onCorrection={() => onCorrection(run)}
                         />

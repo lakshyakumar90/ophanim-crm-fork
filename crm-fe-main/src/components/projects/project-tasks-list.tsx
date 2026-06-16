@@ -95,7 +95,7 @@ export function ProjectTasksList({ projectId }: { projectId: string }) {
         <div className="flex items-center gap-2">
           <Button
             onClick={() =>
-              router.push(`/projects/tasks/new?projectId=${projectId}`)
+              router.push(`/projects/tasks?create=1&projectId=${projectId}`)
             }
           >
             <Plus className="w-4 h-4 mr-2" />

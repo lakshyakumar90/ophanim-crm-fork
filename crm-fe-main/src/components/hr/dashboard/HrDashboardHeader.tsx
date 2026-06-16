@@ -40,12 +40,6 @@ export function HrDashboardHeader({
             <Button onClick={() => router.push("/hr/payroll")}>
               Initiate Payroll
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => router.push("/hr/recruitment/new")}
-            >
-              Create Job Posting
-            </Button>
             <Button variant="outline" onClick={() => router.push("/hr/holidays")}>
               Add Holiday
             </Button>

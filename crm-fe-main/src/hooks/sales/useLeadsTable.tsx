@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { formatIST } from "@/lib/date-utils";
 import type { Lead } from "@/types";
 import { getStatusColor, getStatusLabel } from "@/lib/lead-status-config";
-import { User, FolderKanban, Copy } from "lucide-react";
+import { User, FolderKanban, Copy, FileText } from "lucide-react";
 import { DEFAULT_COLUMNS } from "@/components/sales/leads/leads-list-constants";
 
 export type AssignmentFilter = "all" | "assigned" | "unassigned";
@@ -33,6 +33,7 @@ export interface UseLeadsTableOptions {
   leadsWithOverdueReminders: Set<string>;
   duplicateLeadIds: Set<string>;
   leadProjectMap: Map<string, { id: string; name: string }>;
+  leadInvoiceMap?: Map<string, { id: string; clientName: string }>;
   onMutate?: () => void;
 }
 
@@ -52,6 +53,7 @@ export function useLeadsTable({
   leadsWithOverdueReminders,
   duplicateLeadIds,
   leadProjectMap,
+  leadInvoiceMap,
   onMutate,
 }: UseLeadsTableOptions) {
   const router = useRouter();
@@ -270,6 +272,10 @@ export function useLeadsTable({
             lead.status === "won" && (isAdmin || isManager)
               ? leadProjectMap.get(lead.id)
               : null;
+          const linkedInvoice =
+            lead.status === "won" && (isAdmin || isManager)
+              ? leadInvoiceMap?.get(lead.id)
+              : null;
           const isDuplicate = duplicateLeadIds.has(lead.id);
           return (
             <div className="flex flex-col gap-1">
@@ -282,6 +288,16 @@ export function useLeadsTable({
                 >
                   <FolderKanban className="h-3 w-3" />
                   {linkedProject.name}
+                </Link>
+              )}
+              {linkedInvoice && (
+                <Link
+                  href={`/finance/invoices/${linkedInvoice.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 hover:bg-emerald-100 transition-colors w-fit"
+                >
+                  <FileText className="h-3 w-3" />
+                  Invoiced
                 </Link>
               )}
               {isDuplicate && (
@@ -347,7 +363,7 @@ export function useLeadsTable({
           return String((lead as unknown as Record<string, unknown>)[key] ?? "-");
       }
     },
-    [duplicateLeadIds, isAdmin, isManager, leadProjectMap],
+    [duplicateLeadIds, isAdmin, isManager, leadProjectMap, leadInvoiceMap],
   );
 
   return {

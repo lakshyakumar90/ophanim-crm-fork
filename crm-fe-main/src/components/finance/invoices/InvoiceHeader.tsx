@@ -17,7 +17,15 @@ import type { Invoice } from "@/lib/finance-api";
 type Detail = ReturnType<typeof useInvoiceDetail>;
 
 
-export function InvoiceHeader({ detail, invoice }: { detail: Detail; invoice: Invoice }) {
+export function InvoiceHeader({
+  detail,
+  invoice,
+  embedded,
+}: {
+  detail: Detail;
+  invoice: Invoice;
+  embedded?: boolean;
+}) {
   const {
     isAdmin, isManager, isPreviewLoading, isDownloadingPdf, isPaymentDialogOpen, setIsPaymentDialogOpen,
     paymentAmount, setPaymentAmount, paymentDate, setPaymentDate, paymentMode, setPaymentMode,
@@ -33,11 +41,13 @@ export function InvoiceHeader({ detail, invoice }: { detail: Detail; invoice: In
   return (
     <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
       <div className="flex items-center gap-4">
-        <Link href="/finance/invoices">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
+        {!embedded && (
+          <Link href="/finance/invoices">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+        )}
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <FileText className="h-6 w-6 text-primary" />

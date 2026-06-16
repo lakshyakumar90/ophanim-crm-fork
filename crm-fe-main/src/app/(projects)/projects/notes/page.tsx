@@ -16,6 +16,9 @@ import {
   SortAsc,
   SortDesc,
   PinIcon,
+  Plus,
+  Save,
+  X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,8 +31,10 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { format, isAfter, isBefore, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
@@ -70,6 +75,11 @@ export default function GlobalNotesPage() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
+  // Compose
+  const [composeProjectId, setComposeProjectId] = useState("");
+  const [newNote, setNewNote] = useState("");
+  const [composing, setComposing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   // Filters
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
@@ -154,8 +164,38 @@ export default function GlobalNotesPage() {
 
   const isLoading = isLoadingProjects || isLoadingNotes;
 
+  const handleSubmitNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNote.trim() || !composeProjectId) return;
+    setSubmitting(true);
+    try {
+      const token = localStorage.getItem("crm_access_token");
+      const res = await fetch(`${API_URL}/projects/${composeProjectId}/notes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: newNote, isPrivate: true }),
+      });
+      if (res.ok) {
+        setNewNote("");
+        setComposing(false);
+        setComposeProjectId("");
+        await fetchNotes();
+        toast.success("Note saved");
+      } else {
+        toast.error("Failed to save note");
+      }
+    } catch {
+      toast.error("Failed to save note");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-5 p-6 max-w-4xl mx-auto">
+    <div className="flex flex-col gap-5 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -178,6 +218,80 @@ export default function GlobalNotesPage() {
           Refresh
         </Button>
       </div>
+
+      {/* Compose */}
+      {composing ? (
+        <div className="border rounded-2xl bg-card shadow-sm overflow-hidden">
+          <form onSubmit={handleSubmitNote}>
+            <div className="p-4 space-y-3">
+              <Select
+                value={composeProjectId}
+                onValueChange={setComposeProjectId}
+              >
+                <SelectTrigger className="h-9">
+                  <FolderKanban className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Textarea
+                placeholder="Write a note..."
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                className="resize-none min-h-[100px] border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 text-sm bg-transparent"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && !newNote.trim()) setComposing(false);
+                }}
+              />
+            </div>
+            <div className="border-t px-4 py-2.5 flex items-center justify-end gap-2 bg-muted/30">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setNewNote("");
+                  setComposeProjectId("");
+                  setComposing(false);
+                }}
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={submitting || !newNote.trim() || !composeProjectId}
+                className="h-7 text-xs gap-1.5"
+              >
+                {submitting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                Save Note
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : (
+        <button
+          onClick={() => setComposing(true)}
+          disabled={isLoadingProjects || projects.length === 0}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-muted-foreground/30 bg-muted/20 hover:bg-muted/40 hover:border-primary/40 transition-all text-muted-foreground text-sm disabled:opacity-50 disabled:pointer-events-none"
+        >
+          <Plus className="h-4 w-4" />
+          Add a note...
+        </button>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center bg-card border rounded-xl p-3">
@@ -269,7 +383,7 @@ export default function GlobalNotesPage() {
           </p>
           {notes.length === 0 && (
             <p className="text-sm text-muted-foreground max-w-xs">
-              Private notes are created inside individual project pages under the Notes tab.
+              Create a private note above, or add one from a project&apos;s Notes tab.
             </p>
           )}
         </div>

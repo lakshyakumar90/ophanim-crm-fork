@@ -910,15 +910,36 @@ export async function getProjectsByManagerId(
 /**
  * Get All Project Members with their job titles for resource management
  */
-export async function getProjectResources(authUser: AuthUser): Promise<{
-  developers: any[];
-  designers: any[];
-  seoSpecialists: any[];
-  contentWriters: any[];
-  projectManagers: any[];
+export interface ResourceUser {
+  id: string;
+  fullName: string;
+  email: string;
+  avatarUrl: string | null;
+  jobTitle: string | null;
+  role: string;
+  totalAllocationPercent: number;
+  activeProjectCount: number;
+  hoursLoggedThisWeek: number;
+  projectAllocations: {
+    projectId: string;
+    projectName: string;
+    allocationPercent: number;
+    role: string;
+  }[];
+}
+
+export async function getProjectResources(_authUser: AuthUser): Promise<{
+  developers: ResourceUser[];
+  designers: ResourceUser[];
+  seoSpecialists: ResourceUser[];
+  contentWriters: ResourceUser[];
+  projectManagers: ResourceUser[];
 }> {
-  // Fetch all active users and the resolved RBAC role names in parallel
-  const [usersRes, rbacRes] = await Promise.all([
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStartStr = weekStart.toISOString().slice(0, 10);
+
+  const [usersRes, rbacRes, membersRes, timeRes] = await Promise.all([
     supabaseAdmin
       .from("users")
       .select("id, full_name, email, avatar_url, job_title, role")
@@ -926,6 +947,20 @@ export async function getProjectResources(authUser: AuthUser): Promise<{
     supabaseAdmin
       .from("user_resolved_permissions" as any)
       .select("user_id, role_names"),
+    supabaseAdmin
+      .from("project_members")
+      .select(
+        `
+        user_id,
+        allocation_percentage,
+        role,
+        project:projects!project_id(id, name, status)
+      `,
+      ),
+    supabaseAdmin
+      .from("time_entries")
+      .select("user_id, hours")
+      .gte("entry_date", weekStartStr),
   ]);
 
   if (usersRes.error) {
@@ -933,8 +968,38 @@ export async function getProjectResources(authUser: AuthUser): Promise<{
   }
 
   const allUsers = usersRes.data || [];
+  const activeStatuses = new Set(["planned", "in_progress", "on_hold"]);
 
-  // Build a map of user_id -> role_names from RBAC
+  const allocationByUser = new Map<
+    string,
+    { total: number; projects: ResourceUser["projectAllocations"] }
+  >();
+  for (const row of membersRes.data || []) {
+    const project = row.project as any;
+    if (!project || !activeStatuses.has(project.status)) continue;
+
+    const existing = allocationByUser.get(row.user_id) || {
+      total: 0,
+      projects: [],
+    };
+    existing.total += row.allocation_percentage || 0;
+    existing.projects.push({
+      projectId: project.id,
+      projectName: project.name,
+      allocationPercent: row.allocation_percentage,
+      role: row.role,
+    });
+    allocationByUser.set(row.user_id, existing);
+  }
+
+  const hoursByUser = new Map<string, number>();
+  for (const row of timeRes.data || []) {
+    hoursByUser.set(
+      row.user_id,
+      (hoursByUser.get(row.user_id) || 0) + Number(row.hours || 0),
+    );
+  }
+
   const rbacRoleNames = new Map<string, string[]>();
   for (const row of (rbacRes.data || []) as any[]) {
     rbacRoleNames.set(row.user_id, row.role_names || []);
@@ -945,32 +1010,57 @@ export async function getProjectResources(authUser: AuthUser): Promise<{
       (n: string) => n.toLowerCase() === roleName.toLowerCase(),
     );
 
+  const enrichUser = (u: any): ResourceUser => {
+    const alloc = allocationByUser.get(u.id);
+    return {
+      id: u.id,
+      fullName: u.full_name,
+      email: u.email,
+      avatarUrl: u.avatar_url,
+      jobTitle: u.job_title,
+      role: u.role,
+      totalAllocationPercent: alloc?.total || 0,
+      activeProjectCount: alloc?.projects.length || 0,
+      hoursLoggedThisWeek: hoursByUser.get(u.id) || 0,
+      projectAllocations: alloc?.projects || [],
+    };
+  };
+
   return {
-    developers: allUsers.filter(
-      (u: any) =>
-        u.job_title === "developer" || hasRbacRole(u.id, "Developer"),
-    ),
-    designers: allUsers.filter(
-      (u: any) =>
-        u.job_title === "designer" || hasRbacRole(u.id, "Designer"),
-    ),
-    seoSpecialists: allUsers.filter(
-      (u: any) =>
-        u.job_title === "seo_specialist" ||
-        hasRbacRole(u.id, "SEO Specialist"),
-    ),
-    contentWriters: allUsers.filter(
-      (u: any) =>
-        u.job_title === "content_writer" ||
-        hasRbacRole(u.id, "Content Writer"),
-    ),
-    // Project Managers: anyone with PM job title, PM RBAC role, admin, or manager role
-    projectManagers: allUsers.filter(
-      (u: any) =>
-        u.job_title === "project_manager" ||
-        u.role === "admin" ||
-        hasRbacRole(u.id, "Project Manager"),
-    ),
+    developers: allUsers
+      .filter(
+        (u: any) =>
+          u.job_title === "developer" || hasRbacRole(u.id, "Developer"),
+      )
+      .map(enrichUser),
+    designers: allUsers
+      .filter(
+        (u: any) =>
+          u.job_title === "designer" || hasRbacRole(u.id, "Designer"),
+      )
+      .map(enrichUser),
+    seoSpecialists: allUsers
+      .filter(
+        (u: any) =>
+          u.job_title === "seo_specialist" ||
+          hasRbacRole(u.id, "SEO Specialist"),
+      )
+      .map(enrichUser),
+    contentWriters: allUsers
+      .filter(
+        (u: any) =>
+          u.job_title === "content_writer" ||
+          hasRbacRole(u.id, "Content Writer"),
+      )
+      .map(enrichUser),
+    projectManagers: allUsers
+      .filter(
+        (u: any) =>
+          u.job_title === "project_manager" ||
+          u.role === "admin" ||
+          hasRbacRole(u.id, "Project Manager"),
+      )
+      .map(enrichUser),
   };
 }
 

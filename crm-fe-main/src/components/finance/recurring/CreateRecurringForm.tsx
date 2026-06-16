@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export function CreateRecurringForm() {
+export function CreateRecurringForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const {
     register,
     watch,
@@ -32,7 +32,7 @@ export function CreateRecurringForm() {
     updateLineItem,
     isSubmitting,
     onSubmit,
-  } = useCreateRecurringForm();
+  } = useCreateRecurringForm({ onSuccess });
 
   const dayOfMonth = watch("day_of_month");
   const dayOfWeek = watch("day_of_week");

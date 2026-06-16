@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Suspense, useState, useCallback } from "react";
 import useSWR from "swr";
 import { recurringApi, type RecurringSchedule } from "@/lib/finance-api";
 import { useAuth, useIsAdmin, useIsManager } from "@/providers/auth-provider";
+import { CreateRecurringSheet } from "@/components/finance/recurring/CreateRecurringSheet";
+import { RecurringDetailSheet } from "@/components/finance/recurring/RecurringDetailSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,10 +48,19 @@ const FREQUENCY_LABELS: Record<string, string> = {
 };
 
 export default function RecurringSchedulesPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <RecurringSchedulesPageContent />
+    </Suspense>
+  );
+}
+
+function RecurringSchedulesPageContent() {
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const sheet = useSheetQuery();
 
   const { data, isLoading, mutate } = useSWR(
     user ? "recurring-schedules" : null,
@@ -102,6 +114,7 @@ export default function RecurringSchedulesPage() {
   const schedules = data?.data || [];
 
   return (
+    <>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -122,12 +135,10 @@ export default function RecurringSchedulesPage() {
             Refresh
           </Button>
           {(isAdmin || isManager) && (
-            <Link href="/finance/recurring/new">
-              <Button size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                New Schedule
-              </Button>
-            </Link>
+            <Button size="sm" onClick={sheet.openCreate}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Schedule
+            </Button>
           )}
         </div>
       </div>
@@ -145,11 +156,9 @@ export default function RecurringSchedulesPage() {
             <CalendarClock className="h-12 w-12 text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">No recurring schedules</p>
             {(isAdmin || isManager) && (
-              <Link href="/finance/recurring/new">
-                <Button variant="link" className="mt-2">
-                  Create your first schedule
-                </Button>
-              </Link>
+              <Button variant="link" className="mt-2" onClick={sheet.openCreate}>
+                Create your first schedule
+              </Button>
             )}
           </CardContent>
         </Card>
@@ -169,7 +178,11 @@ export default function RecurringSchedulesPage() {
             </TableHeader>
             <TableBody>
               {schedules.map((schedule: RecurringSchedule) => (
-                <TableRow key={schedule.id}>
+                <TableRow
+                  key={schedule.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => sheet.openDetail(schedule.id)}
+                >
                   <TableCell className="font-medium">{schedule.name}</TableCell>
                   <TableCell>
                     <div>
@@ -203,7 +216,7 @@ export default function RecurringSchedulesPage() {
                       {schedule.is_active ? "Active" : "Paused"}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -211,11 +224,9 @@ export default function RecurringSchedulesPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/finance/recurring/${schedule.id}`}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </Link>
+                        <DropdownMenuItem onClick={() => sheet.openDetail(schedule.id)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
                         </DropdownMenuItem>
                         {schedule.is_active ? (
                           <DropdownMenuItem
@@ -251,5 +262,20 @@ export default function RecurringSchedulesPage() {
         </div>
       )}
     </div>
+
+    {(isAdmin || isManager) && (
+      <CreateRecurringSheet
+        open={sheet.createOpen}
+        onOpenChange={(open) => (open ? sheet.openCreate() : sheet.closeCreate())}
+        onCreated={() => mutate()}
+      />
+    )}
+    <RecurringDetailSheet
+      scheduleId={sheet.selectedId}
+      open={Boolean(sheet.selectedId)}
+      onOpenChange={(open) => !open && sheet.closeDetail()}
+      onUpdated={() => mutate()}
+    />
+    </>
   );
 }

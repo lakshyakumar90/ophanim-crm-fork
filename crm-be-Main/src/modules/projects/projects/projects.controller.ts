@@ -33,6 +33,18 @@ import {
 } from "./projects.validator.js";
 import { sendSuccess, sendCreated } from "../../../utils/responses.js";
 
+export const accessCheck = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    sendSuccess(res, { allowed: true, userId: req.user!.id });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Create Project
 export const create = async (
   req: AuthenticatedRequest,

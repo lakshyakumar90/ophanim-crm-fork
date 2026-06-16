@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Search } from "lucide-react";
+import { CreatePerformanceCycleSheet } from "@/components/hr/performance/CreatePerformanceCycleSheet";
+import { PerformanceCycleDetailSheet } from "@/components/hr/performance/PerformanceCycleDetailSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -36,8 +39,11 @@ import { HRPerformanceDashboardWidgets } from "@/components/hr/performance/Perfo
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
-export default function PerformanceCyclesPage() {
+function PerformanceCyclesPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sheet = useSheetQuery();
+  const editId = sheet.createOpen ? searchParams.get("edit") : null;
   const canManage = usePermission("performance:manage");
   const { load, loading, error } = useReviewCycles();
 
@@ -155,7 +161,7 @@ export default function PerformanceCyclesPage() {
           </p>
         </div>
         {canManage ? (
-          <Button onClick={() => router.push("/hr/performance/new")} className="gap-2">
+          <Button onClick={sheet.openCreate} className="gap-2">
             <Plus className="h-4 w-4" />
             Create review cycle
           </Button>
@@ -254,9 +260,13 @@ export default function PerformanceCyclesPage() {
               cycle={c}
               selfDonePct={selfPctByCycle[c.id]}
               canManage={canManage}
-              onView={() => router.push(`/hr/performance/${c.id}`)}
+              onView={() => sheet.openDetail(c.id)}
               onActivate={canManage ? () => setActivateId(c.id) : undefined}
-              onEdit={canManage ? () => router.push(`/hr/performance/new?edit=${c.id}`) : undefined}
+              onEdit={
+                canManage
+                  ? () => router.replace(`/hr/performance?create=1&edit=${c.id}`)
+                  : undefined
+              }
               onDelete={canManage ? () => setDeleteId(c.id) : undefined}
             />
           ))}
@@ -298,6 +308,43 @@ export default function PerformanceCyclesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {canManage ? (
+        <CreatePerformanceCycleSheet
+          open={sheet.createOpen}
+          onOpenChange={(open) => {
+            if (open) sheet.openCreate();
+            else {
+              sheet.closeCreate();
+              if (searchParams.get("edit")) {
+                router.replace("/hr/performance");
+              }
+            }
+          }}
+          editId={editId}
+          onCreated={(cycleId) => {
+            sheet.closeCreate();
+            router.replace("/hr/performance");
+            sheet.openDetail(cycleId);
+            void refresh();
+          }}
+        />
+      ) : null}
+
+      <PerformanceCycleDetailSheet
+        cycleId={sheet.selectedId}
+        open={Boolean(sheet.selectedId)}
+        onOpenChange={(open) => !open && sheet.closeDetail()}
+        onUpdated={() => void refresh()}
+      />
     </div>
+  );
+}
+
+export default function PerformanceCyclesPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-muted-foreground">Loading…</div>}>
+      <PerformanceCyclesPageContent />
+    </Suspense>
   );
 }

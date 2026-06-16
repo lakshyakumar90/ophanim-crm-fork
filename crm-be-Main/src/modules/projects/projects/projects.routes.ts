@@ -6,12 +6,17 @@ import {
 import multer from "multer";
 import { authenticate } from "../../../middleware/auth.middleware.js";
 import {
-  requireRole,
+  requirePermission,
+  requireAnyPermission,
   excludeDepartment,
 } from "../../../middleware/authorization.middleware.js";
 import { asyncHandler } from "../../../middleware/error.middleware.js";
-import { USER_ROLES } from "../../../config/constants.js";
 import * as projectController from "./projects.controller.js";
+import milestonesRoutes from "../milestones/milestones.routes.js";
+import sprintsRoutes from "../sprints/sprints.routes.js";
+import timelineRoutes from "../timeline/timeline.routes.js";
+import portalRoutes from "../portal/portal.routes.js";
+import timeRoutes from "../time/time.routes.js";
 
 const router: RouterType = Router();
 
@@ -22,181 +27,109 @@ const upload = multer({
   },
 });
 
+const viewProjects = requirePermission("projects:view") as RequestHandler;
+const createProjects = requirePermission("projects:create") as RequestHandler;
+const editProjects = requirePermission("projects:edit") as RequestHandler;
+const closeProjects = requirePermission("projects:close") as RequestHandler;
+const assignMembers = requirePermission("projects:assign_member") as RequestHandler;
+const viewOrEdit = requireAnyPermission([
+  "projects:view",
+  "projects:edit",
+  "projects:create",
+]) as RequestHandler;
+
 router.use(authenticate as any);
 router.use(excludeDepartment("sales", "finance") as any);
 
-router.get(
-  "/stats",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(projectController.stats) as RequestHandler,
-);
+router.get("/access-check", viewProjects, asyncHandler(projectController.accessCheck) as RequestHandler);
 
-router.get(
-  "/idle",
-  requireRole(USER_ROLES.ADMIN) as RequestHandler,
-  asyncHandler(projectController.idleProjects) as RequestHandler,
-);
+router.get("/stats", viewProjects, asyncHandler(projectController.stats) as RequestHandler);
 
-router.get(
-  "/resources",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
-  asyncHandler(projectController.resources) as RequestHandler,
-);
+router.get("/idle", closeProjects, asyncHandler(projectController.idleProjects) as RequestHandler);
+
+router.get("/resources", viewProjects, asyncHandler(projectController.resources) as RequestHandler);
+
+router.use("/time", timeRoutes);
+
+router.use("/:projectId/milestones", milestonesRoutes);
+router.use("/:projectId/sprints", sprintsRoutes);
+router.use("/:projectId/timeline", timelineRoutes);
+router.use("/:projectId/portal", portalRoutes);
 
 router.get(
   "/by-manager/:managerId",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
+  viewProjects,
   asyncHandler(projectController.byManager) as RequestHandler,
 );
 
-router.post(
-  "/",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
-  asyncHandler(projectController.create) as RequestHandler,
-);
+router.post("/", createProjects, asyncHandler(projectController.create) as RequestHandler);
 
-router.get(
-  "/",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(projectController.list) as RequestHandler,
-);
+router.get("/", viewProjects, asyncHandler(projectController.list) as RequestHandler);
 
-router.get(
-  "/my-projects",
-  requireRole(USER_ROLES.EMPLOYEE, USER_ROLES.MANAGER) as RequestHandler,
-  asyncHandler(projectController.myProjects) as RequestHandler,
-);
+router.get("/my-projects", viewProjects, asyncHandler(projectController.myProjects) as RequestHandler);
 
 router.get(
   "/:id/dashboard-stats",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
+  viewProjects,
   asyncHandler(projectController.dashboardStats) as RequestHandler,
 );
 
-router.get(
-  "/:id",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(projectController.getById) as RequestHandler,
-);
+router.get("/:id", viewProjects, asyncHandler(projectController.getById) as RequestHandler);
 
-router.put(
-  "/:id",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
-  asyncHandler(projectController.update) as RequestHandler,
-);
+router.put("/:id", editProjects, asyncHandler(projectController.update) as RequestHandler);
 
-router.delete(
-  "/:id",
-  requireRole(USER_ROLES.ADMIN) as RequestHandler,
-  asyncHandler(projectController.remove) as RequestHandler,
-);
+router.delete("/:id", closeProjects, asyncHandler(projectController.remove) as RequestHandler);
 
-router.post(
-  "/:id/members",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
-  asyncHandler(projectController.addMember) as RequestHandler,
-);
+router.post("/:id/members", assignMembers, asyncHandler(projectController.addMember) as RequestHandler);
 
 router.put(
   "/:id/members/:userId",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
+  assignMembers,
   asyncHandler(projectController.updateMember) as RequestHandler,
 );
 
 router.delete(
   "/:id/members/:userId",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
+  assignMembers,
   asyncHandler(projectController.removeMember) as RequestHandler,
 );
 
-router.get(
-  "/:id/notes",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(projectController.getProjectNotes) as RequestHandler,
-);
+router.get("/:id/notes", viewProjects, asyncHandler(projectController.getProjectNotes) as RequestHandler);
 
-router.post(
-  "/:id/notes",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(projectController.createProjectNote) as RequestHandler,
-);
+router.post("/:id/notes", viewOrEdit, asyncHandler(projectController.createProjectNote) as RequestHandler);
 
-router.put(
-  "/:id/notes/:noteId",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(projectController.updateProjectNote) as RequestHandler,
-);
+router.put("/:id/notes/:noteId", viewOrEdit, asyncHandler(projectController.updateProjectNote) as RequestHandler);
 
 router.post(
   "/:id/notes/:noteId/pin",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
+  editProjects,
   asyncHandler(projectController.pinProjectNote) as RequestHandler,
 );
 
 router.post(
   "/:id/notes/:noteId/unpin",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
+  editProjects,
   asyncHandler(projectController.unpinProjectNote) as RequestHandler,
 );
 
-router.get(
-  "/:id/files",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
-  asyncHandler(projectController.getProjectFiles) as RequestHandler,
-);
+router.get("/:id/files", viewProjects, asyncHandler(projectController.getProjectFiles) as RequestHandler);
 
 router.post(
   "/:id/files",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
+  editProjects,
   upload.single("file") as RequestHandler,
   asyncHandler(projectController.uploadProjectFile) as RequestHandler,
 );
 
 router.get(
   "/:id/files/:fileId/download",
-  requireRole(
-    USER_ROLES.ADMIN,
-    USER_ROLES.MANAGER,
-    USER_ROLES.EMPLOYEE,
-  ) as RequestHandler,
+  viewProjects,
   asyncHandler(projectController.getProjectFileDownload) as RequestHandler,
 );
 
 router.delete(
   "/:id/files/:fileId",
-  requireRole(USER_ROLES.ADMIN, USER_ROLES.MANAGER) as RequestHandler,
+  editProjects,
   asyncHandler(projectController.deleteProjectFile) as RequestHandler,
 );
 

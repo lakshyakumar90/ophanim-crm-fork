@@ -23,7 +23,7 @@ import {
   normalizeLeads,
 } from "@/lib/finance/recurring-actions";
 
-export function useCreateRecurringForm() {
+export function useCreateRecurringForm(options?: { onSuccess?: () => void }) {
   const { user } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,7 +96,11 @@ export function useCreateRecurringForm() {
     try {
       await createRecurringSchedule(values);
       toast.success("Recurring schedule created");
-      router.push("/finance/recurring");
+      if (options?.onSuccess) {
+        options.onSuccess();
+      } else {
+        router.push("/finance/recurring");
+      }
     } catch (error: unknown) {
       toast.error(getCreateRecurringErrorMessage(error));
     } finally {

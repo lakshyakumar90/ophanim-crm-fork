@@ -29,18 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { CreatePersonalTaskSheet } from "@/components/projects/CreatePersonalTaskSheet";
 
 // Mock types for now - these would match backend types
 interface Task {
@@ -91,14 +80,6 @@ export default function MyTasksPage() {
   const [loading, setLoading] = useState(true);
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
 
-  // New task form
-  const [newTask, setNewTask] = useState({
-    title: "",
-    description: "",
-    priority: "medium",
-    dueDate: "",
-  });
-
   const fetchTasks = async () => {
     setLoading(true);
     try {
@@ -124,47 +105,6 @@ export default function MyTasksPage() {
   useEffect(() => {
     fetchTasks();
   }, []);
-
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTask.title) return;
-
-    try {
-      const token = localStorage.getItem("crm_access_token");
-      const res = await fetch(`${API_URL}/tasks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: newTask.title,
-          description: newTask.description || undefined,
-          priority: newTask.priority,
-          dueDate: newTask.dueDate || undefined,
-          status: "todo",
-        }),
-      });
-
-      if (res.ok) {
-        toast.success("Task created successfully");
-        setIsNewTaskOpen(false);
-        setNewTask({
-          title: "",
-          description: "",
-          priority: "medium",
-          dueDate: "",
-        });
-        fetchTasks();
-      } else {
-        const error = await res.json();
-        toast.error(error.message || "Failed to create task");
-      }
-    } catch (error) {
-      console.error("Failed to create task:", error);
-      toast.error("Failed to create task");
-    }
-  };
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
     try {
@@ -203,74 +143,15 @@ export default function MyTasksPage() {
             Manage your personal tasks and assigned work.
           </p>
         </div>
-        <Dialog open={isNewTaskOpen} onOpenChange={setIsNewTaskOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              New Personal Task
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create Personal Task</DialogTitle>
-              <DialogDescription>
-                Add a new task for yourself properly.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreateTask} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Title</Label>
-                <Input
-                  value={newTask.title}
-                  onChange={(e) =>
-                    setNewTask({ ...newTask, title: e.target.value })
-                  }
-                  placeholder="Task title"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea
-                  value={newTask.description}
-                  onChange={(e) =>
-                    setNewTask({ ...newTask, description: e.target.value })
-                  }
-                  placeholder="Details about the task..."
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Priority</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={newTask.priority}
-                    onChange={(e) =>
-                      setNewTask({ ...newTask, priority: e.target.value })
-                    }
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Due Date</Label>
-                  <Input
-                    type="date"
-                    value={newTask.dueDate}
-                    onChange={(e) =>
-                      setNewTask({ ...newTask, dueDate: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="submit">Create Task</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setIsNewTaskOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          New Personal Task
+        </Button>
+        <CreatePersonalTaskSheet
+          open={isNewTaskOpen}
+          onOpenChange={setIsNewTaskOpen}
+          onCreated={fetchTasks}
+        />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

@@ -225,7 +225,13 @@ function renderNoteContent(
   return parts.length > 0 ? <>{parts}</> : <span className="whitespace-pre-wrap break-words">{content}</span>;
 }
 
-export function ProjectNotes({ projectId }: { projectId: string }) {
+export function ProjectNotes({
+  projectId,
+  fullHeight = false,
+}: {
+  projectId: string;
+  fullHeight?: boolean;
+}) {
   const { user } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState("");
@@ -530,7 +536,10 @@ export function ProjectNotes({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="flex flex-col h-full" style={{ minHeight: "500px" }}>
+    <div
+      className={cn("flex flex-col", fullHeight ? "h-full min-h-0" : "h-full")}
+      style={fullHeight ? undefined : { minHeight: "500px" }}
+    >
       {/* ── Pinned Messages Banner (WhatsApp-style single navigator) ── */}
       {pinnedNotes.length > 0 && (() => {
         const currentPinned = pinnedNotes[safePinnedIndex];

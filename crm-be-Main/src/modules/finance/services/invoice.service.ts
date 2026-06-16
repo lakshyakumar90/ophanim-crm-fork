@@ -3,6 +3,11 @@ import { logger } from "../../../utils/logger.js";
 import type { AuthenticatedRequest } from "../../../types/api.types.js";
 import { USER_ROLES } from "../../../config/constants.js";
 import { getISTDate, getISTTimestamp } from "../../../utils/date-utils.js";
+import {
+  addToCurrencyMap,
+  getBaseCurrency,
+  toBaseAmount,
+} from "./finance-currency.util.js";
 
 // Types
 export interface InvoiceLineItem {
@@ -16,6 +21,8 @@ export interface InvoiceLineItem {
   item_discount_type?: "none" | "percentage" | "fixed";
   item_discount_value?: number;
   tax_rate?: number;
+  tax_amount?: number;
+  hsn_code?: string;
   total: number;
   sort_order?: number;
 }
@@ -29,6 +36,7 @@ export interface CreateInvoiceInput {
   invoice_date?: string;
   due_date: string;
   currency?: "USD" | "CAD" | "GBP" | "EUR" | "INR";
+  exchange_rate?: number;
   status?:
     | "draft"
     | "pending_approval"
@@ -75,7 +83,56 @@ function calculateLineItemTotal(item: InvoiceLineItem): number {
         ? discountValue
         : 0;
 
-  return Math.max(baseAmount - discountAmount, 0);
+  const taxableAmount = Math.max(baseAmount - discountAmount, 0);
+  const taxRate = Number(item.tax_rate || 0);
+  const taxAmount =
+    item.tax_amount !== undefined
+      ? Number(item.tax_amount)
+      : (taxableAmount * taxRate) / 100;
+
+  return taxableAmount + taxAmount;
+}
+
+function buildLineItemRow(
+  item: InvoiceLineItem,
+  index: number,
+  invoiceId?: string,
+) {
+  const baseAmount = Number(item.quantity || 0) * Number(item.unit_price || 0);
+  const discountType = item.item_discount_type || "none";
+  const discountValue = Number(item.item_discount_value || 0);
+  const discountAmount =
+    discountType === "percentage"
+      ? (baseAmount * discountValue) / 100
+      : discountType === "fixed"
+        ? discountValue
+        : 0;
+  const taxableAmount = Math.max(baseAmount - discountAmount, 0);
+  const taxRate = Number(item.tax_rate || 0);
+  const taxAmount =
+    item.tax_amount !== undefined
+      ? Number(item.tax_amount)
+      : (taxableAmount * taxRate) / 100;
+  const lineTotal = taxableAmount + taxAmount;
+
+  return {
+    ...(invoiceId ? { invoice_id: invoiceId } : {}),
+    description:
+      item.description ||
+      [item.service_name, item.plan_name].filter(Boolean).join(" - "),
+    service_name: item.service_name,
+    plan_name: item.plan_name,
+    original_amount: item.original_amount ?? baseAmount,
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+    item_discount_type: discountType,
+    item_discount_value: discountValue,
+    tax_rate: taxRate,
+    tax_amount: taxAmount,
+    hsn_code: item.hsn_code,
+    total: lineTotal,
+    sort_order: item.sort_order ?? index,
+  };
 }
 
 function calculateInvoiceAmounts(
@@ -279,30 +336,9 @@ export async function createInvoice(
   const targetStatus = input.status === "draft" ? "draft" : "sent";
 
   // Calculate line item totals
-  const lineItemsWithTotals = input.line_items.map((item, index) => {
-    const baseAmount = item.quantity * item.unit_price;
-    const discountType = item.item_discount_type || "none";
-    const discountValue = item.item_discount_value || 0;
-    const discountAmount =
-      discountType === "percentage"
-        ? (baseAmount * discountValue) / 100
-        : discountType === "fixed"
-          ? discountValue
-          : 0;
-    const lineTotal = Math.max(baseAmount - discountAmount, 0);
-
-    return {
-      ...item,
-      description:
-        item.description ||
-        [item.service_name, item.plan_name].filter(Boolean).join(" - "),
-      original_amount: item.original_amount ?? baseAmount,
-      item_discount_type: discountType,
-      item_discount_value: discountValue,
-      total: lineTotal,
-      sort_order: index,
-    };
-  });
+  const lineItemsWithTotals = input.line_items.map((item, index) =>
+    buildLineItemRow(item, index),
+  );
 
   const { subtotal, discountAmount, taxAmount, totalAmount } =
     calculateInvoiceAmounts(
@@ -323,6 +359,7 @@ export async function createInvoice(
       invoice_date: input.invoice_date || getISTDate(),
       due_date: input.due_date,
       currency: input.currency || "INR",
+      exchange_rate: input.exchange_rate ?? 1,
       subtotal,
       tax_rate: input.tax_rate || 0,
       tax_amount: taxAmount,
@@ -357,9 +394,11 @@ export async function createInvoice(
           original_amount: item.original_amount,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          item_discount_type: item.item_discount_type || "none",
-          item_discount_value: item.item_discount_value || 0,
-          tax_rate: item.tax_rate || 0,
+          item_discount_type: item.item_discount_type,
+          item_discount_value: item.item_discount_value,
+          tax_rate: item.tax_rate,
+          tax_amount: item.tax_amount,
+          hsn_code: item.hsn_code,
           total: item.total,
           sort_order: item.sort_order,
         })),
@@ -421,6 +460,8 @@ export async function updateInvoice(
   if (input.invoice_date) updateData.invoice_date = input.invoice_date;
   if (input.due_date) updateData.due_date = input.due_date;
   if (input.currency) updateData.currency = input.currency;
+  if (input.exchange_rate !== undefined)
+    updateData.exchange_rate = input.exchange_rate;
   if (input.tax_rate !== undefined) updateData.tax_rate = input.tax_rate;
   if (input.discount_rate !== undefined)
     updateData.discount_rate = input.discount_rate;
@@ -449,34 +490,9 @@ export async function updateInvoice(
 
     // Insert new line items
     if (input.line_items.length > 0) {
-      const lineItemsWithTotals = input.line_items.map((item, index) => {
-        const baseAmount = item.quantity * item.unit_price;
-        const discountType = item.item_discount_type || "none";
-        const discountValue = item.item_discount_value || 0;
-        const discountAmount =
-          discountType === "percentage"
-            ? (baseAmount * discountValue) / 100
-            : discountType === "fixed"
-              ? discountValue
-              : 0;
-
-        return {
-          invoice_id: invoiceId,
-          description:
-            item.description ||
-            [item.service_name, item.plan_name].filter(Boolean).join(" - "),
-          service_name: item.service_name,
-          plan_name: item.plan_name,
-          original_amount: item.original_amount ?? baseAmount,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          item_discount_type: discountType,
-          item_discount_value: discountValue,
-          tax_rate: item.tax_rate || 0,
-          total: Math.max(baseAmount - discountAmount, 0),
-          sort_order: index,
-        };
-      });
+      const lineItemsWithTotals = input.line_items.map((item, index) =>
+        buildLineItemRow(item, index, invoiceId),
+      );
 
       await supabaseAdmin
         .from("invoice_line_items")
@@ -736,9 +752,11 @@ export async function updateOverdueInvoices() {
  * Get invoice stats for dashboard
  */
 export async function getInvoiceStats(departmentId?: string) {
+  const baseCurrency = await getBaseCurrency();
+
   let query = supabaseAdmin
     .from("invoices")
-    .select("status, total_amount, amount_paid");
+    .select("status, total_amount, amount_paid, currency, exchange_rate");
 
   if (departmentId) {
     query = query.eq("department_id", departmentId);
@@ -748,27 +766,48 @@ export async function getInvoiceStats(departmentId?: string) {
 
   if (!invoices) {
     return {
+      base_currency: baseCurrency,
       total_revenue: 0,
       outstanding_amount: 0,
       overdue_count: 0,
       overdue_amount: 0,
       pending_approval_count: 0,
+      by_currency: {} as Record<string, number>,
     };
   }
 
+  const byCurrency: Record<string, number> = {};
+
   const stats = invoices.reduce(
     (acc, inv) => {
+      const currency = (inv.currency as string) || baseCurrency;
+      const rate = Number(inv.exchange_rate) || 1;
+
       if (inv.status === "paid") {
-        acc.total_revenue += Number(inv.amount_paid) || 0;
+        const paid = Number(inv.amount_paid) || 0;
+        acc.total_revenue += toBaseAmount(paid, currency, rate, baseCurrency);
+        addToCurrencyMap(byCurrency, currency, paid);
       }
       if (inv.status === "sent" || inv.status === "overdue") {
-        acc.outstanding_amount +=
+        const outstanding =
           Number(inv.total_amount) - Number(inv.amount_paid) || 0;
+        acc.outstanding_amount += toBaseAmount(
+          outstanding,
+          currency,
+          rate,
+          baseCurrency,
+        );
       }
       if (inv.status === "overdue") {
         acc.overdue_count += 1;
-        acc.overdue_amount +=
+        const overdueAmt =
           Number(inv.total_amount) - Number(inv.amount_paid) || 0;
+        acc.overdue_amount += toBaseAmount(
+          overdueAmt,
+          currency,
+          rate,
+          baseCurrency,
+        );
       }
       if (inv.status === "pending_approval") {
         acc.pending_approval_count += 1;
@@ -784,5 +823,5 @@ export async function getInvoiceStats(departmentId?: string) {
     },
   );
 
-  return stats;
+  return { ...stats, base_currency: baseCurrency, by_currency: byCurrency };
 }

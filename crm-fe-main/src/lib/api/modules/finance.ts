@@ -569,3 +569,61 @@ export const financeCronApi = {
 
   updateOverdue: () => api.post("/finance/cron/update-overdue"),
 };
+
+// ============================================
+// BUDGETS API
+// ============================================
+
+export interface Budget {
+  id: string;
+  name: string;
+  fiscal_year: number;
+  department_id?: string;
+  total_amount?: number;
+  total_allocated?: number;
+  total_spent?: number;
+  spent_amount?: number;
+  currency?: string;
+  status: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const budgetsApi = {
+  list: async (params?: Record<string, unknown>) => {
+    const res = await api.get("/finance/budgets", { params });
+    return unwrap(res);
+  },
+  get: async (id: string) => {
+    const res = await api.get(`/finance/budgets/${id}`);
+    return unwrap(res);
+  },
+  create: (data: Record<string, unknown>) => api.post("/finance/budgets", data),
+  update: (id: string, data: Record<string, unknown>) =>
+    api.put(`/finance/budgets/${id}`, data),
+  delete: (id: string) => api.delete(`/finance/budgets/${id}`),
+};
+
+// ============================================
+// PUBLIC PORTAL API (no auth)
+// ============================================
+
+const PUBLIC_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:5000/api/v1");
+
+async function publicFetch<T>(path: string): Promise<T> {
+  const res = await fetch(`${PUBLIC_API_BASE}${path}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.message || `Request failed (${res.status})`);
+  }
+  const json = await res.json();
+  return json?.data ?? json;
+}
+
+export const publicPortalApi = {
+  getProjectByToken: (token: string) =>
+    publicFetch<Record<string, unknown>>(`/portal/projects/${token}`),
+};

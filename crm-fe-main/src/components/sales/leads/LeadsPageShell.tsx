@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import { leadsApi, csvApi } from "@/lib/api";
+import { invoicesApi } from "@/lib/api/modules/finance";
 import { projectsApi } from "@/lib/projects-api";
 import { UserSelector } from "@/components/shared/user-selector";
 import {
@@ -105,6 +106,30 @@ export function LeadsPageShell() {
     });
     return map;
   }, [projectsForLeads]);
+
+  const { data: invoicesForLeads } = useSWR(
+    isAdmin || isManager ? "all-invoices-for-leads" : null,
+    () => invoicesApi.list({ limit: 500 }),
+  );
+
+  const leadInvoiceMap = useMemo(() => {
+    const map = new Map<string, { id: string; clientName: string }>();
+    const invoiceList = Array.isArray(invoicesForLeads)
+      ? invoicesForLeads
+      : (invoicesForLeads as { data?: unknown[] })?.data || [];
+    (invoiceList as Array<{ lead_id?: string; leadId?: string; id: string; client_name?: string; clientName?: string }>).forEach(
+      (inv) => {
+        const leadId = inv.lead_id || inv.leadId;
+        if (leadId) {
+          map.set(leadId, {
+            id: inv.id,
+            clientName: inv.client_name || inv.clientName || "Invoice",
+          });
+        }
+      },
+    );
+    return map;
+  }, [invoicesForLeads]);
 
   const { data: duplicatesData } = useSWR(
     user ? "duplicate-leads" : null,
@@ -238,6 +263,7 @@ export function LeadsPageShell() {
     leadsWithOverdueReminders,
     duplicateLeadIds,
     leadProjectMap,
+    leadInvoiceMap,
     onMutate: refreshAll,
     pageSize: tablePageSize,
     onPageSizeChange: setTablePageSize,

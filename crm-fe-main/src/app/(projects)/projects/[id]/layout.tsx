@@ -18,6 +18,8 @@ import {
   ChevronRight,
   Bell,
   MessageSquare,
+  Flag,
+  Kanban,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -58,6 +60,7 @@ export default function ProjectLayout({
   const pathname = usePathname();
   const { user } = useAuth();
   const id = params.id as string;
+  const isDiscussionRoute = pathname.endsWith("/discussion");
 
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,6 +90,8 @@ export default function ProjectLayout({
   const navItems: NavItem[] = [
     { label: "Overview", href: `/projects/${id}/overview`, icon: LayoutDashboard },
     { label: "Tasks", href: `/projects/${id}/tasks`, icon: CheckSquare },
+    { label: "Timeline", href: `/projects/${id}/timeline`, icon: Flag },
+    { label: "Sprints", href: `/projects/${id}/sprints`, icon: Kanban },
     { label: "Reminders", href: `/projects/${id}/reminders`, icon: Bell },
     { label: "Members", href: `/projects/${id}/members`, icon: Users2 },
     { label: "Analytics", href: `/projects/${id}/analytics`, icon: BarChart3 },
@@ -217,7 +222,12 @@ export default function ProjectLayout({
         </div>
 
         {/* Page Content */}
-        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto flex flex-col">
+        <div
+          className={cn(
+            "flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col",
+            !isDiscussionRoute && "px-4 py-4 lg:px-6",
+          )}
+        >
           {children}
         </div>
       </div>

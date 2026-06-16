@@ -16,6 +16,8 @@ const lineItemSchema = z.object({
     .optional(),
   item_discount_value: z.number().min(0).optional(),
   tax_rate: z.number().min(0).max(100).optional(),
+  tax_amount: z.number().min(0).optional(),
+  hsn_code: z.string().trim().optional(),
 });
 
 export const createInvoiceSchema = z.object({
@@ -27,6 +29,7 @@ export const createInvoiceSchema = z.object({
   invoice_date: z.string().optional(),
   due_date: z.string().min(1, "Due date is required"),
   currency: z.enum(["USD", "CAD", "GBP", "EUR", "INR"]).optional(),
+  exchange_rate: z.number().min(0).optional(),
   status: z.enum(["draft", "sent"]).optional(),
   tax_rate: z.number().min(0).max(100).optional(),
   discount_rate: z.number().min(0).max(100).optional(),
@@ -169,3 +172,30 @@ export const bulkApproveSchema = z.object({
     .array(z.string().uuid())
     .min(1, "At least one approval ID required"),
 });
+
+// ============================================
+// BUDGET VALIDATORS
+// ============================================
+
+const budgetLineSchema = z.object({
+  category_id: z.string().uuid().optional(),
+  description: z.string().min(1, "Line description is required"),
+  allocated_amount: z.number().min(0, "Allocated amount must be non-negative"),
+  notes: z.string().optional(),
+  sort_order: z.number().int().min(0).optional(),
+});
+
+export const createBudgetSchema = z.object({
+  name: z.string().min(1, "Budget name is required"),
+  fiscal_year: z.number().int().min(2000).max(2100),
+  period: z.enum(["monthly", "quarterly", "yearly"]),
+  period_start: z.string().min(1, "Period start is required"),
+  period_end: z.string().min(1, "Period end is required"),
+  department_id: z.string().uuid().optional(),
+  status: z.enum(["draft", "active", "closed"]).optional(),
+  currency: z.enum(["USD", "CAD", "GBP", "EUR", "INR"]).optional(),
+  notes: z.string().optional(),
+  lines: z.array(budgetLineSchema).min(1, "At least one budget line required"),
+});
+
+export const updateBudgetSchema = createBudgetSchema.partial();

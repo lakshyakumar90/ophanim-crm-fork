@@ -1,6 +1,10 @@
 "use client";
 
 import { BulkEditTable } from "@/components/hr/employees/BulkEditTable";
+import { CreateUserSheet } from "@/components/global/users/CreateUserSheet";
+import { EditUserSheet } from "@/components/global/users/EditUserSheet";
+import { UserDetailSheet } from "@/components/global/users/UserDetailSheet";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { useUsersPage } from "@/hooks/core/useUsersPage";
 import { JOB_TITLES } from "./users.constants";
 import { UsersAccessDenied } from "./UsersAccessDenied";
@@ -10,6 +14,7 @@ import { UsersPageHeader } from "./UsersPageHeader";
 import { UsersTable } from "./UsersTable";
 
 export function UsersPageContent() {
+  const sheet = useSheetQuery();
   const {
     isAdmin,
     search,
@@ -34,9 +39,7 @@ export function UsersPageContent() {
     saveBulkUsers,
     scrollToBulkTable,
     openBulkEdit,
-    goToAddUser,
-    goToUserDetails,
-    goToEditUser,
+    refreshUsers,
   } = useUsersPage();
 
   if (!isAdmin) {
@@ -44,8 +47,9 @@ export function UsersPageContent() {
   }
 
   return (
+    <>
     <div className="space-y-6">
-      <UsersPageHeader onAddUser={goToAddUser} />
+      <UsersPageHeader onAddUser={sheet.openCreate} />
 
       <UsersFilters
         search={search}
@@ -70,8 +74,8 @@ export function UsersPageContent() {
         allChecked={allChecked}
         onToggleAll={toggleAll}
         onToggleSelect={toggleSelect}
-        onViewDetails={goToUserDetails}
-        onEditUser={goToEditUser}
+        onViewDetails={sheet.openDetail}
+        onEditUser={sheet.openEdit}
       />
 
       {bulkEditMode && selectedUsers.length > 0 ? (
@@ -121,5 +125,36 @@ export function UsersPageContent() {
         </div>
       ) : null}
     </div>
+
+    <CreateUserSheet
+      open={sheet.createOpen}
+      onOpenChange={(open) => (open ? sheet.openCreate() : sheet.closeCreate())}
+      onCreated={() => refreshUsers()}
+    />
+
+    <UserDetailSheet
+      userId={sheet.selectedId}
+      open={Boolean(sheet.selectedId)}
+      onOpenChange={(open) => !open && sheet.closeDetail()}
+      onEdit={(id) => {
+        sheet.closeDetail();
+        sheet.openEdit(id);
+      }}
+    />
+
+    <EditUserSheet
+      userId={sheet.editId}
+      open={Boolean(sheet.editId)}
+      onOpenChange={(open) => !open && sheet.closeEdit()}
+      onUpdated={() => {
+        refreshUsers();
+        if (sheet.editId) {
+          const id = sheet.editId;
+          sheet.closeEdit();
+          sheet.openDetail(id);
+        }
+      }}
+    />
+    </>
   );
 }

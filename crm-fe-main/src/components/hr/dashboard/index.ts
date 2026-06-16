@@ -11,3 +11,4 @@ export { TodaySnapshotCard } from "./TodaySnapshotCard";
 export { FullViewSection } from "./FullViewSection";
 export { ManagerViewSection } from "./ManagerViewSection";
 export { EmployeeViewSection } from "./EmployeeViewSection";
+export { EmployeeSelfServiceHub } from "./EmployeeSelfServiceHub";

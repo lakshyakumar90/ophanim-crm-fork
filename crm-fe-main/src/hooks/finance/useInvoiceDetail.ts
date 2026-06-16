@@ -18,12 +18,12 @@ import {
   type LineItemInput,
 } from "@/lib/invoice-line-item-math";
 
-export function useInvoiceDetail() {
+export function useInvoiceDetail(overrideId?: string | null) {
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
   const params = useParams();
-  const invoiceId = params.id as string;
+  const invoiceId = (overrideId ?? params.id) as string;
 
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");

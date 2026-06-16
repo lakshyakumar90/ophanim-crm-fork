@@ -7,6 +7,7 @@ import {
   FullViewSection,
   ManagerViewSection,
   EmployeeViewSection,
+  EmployeeSelfServiceHub,
 } from "@/components/hr/dashboard";
 
 export default function HRDashboardPage() {
@@ -47,10 +48,17 @@ export default function HRDashboardPage() {
       {isManagerView && <ManagerViewSection teamUsers={teamUsers} />}
 
       {isEmployeeView && (
-        <EmployeeViewSection
-          selfToday={selfToday}
-          weeklyTotalHours={weeklyTotalHours}
-        />
+        <>
+          <EmployeeSelfServiceHub />
+          <EmployeeViewSection
+            selfToday={selfToday}
+            weeklyTotalHours={weeklyTotalHours}
+          />
+        </>
+      )}
+
+      {!isFullView && !isManagerView && !isEmployeeView && (
+        <EmployeeSelfServiceHub />
       )}
     </div>
   );
