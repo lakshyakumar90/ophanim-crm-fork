@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -103,73 +98,77 @@ export function ManagerReviewModal({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Manager review</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Overall rating</Label>
-              <Select value={overall} onValueChange={(v) => setOverall(v as OverallRating)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {RATINGS.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r.replace(/_/g, " ")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Comments (required)</Label>
-              <textarea
-                className="w-full min-h-[100px] rounded-md border px-3 py-2 text-sm"
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                placeholder="Summary of performance…"
-              />
-            </div>
-            {goals.length > 0 ? (
-              <div className="space-y-2">
-                <Label>Goal scores (1–5)</Label>
-                {goals.map((g, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-sm flex-1 truncate" title={g.title}>
-                      {g.title}
-                    </span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={5}
-                      className="w-20"
-                      value={scores[i] ?? 3}
-                      onChange={(e) => {
-                        const next = [...scores];
-                        next[i] = Math.min(5, Math.max(1, Number(e.target.value) || 1));
-                        setScores(next);
-                      }}
-                    />
-                  </div>
-                ))}
-                <p className="text-sm text-muted-foreground">
-                  Weighted score preview: {weighted.toFixed(2)} (1–5 scale × goal weights)
-                </p>
-              </div>
-            ) : null}
-            <Button
-              className="w-full"
-              disabled={saving}
-              onClick={() => setConfirmOpen(true)}
-            >
+      <FormSideSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Manager review"
+        description="Rate performance and provide comments for calibration."
+        size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button disabled={saving} onClick={() => setConfirmOpen(true)}>
               Submit manager review
             </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Overall rating</Label>
+            <Select value={overall} onValueChange={(v) => setOverall(v as OverallRating)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RATINGS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </DialogContent>
-      </Dialog>
+          <div className="space-y-2">
+            <Label>Comments (required)</Label>
+            <textarea
+              className="w-full min-h-[100px] rounded-md border px-3 py-2 text-sm"
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              placeholder="Summary of performance…"
+            />
+          </div>
+          {goals.length > 0 ? (
+            <div className="space-y-2">
+              <Label>Goal scores (1–5)</Label>
+              {goals.map((g, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-sm flex-1 truncate" title={g.title}>
+                    {g.title}
+                  </span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={5}
+                    className="w-20"
+                    value={scores[i] ?? 3}
+                    onChange={(e) => {
+                      const next = [...scores];
+                      next[i] = Math.min(5, Math.max(1, Number(e.target.value) || 1));
+                      setScores(next);
+                    }}
+                  />
+                </div>
+              ))}
+              <p className="text-sm text-muted-foreground">
+                Weighted score preview: {weighted.toFixed(2)} (1–5 scale × goal weights)
+              </p>
+            </div>
+          ) : null}
+        </div>
+      </FormSideSheet>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

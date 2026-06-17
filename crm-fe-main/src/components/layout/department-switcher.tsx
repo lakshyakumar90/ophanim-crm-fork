@@ -46,7 +46,7 @@ export function DepartmentSwitcher() {
   // Project-only users only see Projects in the switcher
   if (isProjectOnlyUser && accessibleDepartments.length <= 1) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50 text-sm font-medium">
+      <div className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent px-3 py-1.5 text-sm font-medium text-sidebar-accent-foreground">
         <FolderKanban className="w-4 h-4" />
         Projects
       </div>
@@ -109,7 +109,7 @@ export function DepartmentSwitcher() {
   // Non-admin with department assigned - show their department name
   if (!isAdmin) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50 text-sm font-medium">
+      <div className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent px-3 py-1.5 text-sm font-medium text-sidebar-accent-foreground">
         {isProjects ? (
           <>
             <FolderKanban className="w-4 h-4" />

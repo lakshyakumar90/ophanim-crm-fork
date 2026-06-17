@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { ProjectCard } from "@/components/projects/project-card";
 import { CreateProjectSheet } from "@/components/projects/CreateProjectSheet";
+import { StatsCard } from "@/components/dashboard";
+import { PageShell } from "@/components/shared/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { projectsApi, type ProjectStats } from "@/lib/projects-api";
@@ -225,30 +227,41 @@ export default function ProjectsPage() {
       .slice(0, 2);
   };
 
-  const statsCards = [
+  const statsCards: {
+    label: string;
+    value: number;
+    icon: typeof FolderKanban;
+    accentColor:
+      | "blue"
+      | "green"
+      | "emerald"
+      | "orange"
+      | "rose"
+      | "amber";
+  }[] = [
     {
       label: "Total Projects",
       value: stats?.total || 0,
       icon: FolderKanban,
-      color: "text-blue-600 bg-blue-100",
+      accentColor: "blue",
     },
     {
       label: "Active",
       value: stats?.active || 0,
       icon: TrendingUp,
-      color: "text-green-600 bg-green-100",
+      accentColor: "green",
     },
     {
       label: "Completed",
       value: stats?.completed || 0,
       icon: CheckCircle,
-      color: "text-emerald-600 bg-emerald-100",
+      accentColor: "emerald",
     },
     {
       label: "On Hold",
       value: stats?.onHold || 0,
       icon: Clock,
-      color: "text-orange-600 bg-orange-100",
+      accentColor: "orange",
     },
   ];
 
@@ -257,7 +270,7 @@ export default function ProjectsPage() {
       label: "Overdue Tasks",
       value: (stats as any).totalOverdueTasks || 0,
       icon: AlertTriangle,
-      color: "text-red-600 bg-red-100",
+      accentColor: "rose",
     });
   }
 
@@ -266,14 +279,14 @@ export default function ProjectsPage() {
       label: "Idle",
       value: stats.idle || 0,
       icon: AlertTriangle,
-      color: "text-orange-600 bg-orange-100",
+      accentColor: "amber",
     });
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-y-auto">
+    <PageShell className="h-full overflow-y-auto">
       {/* Header */}
-      <div className="flex flex-col gap-4 p-4 lg:p-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
@@ -455,9 +468,7 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="px-4 lg:px-6 pb-4 lg:pb-6 space-y-6">
-        {isLoading ? (
+      {isLoading ? (
           <div className="flex items-center justify-center h-40">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
@@ -466,19 +477,13 @@ export default function ProjectsPage() {
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {statsCards.map((stat, i) => (
-                <Card key={i} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className={`p-3 rounded-lg ${stat.color}`}>
-                      <stat.icon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{stat.value}</p>
-                      <p className="text-xs text-muted-foreground font-medium">
-                        {stat.label}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <StatsCard
+                  key={i}
+                  title={stat.label}
+                  value={stat.value}
+                  icon={stat.icon}
+                  accentColor={stat.accentColor}
+                />
               ))}
             </div>
 
@@ -630,7 +635,6 @@ export default function ProjectsPage() {
             </Tabs>
           </>
         )}
-      </div>
-    </div>
+    </PageShell>
   );
 }

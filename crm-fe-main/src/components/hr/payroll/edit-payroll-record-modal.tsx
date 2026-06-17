@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -121,17 +114,30 @@ export function EditPayrollRecordModal({
   const designation = record.employee?.job_title || "—";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit payroll record</DialogTitle>
-          <DialogDescription>
-            {readOnly
-              ? "This run cannot be edited in the current status."
-              : `Adjust earnings and deductions for ${empName}.`}
-          </DialogDescription>
-        </DialogHeader>
-
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit payroll record"
+      description={
+        readOnly
+          ? "This run cannot be edited in the current status."
+          : `Adjust earnings and deductions for ${empName}.`
+      }
+      size="lg"
+      footer={
+        <>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          {!readOnly && (
+            <Button disabled={reason.trim().length < 1 || loading} onClick={() => void save()}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div className="space-y-1 rounded-md border bg-muted/40 px-3 py-2 text-sm">
           <p className="font-semibold">{empName}</p>
           <p className="text-muted-foreground">Designation: {designation}</p>
@@ -229,18 +235,7 @@ export function EditPayrollRecordModal({
             </div>
           </>
         )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-          {!readOnly && (
-            <Button disabled={reason.trim().length < 1 || loading} onClick={() => void save()}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FormSideSheet>
   );
 }

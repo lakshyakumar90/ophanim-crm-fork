@@ -133,7 +133,7 @@ export default function PaymentsPage() {
           <p>No payments found</p>
         </div>
       ) : (
-        <div className="border rounded-lg">
+        <div className="rounded-lg border border-border bg-card">
           <Table>
             <TableHeader>
                 <TableRow>

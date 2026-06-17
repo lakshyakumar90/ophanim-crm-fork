@@ -178,7 +178,7 @@ export default function ChangePasswordPage() {
                   </InputOTPGroup>
                 </InputOTP>
                 {errors.otp && (
-                  <p className="text-sm text-red-500">{errors.otp.message}</p>
+                  <p className="text-sm text-destructive">{errors.otp.message}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
                   Enter the 6-digit code sent to your email
@@ -193,7 +193,7 @@ export default function ChangePasswordPage() {
                   {...register("newPassword")}
                 />
                 {errors.newPassword && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-destructive">
                     {errors.newPassword.message}
                   </p>
                 )}
@@ -207,7 +207,7 @@ export default function ChangePasswordPage() {
                   {...register("confirmPassword")}
                 />
                 {errors.confirmPassword && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-destructive">
                     {errors.confirmPassword.message}
                   </p>
                 )}

@@ -22,8 +22,6 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 
-const otpSlotClassName = "bg-slate-700/50 border-slate-600 text-white";
-
 function LoginForm() {
   const {
     requires2FA,
@@ -40,15 +38,15 @@ function LoginForm() {
 
   if (requires2FA) {
     return (
-      <Card className="shadow-2xl border-slate-700/50 bg-slate-800/80 backdrop-blur-sm">
+      <Card className="shadow-lg border-border bg-card/95 backdrop-blur-sm">
         <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-600">
-            <ShieldCheck className="h-7 w-7 text-white" />
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary">
+            <ShieldCheck className="h-7 w-7 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl font-bold text-white">
+          <CardTitle className="text-2xl font-bold">
             Two-Factor Authentication
           </CardTitle>
-          <CardDescription className="text-slate-400">
+          <CardDescription>
             Enter the 6-digit code from your authenticator app
           </CardDescription>
         </CardHeader>
@@ -60,7 +58,7 @@ function LoginForm() {
                   <InputOTPSlot
                     key={index}
                     index={index}
-                    className={otpSlotClassName}
+                    className="bg-muted border-border"
                   />
                 ))}
               </InputOTPGroup>
@@ -70,14 +68,14 @@ function LoginForm() {
           <div className="flex gap-3">
             <Button
               variant="outline"
-              className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700"
+              className="flex-1"
               onClick={handleBack}
               disabled={isVerifying2FA}
             >
               Back
             </Button>
             <Button
-              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-medium"
+              className="flex-1"
               onClick={handleVerify2FA}
               disabled={isVerifying2FA || twoFACode.length !== 6}
             >
@@ -97,62 +95,54 @@ function LoginForm() {
   }
 
   return (
-    <Card className="shadow-2xl border-slate-700/50 bg-slate-800/80 backdrop-blur-sm">
+    <Card className="shadow-lg border-border bg-card/95 backdrop-blur-sm">
       <CardHeader className="space-y-1 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-600">
-          <LogIn className="h-7 w-7 text-white" />
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary">
+          <LogIn className="h-7 w-7 text-primary-foreground" />
         </div>
-        <CardTitle className="text-2xl font-bold text-white">Welcome back</CardTitle>
-        <CardDescription className="text-slate-400">
+        <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+        <CardDescription>
           Enter your credentials to access your account
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-slate-200">
-              Email
-            </Label>
+            <Label htmlFor="email">Email</Label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
-                className="pl-10 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500"
+                className="pl-10"
                 {...register("email")}
                 disabled={isLoading}
               />
             </div>
             {errors.email && (
-              <p className="text-sm text-red-400">{errors.email.message}</p>
+              <p className="text-sm text-destructive">{errors.email.message}</p>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-slate-200">
-              Password
-            </Label>
+            <Label htmlFor="password">Password</Label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
               <PasswordInput
                 id="password"
                 placeholder="••••••••"
-                className="pl-10 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500"
+                className="pl-10"
                 {...register("password")}
                 disabled={isLoading}
               />
             </div>
             {errors.password && (
-              <p className="text-sm text-red-400">{errors.password.message}</p>
+              <p className="text-sm text-destructive">{errors.password.message}</p>
             )}
           </div>
 
-          <Button
-            type="submit"
-            className="w-full bg-gradient-to-r from-blue-500 to-violet-600 hover:from-blue-600 hover:to-violet-700 text-white font-medium"
-            disabled={isLoading}
-          >
+          <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -164,12 +154,12 @@ function LoginForm() {
           </Button>
         </form>
       </CardContent>
-      <CardFooter className="flex justify-center border-t border-slate-700/50 pt-4">
-        <div className="text-sm text-slate-400">
+      <CardFooter className="flex justify-center border-t border-border pt-4">
+        <div className="text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
           <Link
             href="/register"
-            className="font-medium text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+            className="font-medium text-primary hover:underline transition-colors"
           >
             Sign up
           </Link>
@@ -182,7 +172,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense
-      fallback={<div className="text-white text-center">Loading...</div>}
+      fallback={<div className="text-muted-foreground text-center">Loading...</div>}
     >
       <LoginForm />
     </Suspense>

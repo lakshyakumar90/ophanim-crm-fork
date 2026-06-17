@@ -34,7 +34,7 @@ export function ActivityItemCard({
 }) {
   const ActionIcon = actionIcons[activity.activity_type] || Activity;
   const colorClass =
-    actionColors[activity.activity_type] || "bg-slate-100 text-slate-700 ring-slate-200";
+    actionColors[activity.activity_type] || "bg-muted text-muted-foreground ring-border";
   const changes = getChangesFromMetadata(activity.metadata, activity.activity_type, userMap);
   const commentPreview =
     typeof activity.metadata?.comment_preview === "string"
@@ -45,14 +45,14 @@ export function ActivityItemCard({
   return (
     <div
       key={activity.id}
-      className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"
+      className="rounded-xl border border-border bg-muted/70 p-4"
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <div className="flex items-start gap-3">
           <div className={cn("rounded-xl p-2 ring-1", colorClass)}>
             <ActionIcon className="h-4 w-4" />
           </div>
-          <Avatar className="h-10 w-10 ring-2 ring-white">
+          <Avatar className="h-10 w-10 ring-2 ring-background">
             <AvatarImage src={activity.user?.avatar_url || ""} />
             <AvatarFallback className="text-xs">
               {activity.user?.full_name?.[0] || "U"}
@@ -61,12 +61,12 @@ export function ActivityItemCard({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm leading-6 text-slate-700">
-            <span className="font-semibold text-slate-900">
+          <p className="text-sm leading-6 text-muted-foreground">
+            <span className="font-semibold text-foreground">
               {activity.user?.full_name || "Unknown User"}
             </span>{" "}
             {formatActivityDescription(activity)}{" "}
-            <span className="font-medium text-slate-900">{entityName}</span>
+            <span className="font-medium text-foreground">{entityName}</span>
           </p>
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -89,7 +89,7 @@ export function ActivityItemCard({
                     return next;
                   })
                 }
-                className="flex items-center gap-1 text-xs font-medium text-blue-600 transition-colors hover:text-blue-800"
+                className="flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-primary/80"
               >
                 {isExpanded ? (
                   <>
@@ -107,28 +107,28 @@ export function ActivityItemCard({
           </div>
 
           {commentPreview && (
-            <p className="mt-3 rounded-lg bg-white px-3 py-2 text-sm italic text-slate-600">
+            <p className="mt-3 rounded-lg bg-card px-3 py-2 text-sm italic text-muted-foreground">
               &quot;{commentPreview}&quot;
             </p>
           )}
 
           {isExpanded && changes.length > 0 && (
-            <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+            <div className="mt-3 space-y-2 rounded-lg border border-border bg-card p-3">
               {changes.map((change, index) => (
                 <div
                   key={`${activity.id}-${index}`}
                   className="grid gap-2 text-sm md:grid-cols-[140px_1fr_1fr]"
                 >
-                  <span className="font-semibold text-slate-500 uppercase tracking-widest text-[10px]">{change.field}</span>
-                  <span className="text-slate-400 line-through truncate">{change.oldVal || "-"}</span>
-                  <span className="text-slate-900 font-medium truncate">{change.newVal}</span>
+                  <span className="font-semibold text-muted-foreground uppercase tracking-widest text-[10px]">{change.field}</span>
+                  <span className="text-muted-foreground/70 line-through truncate">{change.oldVal || "-"}</span>
+                  <span className="text-foreground font-medium truncate">{change.newVal}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="shrink-0 text-sm text-slate-500 lg:text-right">
+        <div className="shrink-0 text-sm text-muted-foreground lg:text-right">
           <div>{formatDistanceToNowIST(activity.created_at, { addSuffix: true })}</div>
           <div>{formatIST(activity.created_at, "MMM d, HH:mm")}</div>
         </div>

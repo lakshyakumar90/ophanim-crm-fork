@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -241,16 +234,25 @@ export function QuickFixMissingCTCModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Set missing CTC</DialogTitle>
-          <DialogDescription>
-            Select one or more employees with missing CTC, pick a salary band, then submit increment proposals for all selected employees at once.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Set missing CTC"
+      description="Select employees with missing CTC, pick a salary band, then submit increment proposals for all selected at once."
+      size="3xl"
+      footer={
+        <>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button disabled={!canSubmit || submitting} onClick={() => void submit()}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Submit proposals ({computedSelected.length})
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
           <div className="rounded-md border bg-muted/20 p-3 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-2">
@@ -397,18 +399,7 @@ export function QuickFixMissingCTCModal({
             </div>
           </div>
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button disabled={!canSubmit || submitting} onClick={() => void submit()}>
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Submit proposals ({computedSelected.length})
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </FormSideSheet>
   );
 }
 

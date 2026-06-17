@@ -72,19 +72,19 @@ export function AppearanceForm() {
       value: "light",
       label: "Light",
       icon: Sun,
-      preview: "bg-white border-gray-200",
+      preview: "bg-background border-border",
     },
     {
       value: "dark",
       label: "Dark",
       icon: Moon,
-      preview: "bg-gray-900 border-gray-700",
+      preview: "bg-card border-border",
     },
     {
       value: "system",
       label: "System",
       icon: Monitor,
-      preview: "bg-gradient-to-r from-white to-gray-900",
+      preview: "bg-gradient-to-r from-background to-card",
     },
   ];
 

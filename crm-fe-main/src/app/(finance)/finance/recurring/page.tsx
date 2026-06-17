@@ -163,7 +163,7 @@ function RecurringSchedulesPageContent() {
           </CardContent>
         </Card>
       ) : (
-        <div className="border rounded-lg">
+        <div className="rounded-lg border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -210,7 +210,7 @@ function RecurringSchedulesPageContent() {
                       className={
                         schedule.is_active
                           ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
-                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                          : "bg-muted text-muted-foreground"
                       }
                     >
                       {schedule.is_active ? "Active" : "Paused"}

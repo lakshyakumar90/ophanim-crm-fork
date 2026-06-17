@@ -43,7 +43,7 @@ function ReminderItem({ reminder }: { reminder: any }) {
         if (reminder.projectId) router.push(`/projects/${reminder.projectId}/tasks?taskId=${reminder.id}`);
         else router.push(`/tasks/${reminder.id}`);
       }}
-      className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors border-b last:border-0"
+      className="w-full flex items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors last:border-0 hover:bg-muted/50"
     >
       <div className="mt-0.5 shrink-0">
         {isUrgent ? (
@@ -93,7 +93,7 @@ function LeadReminderItem({ reminder }: { reminder: any }) {
       onClick={() => {
         if (reminder.leadId) router.push(`/sales/leads/${reminder.leadId}`);
       }}
-      className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors border-b last:border-0"
+      className="w-full flex items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors last:border-0 hover:bg-muted/50"
     >
       <div className="mt-0.5 shrink-0">
         {isOverdue ? (
@@ -192,14 +192,14 @@ export function RemindersPopover() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-80 p-0 shadow-lg"
+        className="w-80 border-border bg-popover p-0 shadow-lg"
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <AlarmClock className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold">Reminders</span>
           {badgeCount > 0 && (
-            <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-amber-100 text-amber-700">
+            <Badge variant="secondary" className="h-5 px-1.5 text-xs">
               {badgeCount} today
             </Badge>
           )}
@@ -222,8 +222,8 @@ export function RemindersPopover() {
               {/* Today section */}
               {todayReminders.length > 0 && (
                 <>
-                  <div className="px-4 py-1.5 bg-amber-50 dark:bg-amber-950/20 border-b">
-                    <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">Due Today</span>
+                  <div className="border-b border-border bg-muted/40 px-4 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Due Today</span>
                   </div>
                   {todayReminders.map((r: any) => (
                     <ReminderItem key={r.id} reminder={r} />
@@ -234,8 +234,8 @@ export function RemindersPopover() {
               {/* Lead overdue section */}
               {overdueLeadReminders.length > 0 && (
                 <>
-                  <div className="px-4 py-1.5 bg-red-50 dark:bg-red-950/30 border-b">
-                    <span className="text-[10px] font-semibold text-red-700 uppercase tracking-wide">
+                  <div className="border-b border-border bg-destructive/10 px-4 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-destructive">
                       Lead Reminders Overdue
                     </span>
                   </div>
@@ -248,8 +248,8 @@ export function RemindersPopover() {
               {/* Lead due today (not yet overdue) */}
               {todayLeadReminders.length > 0 && (
                 <>
-                  <div className="px-4 py-1.5 bg-amber-50 dark:bg-amber-950/20 border-b">
-                    <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">
+                  <div className="border-b border-border bg-muted/40 px-4 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       Lead Reminders Today
                     </span>
                   </div>
@@ -262,8 +262,8 @@ export function RemindersPopover() {
               {/* Upcoming section */}
               {reminders.filter((r: any) => !isToday(new Date(r.dueDate))).length > 0 && (
                 <>
-                  <div className="px-4 py-1.5 bg-muted/40 border-b">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Upcoming (48h)</span>
+                  <div className="border-b border-border bg-muted/40 px-4 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Upcoming (48h)</span>
                   </div>
                   {reminders
                     .filter((r: any) => !isToday(new Date(r.dueDate)))
@@ -276,8 +276,8 @@ export function RemindersPopover() {
               {/* Upcoming lead reminders */}
               {upcomingLeadReminders.length > 0 && (
                 <>
-                  <div className="px-4 py-1.5 bg-muted/40 border-b">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  <div className="border-b border-border bg-muted/40 px-4 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       Lead Upcoming (48h)
                     </span>
                   </div>
@@ -291,7 +291,7 @@ export function RemindersPopover() {
         </div>
 
         {/* Footer */}
-        <div className="border-t px-4 py-2.5">
+        <div className="border-t border-border px-4 py-2.5">
           <button
             onClick={() => router.push("/reminders")}
             className="w-full flex items-center justify-center gap-1.5 text-xs text-primary hover:underline font-medium"

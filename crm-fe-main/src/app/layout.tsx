@@ -5,6 +5,7 @@ import { AuthProvider } from "@/providers/auth-provider";
 import { DepartmentProvider } from "@/providers/department-context";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { SWRProvider } from "@/providers/swr-provider";
 
 const dmSans = DM_Sans({
@@ -33,10 +34,12 @@ export default function RootLayout({
           <AuthProvider>
             <DepartmentProvider>
               <SWRProvider>
-                <div className="h-full overflow-hidden">
-                  {children}
-                  <Toaster duration={5000} />
-                </div>
+                <TooltipProvider>
+                  <div className="h-full overflow-hidden">
+                    {children}
+                    <Toaster duration={5000} />
+                  </div>
+                </TooltipProvider>
               </SWRProvider>
             </DepartmentProvider>
           </AuthProvider>

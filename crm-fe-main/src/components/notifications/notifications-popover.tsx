@@ -96,10 +96,10 @@ export function NotificationsPopover() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-80 p-0 shadow-lg"
+        className="w-80 border-border bg-popover p-0 shadow-lg"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">Notifications</span>
@@ -137,7 +137,7 @@ export function NotificationsPopover() {
                 key={notif.id}
                 onClick={() => handleNotificationClick(notif)}
                 className={cn(
-                  "w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors border-b last:border-0",
+                  "w-full flex items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors last:border-0 hover:bg-muted/50",
                   !notif.isRead && "bg-primary/5",
                 )}
               >
@@ -164,7 +164,7 @@ export function NotificationsPopover() {
         </div>
 
         {/* Footer */}
-        <div className="border-t px-4 py-2.5">
+        <div className="border-t border-border px-4 py-2.5">
           <button
             onClick={() => router.push("/notifications")}
             className="w-full flex items-center justify-center gap-1.5 text-xs text-primary hover:underline font-medium"

@@ -160,7 +160,7 @@ export function TeamAttendanceTable({
                         <TableCell>
                           <Badge
                             className={
-                              statusColors[item.status] || "bg-gray-100 text-gray-700"
+                              statusColors[item.status] || "bg-muted text-muted-foreground"
                             }
                           >
                             {item.status?.replace("_", " ")}

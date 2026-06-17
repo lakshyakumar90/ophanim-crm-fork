@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -136,148 +131,145 @@ export function ReviewDetailPanel({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-xl overflow-y-auto px-4 sm:px-6">
-          <SheetHeader>
-            <SheetTitle className="pr-8">
-              {review?.employee?.full_name || "Review"}
-            </SheetTitle>
-            {review ? (
-              <div className="flex flex-wrap gap-2 items-center text-left">
-                <Badge variant="outline" className={reviewStatusBadgeClass(review.status)}>
-                  {reviewStatusLabel(review.status)}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  Manager: {review.manager?.full_name || "—"}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Email: {review.employee?.email || "—"}
-                </span>
-              </div>
-            ) : null}
-          </SheetHeader>
+      <FormSideSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        title={review?.employee?.full_name || "Review"}
+        description={
+          review
+            ? `Manager: ${review.manager?.full_name || "—"} · ${review.employee?.email || "—"}`
+            : undefined
+        }
+        size="xl"
+      >
+        {review ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={reviewStatusBadgeClass(review.status)}>
+              {reviewStatusLabel(review.status)}
+            </Badge>
+          </div>
+        ) : null}
 
-          {loading || !review ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <Tabs defaultValue="goals" className="mt-6">
-              <TabsList className="flex flex-wrap h-auto gap-1">
-                <TabsTrigger value="goals">Goals</TabsTrigger>
-                <TabsTrigger value="self">Self</TabsTrigger>
-                <TabsTrigger value="manager">Manager</TabsTrigger>
-                <TabsTrigger value="peer">Peer</TabsTrigger>
-                <TabsTrigger value="result">Result</TabsTrigger>
-              </TabsList>
+        {loading || !review ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <Tabs defaultValue="goals">
+            <TabsList className="flex h-auto flex-wrap gap-1">
+              <TabsTrigger value="goals">Goals</TabsTrigger>
+              <TabsTrigger value="self">Self</TabsTrigger>
+              <TabsTrigger value="manager">Manager</TabsTrigger>
+              <TabsTrigger value="peer">Peer</TabsTrigger>
+              <TabsTrigger value="result">Result</TabsTrigger>
+            </TabsList>
 
-              <TabsContent value="goals" className="space-y-3 mt-4">
-                <div className="flex justify-between items-center gap-2">
-                  <p className="text-sm text-muted-foreground">
-                    Total weight:{" "}
-                    <span className={totalW === 100 ? "text-emerald-600 font-medium" : "text-destructive"}>
-                      {totalW}%
-                    </span>{" "}
-                    / 100%
-                  </p>
-                  {((isAssignedManager || canManage) && review.status === "draft") ? (
-                    <Button size="sm" onClick={() => setGoalsOpen(true)}>
-                      {isAssignedManager ? "Set goals" : "Set goals (admin override)"}
-                    </Button>
-                  ) : null}
-                </div>
-                {goals.length === 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">No goals set yet.</p>
-                    {canManage ? (
-                      <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded-md p-2">
-                        As admin/HR manager, you can set goals here even if no manager is assigned yet.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <ul className="space-y-2">
-                    {goals.map((g, i) => {
-                      const mgr = review.manager_review as
-                        | { goal_manager_ratings?: Array<{ goal_index: number; manager_rating: number }> }
-                        | undefined;
-                      const rating = mgr?.goal_manager_ratings?.find((x) => x.goal_index === i)?.manager_rating;
-                      return (
-                        <li key={i} className="rounded-lg border p-3 text-sm">
-                          <div className="flex justify-between gap-2">
-                            <span className="font-medium">{g.title}</span>
-                            <Badge variant="secondary">{g.weight ?? 0}%</Badge>
-                          </div>
-                          {g.target ? (
-                            <p className="text-xs text-muted-foreground mt-1">Target: {g.target}</p>
-                          ) : null}
-                          {g.kpi ? (
-                            <p className="text-xs mt-1 whitespace-pre-wrap">{g.kpi}</p>
-                          ) : null}
-                          {rating != null ? (
-                            <p className="text-xs mt-2">Manager score: {rating}</p>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Weighted score uses Σ (goal score × weight ÷ 100) when manager submits ratings.
+            <TabsContent value="goals" className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Total weight:{" "}
+                  <span className={totalW === 100 ? "text-emerald-600 font-medium" : "text-destructive"}>
+                    {totalW}%
+                  </span>{" "}
+                  / 100%
                 </p>
-              </TabsContent>
-
-              <TabsContent value="self" className="mt-4">
-                <SelfAssessmentView data={review.self_assessment as Record<string, unknown>} />
-              </TabsContent>
-
-              <TabsContent value="manager" className="mt-4 space-y-3">
-                <ManagerReviewView data={review.manager_review as Record<string, unknown>} />
-                {((isAssignedManager || canManage) && review.status === "self_submitted") ? (
-                  <Button className="w-full" onClick={() => setMgrOpen(true)}>
-                    {isAssignedManager
-                      ? "Submit manager review"
-                      : "Submit manager review (admin override)"}
+                {((isAssignedManager || canManage) && review.status === "draft") ? (
+                  <Button size="sm" onClick={() => setGoalsOpen(true)}>
+                    {isAssignedManager ? "Set goals" : "Set goals (admin override)"}
                   </Button>
                 ) : null}
-              </TabsContent>
+              </div>
+              {goals.length === 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">No goals set yet.</p>
+                  {canManage ? (
+                    <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded-md p-2">
+                      As admin/HR manager, you can set goals here even if no manager is assigned yet.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {goals.map((g, i) => {
+                    const mgr = review.manager_review as
+                      | { goal_manager_ratings?: Array<{ goal_index: number; manager_rating: number }> }
+                      | undefined;
+                    const rating = mgr?.goal_manager_ratings?.find((x) => x.goal_index === i)?.manager_rating;
+                    return (
+                      <li key={i} className="rounded-lg border border-border p-3 text-sm">
+                        <div className="flex justify-between gap-2">
+                          <span className="font-medium">{g.title}</span>
+                          <Badge variant="secondary">{g.weight ?? 0}%</Badge>
+                        </div>
+                        {g.target ? (
+                          <p className="text-xs text-muted-foreground mt-1">Target: {g.target}</p>
+                        ) : null}
+                        {g.kpi ? (
+                          <p className="text-xs mt-1 whitespace-pre-wrap">{g.kpi}</p>
+                        ) : null}
+                        {rating != null ? (
+                          <p className="text-xs mt-2">Manager score: {rating}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Weighted score uses Σ (goal score × weight ÷ 100) when manager submits ratings.
+              </p>
+            </TabsContent>
 
-              <TabsContent value="peer" className="mt-4">
-                <PeerFeedbackRadar peerFeedback={peerAgg} />
-              </TabsContent>
+            <TabsContent value="self" className="mt-4">
+              <SelfAssessmentView data={review.self_assessment as Record<string, unknown>} />
+            </TabsContent>
 
-              <TabsContent value="result" className="mt-4 space-y-4">
-                {!showCalibrated ? (
-                  <p className="text-sm text-muted-foreground">
-                    Calibrated rating is visible here once calibration is complete (and released to the employee
-                    when you are viewing your own record).
-                  </p>
-                ) : (
-                  <>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Calibrated rating</p>
-                      <RatingDisplay rating={review.calibrated_rating} size="lg" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">PIP</span>
-                      {review.pip_triggered ? (
-                        <Badge className="bg-amber-100 text-amber-950 border-amber-200">Yes</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-emerald-800 bg-emerald-50">
-                          No
-                        </Badge>
-                      )}
-                    </div>
-                    {isEmployeeSubject && review.pip_triggered && review.status === "released" ? (
-                      <PIPNotification />
-                    ) : null}
-                  </>
-                )}
-              </TabsContent>
-            </Tabs>
-          )}
-        </SheetContent>
-      </Sheet>
+            <TabsContent value="manager" className="mt-4 space-y-3">
+              <ManagerReviewView data={review.manager_review as Record<string, unknown>} />
+              {((isAssignedManager || canManage) && review.status === "self_submitted") ? (
+                <Button className="w-full" onClick={() => setMgrOpen(true)}>
+                  {isAssignedManager
+                    ? "Submit manager review"
+                    : "Submit manager review (admin override)"}
+                </Button>
+              ) : null}
+            </TabsContent>
+
+            <TabsContent value="peer" className="mt-4">
+              <PeerFeedbackRadar peerFeedback={peerAgg} />
+            </TabsContent>
+
+            <TabsContent value="result" className="mt-4 space-y-4">
+              {!showCalibrated ? (
+                <p className="text-sm text-muted-foreground">
+                  Calibrated rating is visible here once calibration is complete (and released to the employee
+                  when you are viewing your own record).
+                </p>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Calibrated rating</p>
+                    <RatingDisplay rating={review.calibrated_rating} size="lg" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">PIP</span>
+                    {review.pip_triggered ? (
+                      <Badge className="bg-amber-100 text-amber-950 border-amber-200">Yes</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-emerald-800 bg-emerald-50">
+                        No
+                      </Badge>
+                    )}
+                  </div>
+                  {isEmployeeSubject && review.pip_triggered && review.status === "released" ? (
+                    <PIPNotification />
+                  ) : null}
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
+      </FormSideSheet>
 
       {reviewId && review ? (
         <>

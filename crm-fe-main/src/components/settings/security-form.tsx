@@ -237,7 +237,7 @@ export function SecurityForm() {
                   </InputOTPGroup>
                 </InputOTP>
                 {errors.otp && (
-                  <p className="text-sm text-red-500">{errors.otp.message}</p>
+                  <p className="text-sm text-destructive">{errors.otp.message}</p>
                 )}
                 <p className="text-sm text-muted-foreground">
                   Enter the 6-digit code sent to your email
@@ -248,7 +248,7 @@ export function SecurityForm() {
                 <Label htmlFor="newPassword">New Password</Label>
                 <PasswordInput id="newPassword" {...register("newPassword")} />
                 {errors.newPassword && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-destructive">
                     {errors.newPassword.message}
                   </p>
                 )}
@@ -261,7 +261,7 @@ export function SecurityForm() {
                   {...register("confirmPassword")}
                 />
                 {errors.confirmPassword && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-destructive">
                     {errors.confirmPassword.message}
                   </p>
                 )}
@@ -385,7 +385,7 @@ export function SecurityForm() {
                 <p className="text-sm font-medium mb-2">
                   Scan this QR code with your authenticator app
                 </p>
-                <div className="inline-block p-4 bg-white rounded-lg">
+                <div className="inline-block p-4 bg-card rounded-lg border border-border">
                   <img
                     src={qrCodeData.qrCode}
                     alt="2FA QR Code"

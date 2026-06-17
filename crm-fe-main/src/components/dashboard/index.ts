@@ -1,5 +1,7 @@
 export { StatsCard } from "./stats-card";
 export { MiniStatsCard } from "./mini-stats-card";
+export { DashboardPageHeader } from "./dashboard-page-header";
+export { DashboardSkeleton } from "./dashboard-skeleton";
 export { LeadPipelineChart, LeadSourceChart } from "./charts";
 export { AttendanceWidget } from "./attendance-widget";
 export { RecentLeadsList } from "./recent-leads-list";

@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -89,101 +84,101 @@ export function CalibrationModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Calibrate reviews</DialogTitle>
-        </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Adjust final ratings and PIP flags. Only reviews in “Awaiting calibration” are listed.
-        </p>
-        <div className="overflow-y-auto flex-1 border rounded-md">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0">
-              <tr>
-                <th className="text-left p-2 font-medium">Employee</th>
-                <th className="text-left p-2 font-medium">Manager score</th>
-                <th className="text-left p-2 font-medium">Calibrated</th>
-                <th className="text-left p-2 font-medium">PIP</th>
-                <th className="text-left p-2 font-medium">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reviews.map((r) => {
-                const mr = r.manager_review as { weighted_score?: number } | undefined;
-                const row = rows[r.id];
-                return (
-                  <tr key={r.id} className="border-t">
-                    <td className="p-2 align-top">
-                      {r.employee?.full_name || "Employee"}
-                    </td>
-                    <td className="p-2 align-top text-muted-foreground">
-                      {mr?.weighted_score != null ? mr.weighted_score.toFixed(2) : "—"}
-                    </td>
-                    <td className="p-2 align-top">
-                      <Select
-                        value={row?.calibrated_rating ?? "meets"}
-                        onValueChange={(v) =>
-                          setRows((prev) => ({
-                            ...prev,
-                            [r.id]: {
-                              ...prev[r.id]!,
-                              calibrated_rating: v as CalibratedRating,
-                            },
-                          }))
-                        }
-                      >
-                        <SelectTrigger className="h-8 w-[140px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {RATINGS.map((x) => (
-                            <SelectItem key={x} value={x}>
-                              {x}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="p-2 align-top">
-                      <Switch
-                        checked={row?.pip_triggered ?? false}
-                        onCheckedChange={(c) =>
-                          setRows((prev) => ({
-                            ...prev,
-                            [r.id]: { ...prev[r.id]!, pip_triggered: c },
-                          }))
-                        }
-                      />
-                    </td>
-                    <td className="p-2 align-top">
-                      <Input
-                        className="h-8"
-                        placeholder="Optional"
-                        value={row?.notes ?? ""}
-                        onChange={(e) =>
-                          setRows((prev) => ({
-                            ...prev,
-                            [r.id]: { ...prev[r.id]!, notes: e.target.value },
-                          }))
-                        }
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Calibrate reviews"
+      description="Adjust final ratings and PIP flags. Only reviews in “Awaiting calibration” are listed."
+      size="3xl"
+      footer={
+        <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button disabled={saving || reviews.length === 0} onClick={() => void submit()}>
             {saving ? "Saving…" : "Save calibration"}
           </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="overflow-y-auto border rounded-md">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 sticky top-0">
+            <tr>
+              <th className="text-left p-2 font-medium">Employee</th>
+              <th className="text-left p-2 font-medium">Manager score</th>
+              <th className="text-left p-2 font-medium">Calibrated</th>
+              <th className="text-left p-2 font-medium">PIP</th>
+              <th className="text-left p-2 font-medium">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reviews.map((r) => {
+              const mr = r.manager_review as { weighted_score?: number } | undefined;
+              const row = rows[r.id];
+              return (
+                <tr key={r.id} className="border-t">
+                  <td className="p-2 align-top">
+                    {r.employee?.full_name || "Employee"}
+                  </td>
+                  <td className="p-2 align-top text-muted-foreground">
+                    {mr?.weighted_score != null ? mr.weighted_score.toFixed(2) : "—"}
+                  </td>
+                  <td className="p-2 align-top">
+                    <Select
+                      value={row?.calibrated_rating ?? "meets"}
+                      onValueChange={(v) =>
+                        setRows((prev) => ({
+                          ...prev,
+                          [r.id]: {
+                            ...prev[r.id]!,
+                            calibrated_rating: v as CalibratedRating,
+                          },
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RATINGS.map((x) => (
+                          <SelectItem key={x} value={x}>
+                            {x}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="p-2 align-top">
+                    <Switch
+                      checked={row?.pip_triggered ?? false}
+                      onCheckedChange={(c) =>
+                        setRows((prev) => ({
+                          ...prev,
+                          [r.id]: { ...prev[r.id]!, pip_triggered: c },
+                        }))
+                      }
+                    />
+                  </td>
+                  <td className="p-2 align-top">
+                    <Input
+                      className="h-8"
+                      placeholder="Optional"
+                      value={row?.notes ?? ""}
+                      onChange={(e) =>
+                        setRows((prev) => ({
+                          ...prev,
+                          [r.id]: { ...prev[r.id]!, notes: e.target.value },
+                        }))
+                      }
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </FormSideSheet>
   );
 }

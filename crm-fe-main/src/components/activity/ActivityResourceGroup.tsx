@@ -40,18 +40,18 @@ export function ActivityResourceGroup({
     <Collapsible open={isOpen} onOpenChange={onOpenChange}>
       <div
         className={cn(
-          "rounded-xl border border-slate-200 shadow-sm overflow-hidden",
+          "rounded-xl border border-border shadow-sm overflow-hidden",
           resourceGroup.accentClass,
         )}
       >
         <CollapsibleTrigger className="w-full">
-          <div className="flex items-center justify-between gap-4 px-4 py-3 bg-white/50 text-left hover:bg-white/80 transition-colors">
+          <div className="flex items-center justify-between gap-4 px-4 py-3 bg-card/50 text-left hover:bg-card/80 transition-colors">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100">
-                <GroupIcon className="h-4 w-4 text-slate-700" />
+              <div className="p-2 bg-card rounded-lg shadow-sm border border-border">
+                <GroupIcon className="h-4 w-4 text-foreground" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-900">
+                <h4 className="text-sm font-bold text-foreground">
                   {resourceGroup.label} (
                   {
                     new Set(
@@ -60,22 +60,22 @@ export function ActivityResourceGroup({
                   }
                   )
                 </h4>
-                <p className="text-xs font-medium text-slate-500">
+                <p className="text-xs font-medium text-muted-foreground">
                   {resourceGroup.activities.length} activities
                 </p>
               </div>
             </div>
             <div className="mr-2">
               {isOpen ? (
-                <ChevronDown className="h-4 w-4 text-slate-500" />
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-slate-500" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
               )}
             </div>
           </div>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-t border-slate-100 bg-white/70 p-4 space-y-3">
+          <div className="border-t border-border bg-card/70 p-4 space-y-3">
             {resourceGroup.activities.map((act) => (
               <ActivityItemCard
                 key={act.id}

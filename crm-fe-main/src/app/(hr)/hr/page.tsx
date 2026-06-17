@@ -1,8 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useHrDashboard } from "@/hooks/hr/useHrDashboard";
+import { DashboardPageHeader } from "@/components/dashboard";
+import { PageShell } from "@/components/shared/page-shell";
+import { Button } from "@/components/ui/button";
 import {
-  HrDashboardHeader,
   TodaySnapshotCard,
   FullViewSection,
   ManagerViewSection,
@@ -11,6 +14,7 @@ import {
 } from "@/components/hr/dashboard";
 
 export default function HRDashboardPage() {
+  const router = useRouter();
   const {
     user,
     isFullView,
@@ -24,12 +28,50 @@ export default function HRDashboardPage() {
     weeklyTotalHours,
   } = useHrDashboard();
 
+  const title = isFullView
+    ? "HR Control Center"
+    : isManagerView
+      ? "HR Team Overview"
+      : "My HR Dashboard";
+
+  const description = isFullView
+    ? `Welcome back, ${user?.fullName}. Here is your department overview.`
+    : isManagerView
+      ? `Welcome back, ${user?.fullName}. This is your team overview.`
+      : `Welcome back, ${user?.fullName}. This is your personal HR overview.`;
+
+  const actions = isFullView ? (
+    <>
+      <Button onClick={() => router.push("/hr/payroll")}>Initiate Payroll</Button>
+      <Button variant="outline" onClick={() => router.push("/hr/holidays")}>
+        Add Holiday
+      </Button>
+    </>
+  ) : isManagerView ? (
+    <>
+      <Button onClick={() => router.push("/hr/attendance")}>Team Attendance</Button>
+      <Button variant="outline" onClick={() => router.push("/hr/leaves")}>
+        Team Leaves
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button onClick={() => router.push("/attendance")}>My Attendance</Button>
+      <Button
+        variant="outline"
+        onClick={() => router.push("/hr/payroll/my-payslips")}
+      >
+        My Payslips
+      </Button>
+    </>
+  );
+
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
-      <HrDashboardHeader
-        user={user}
-        isFullView={isFullView}
-        isManagerView={isManagerView}
+    <PageShell>
+      <DashboardPageHeader
+        title={title}
+        description={description}
+        actions={actions}
       />
 
       <TodaySnapshotCard
@@ -60,6 +102,6 @@ export default function HRDashboardPage() {
       {!isFullView && !isManagerView && !isEmployeeView && (
         <EmployeeSelfServiceHub />
       )}
-    </div>
+    </PageShell>
   );
 }

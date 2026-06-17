@@ -190,7 +190,7 @@ export function ProfileForm() {
                 <>
                   <Input id="fullName" {...register("fullName")} />
                   {errors.fullName && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-destructive">
                       {errors.fullName.message}
                     </p>
                   )}
@@ -200,10 +200,10 @@ export function ProfileForm() {
                   <Input
                     id="fullName"
                     {...register("fullName")}
-                    className="bg-slate-50"
+                    className="bg-muted"
                   />
                   {errors.fullName && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-destructive">
                       {errors.fullName.message}
                     </p>
                   )}
@@ -212,7 +212,7 @@ export function ProfileForm() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input value={user?.email} disabled className="bg-slate-50" />
+              <Input value={user?.email} disabled className="bg-muted" />
               <p className="text-xs text-slate-500">Email cannot be changed</p>
             </div>
             <div className="space-y-2">
@@ -224,7 +224,7 @@ export function ProfileForm() {
               <Input
                 value={user?.role}
                 disabled
-                className="uppercase bg-slate-50"
+                className="uppercase bg-muted"
               />
             </div>
             <div className="space-y-2">
@@ -232,7 +232,7 @@ export function ProfileForm() {
               <Input
                 value={user?.departmentName || "Not assigned"}
                 disabled
-                className="bg-slate-50"
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
@@ -246,7 +246,7 @@ export function ProfileForm() {
                     : "Not assigned"
                 }
                 disabled
-                className="bg-slate-50"
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
@@ -260,7 +260,7 @@ export function ProfileForm() {
                       : "Not Set"
                 }
                 disabled
-                className="bg-slate-50"
+                className="bg-muted"
               />
               <p className="text-xs text-slate-500">
                 Contact admin to change your shift
@@ -275,7 +275,7 @@ export function ProfileForm() {
                     : "No dynamic roles assigned"
                 }
                 disabled
-                className="bg-slate-50"
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -287,7 +287,7 @@ export function ProfileForm() {
                     : "No permissions loaded"
                 }
                 disabled
-                className="bg-slate-50"
+                className="bg-muted"
               />
             </div>
           </div>

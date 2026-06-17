@@ -2,6 +2,8 @@
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { DashboardPageHeader } from "@/components/dashboard";
+import { PageShell } from "@/components/shared/page-shell";
 import { useSalesDashboard } from "@/hooks/sales/useSalesDashboard";
 import { SalesDashboardSkeleton } from "@/components/sales/dashboard/SalesDashboardSkeleton";
 import { SalesDashboardFilters } from "@/components/sales/dashboard/SalesDashboardFilters";
@@ -56,26 +58,24 @@ export default function SalesDashboardPage() {
   if (isLoading) return <SalesDashboardSkeleton />;
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Sales Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Real-time operational overview of your sales pipeline.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={refresh}
-          disabled={isRefreshing}
-        >
-          <RefreshCw
-            className={cn("w-4 h-4 mr-2", isRefreshing && "animate-spin")}
-          />
-          Refresh
-        </Button>
-      </div>
+    <PageShell>
+      <DashboardPageHeader
+        title="Sales Dashboard"
+        description="Real-time operational overview of your sales pipeline."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw
+              className={cn("w-4 h-4 mr-2", isRefreshing && "animate-spin")}
+            />
+            Refresh
+          </Button>
+        }
+      />
 
       <SalesDashboardFilters
         date={date}
@@ -122,6 +122,6 @@ export default function SalesDashboardPage() {
       </div>
 
       <TopDealsTable topDeals={topDeals} users={users} />
-    </div>
+    </PageShell>
   );
 }

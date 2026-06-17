@@ -65,7 +65,7 @@ export function AnalyticsFiltersBar({
   onSetDraftDate,
 }: AnalyticsFiltersBarProps) {
   return (
-    <div className="flex flex-wrap gap-2 items-center bg-card border rounded-xl p-3">
+    <div className="flex flex-wrap gap-2 items-center rounded-xl border border-border bg-card p-3">
       <div className="flex gap-1">
         {DATE_PRESETS.map((p) => (
           <Button
@@ -106,8 +106,8 @@ export function AnalyticsFiltersBar({
               onSelect={(d) => onSetDraftDate(d)}
               numberOfMonths={1}
               captionLayout="dropdown"
-              fromYear={2000}
-              toYear={nowIST().getFullYear() + 1}
+              startMonth={new Date(2000, 0)}
+              endMonth={new Date(nowIST().getFullYear() + 1, 11)}
             />
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">

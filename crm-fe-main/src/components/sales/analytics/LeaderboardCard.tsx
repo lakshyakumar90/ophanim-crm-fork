@@ -59,9 +59,9 @@ export function LeaderboardCard({
               router.push(`/activity?${params.toString()}`);
             }}
             className={cn(
-              "w-full cursor-pointer text-left flex items-center justify-between rounded-lg border p-2 transition-colors",
+              "w-full cursor-pointer text-left flex items-center justify-between rounded-lg border border-border p-2 transition-colors",
               row.rank === 1 && "bg-amber-50/70 border-amber-200 hover:bg-amber-100/70",
-              row.rank === 2 && "bg-slate-100/70 border-slate-300 hover:bg-slate-200/70",
+              row.rank === 2 && "bg-muted/70 hover:bg-muted",
               row.rank === 3 && "bg-orange-50/70 border-orange-200 hover:bg-orange-100/70",
               row.rank > 3 && "hover:bg-muted/40",
             )}

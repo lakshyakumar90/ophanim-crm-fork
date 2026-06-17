@@ -2,12 +2,17 @@
 
 import { useState, useCallback } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
-import { financeDashboardApi, approvalsApi } from "@/lib/finance-api";
+import { financeDashboardApi } from "@/lib/finance-api";
 import { useAuth } from "@/providers/auth-provider";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  StatsCard,
+  DashboardPageHeader,
+  DashboardSkeleton,
+} from "@/components/dashboard";
+import { PageShell } from "@/components/shared/page-shell";
 import { formatCurrency } from "@/lib/invoice-line-item-math";
 import {
   Wallet,
@@ -51,7 +56,11 @@ export default function FinanceDashboardPage() {
   });
 
   if (isLoading) {
-    return <DashboardSkeleton />;
+    return (
+      <PageShell>
+        <DashboardSkeleton />
+      </PageShell>
+    );
   }
 
   if (error) {
@@ -89,83 +98,72 @@ export default function FinanceDashboardPage() {
         : undefined;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Wallet className="h-6 w-6 text-primary" />
-            Finance Dashboard
-          </h1>
-          <p className="text-muted-foreground">
-            Overview of revenue, expenses, and pending approvals
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh}>
-          <RefreshCw
-            className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </Button>
-      </div>
+    <PageShell>
+      <DashboardPageHeader
+        title="Finance Dashboard"
+        description="Overview of revenue, expenses, and pending approvals"
+        icon={<Wallet className="h-6 w-6 text-primary" />}
+        actions={
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
+            <RefreshCw
+              className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
+        <StatsCard
           title="Total Revenue"
           value={formatCurrency(displayRevenue || 0, displayCurrency)}
           icon={TrendingUp}
-          trend={{ label: currencyNote || "All time", isPositive: true }}
-          color="emerald"
+          description={currencyNote || "All time"}
+          accentColor="emerald"
         />
-        <StatCard
+        <StatsCard
           title="Outstanding"
           value={formatCurrency(summary.outstanding_amount || 0, displayCurrency)}
           icon={Clock}
-          trend={{
-            label: `${summary.overdue_invoices || 0} overdue`,
-            isPositive: false,
-          }}
-          color="amber"
+          description={`${summary.overdue_invoices || 0} overdue`}
+          accentColor="amber"
         />
-        <StatCard
+        <StatsCard
           title="This Month Expenses"
           value={formatCurrency(summary.this_month_expenses || 0, displayCurrency)}
           icon={Receipt}
-          color="rose"
+          accentColor="rose"
         />
-        <StatCard
+        <StatsCard
           title="Net Balance"
           value={formatCurrency(summary.net_balance || 0, displayCurrency)}
           icon={Wallet}
-          trend={{
-            label: "Revenue - Expenses",
-            isPositive: (summary.net_balance || 0) >= 0,
-          }}
-          color="blue"
+          description="Revenue - Expenses"
+          accentColor="blue"
         />
       </div>
 
       {/* Pending Approvals Alert */}
       {(summary.pending_approvals || 0) > 0 && (
-        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+        <Card className="border-border bg-muted/50">
           <CardContent className="flex items-center justify-between py-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-100 dark:bg-amber-900 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <div className="p-2 bg-muted rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">
+                <p className="font-medium text-foreground">
                   {summary.pending_approvals} pending approval
                   {summary.pending_approvals > 1 ? "s" : ""}
                 </p>
-                <p className="text-sm text-amber-600 dark:text-amber-400">
+                <p className="text-sm text-muted-foreground">
                   Invoices, expenses, or emails awaiting your review
                 </p>
               </div>
             </div>
             <Link href="/finance/approvals">
-              <Button variant="outline" size="sm" className="border-amber-300">
+              <Button variant="outline" size="sm">
                 Review Now
               </Button>
             </Link>
@@ -175,24 +173,24 @@ export default function FinanceDashboardPage() {
 
       {/* Overdue Invoices Alert */}
       {(summary.overdue_invoices || 0) > 0 && (
-        <Card className="border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-800">
+        <Card className="border-destructive/50 bg-destructive/10">
           <CardContent className="flex items-center justify-between py-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-rose-100 dark:bg-rose-900 rounded-lg">
-                <FileText className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              <div className="p-2 bg-destructive/10 rounded-lg">
+                <FileText className="h-5 w-5 text-destructive" />
               </div>
               <div>
-                <p className="font-medium text-rose-800 dark:text-rose-200">
+                <p className="font-medium text-destructive">
                   {summary.overdue_invoices} overdue invoice
                   {summary.overdue_invoices > 1 ? "s" : ""}
                 </p>
-                <p className="text-sm text-rose-600 dark:text-rose-400">
+                <p className="text-sm text-muted-foreground">
                   Total overdue: {formatCurrency(summary.overdue_amount || 0, displayCurrency)}
                 </p>
               </div>
             </div>
             <Link href="/finance/invoices?status=overdue">
-              <Button variant="outline" size="sm" className="border-rose-300">
+              <Button variant="outline" size="sm">
                 View Overdue
               </Button>
             </Link>
@@ -349,73 +347,6 @@ export default function FinanceDashboardPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  trend,
-  color,
-}: {
-  title: string;
-  value: string;
-  icon: React.ElementType;
-  trend?: { label: string; isPositive: boolean };
-  color: "emerald" | "amber" | "rose" | "blue";
-}) {
-  const colorClasses = {
-    emerald:
-      "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400",
-    amber: "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400",
-    rose: "bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-400",
-    blue: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
-  };
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold mt-1">{value}</p>
-            {trend && (
-              <p
-                className={`text-xs mt-1 ${
-                  trend.isPositive ? "text-emerald-600" : "text-rose-600"
-                }`}
-              >
-                {trend.label}
-              </p>
-            )}
-          </div>
-          <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-9 w-24" />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
-          <Skeleton key={i} className="h-32" />
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Skeleton className="h-64" />
-        <Skeleton className="h-64" />
-      </div>
-    </div>
+    </PageShell>
   );
 }

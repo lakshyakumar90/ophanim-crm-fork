@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { Menu, Sun, Moon, RefreshCw } from "lucide-react";
+import { Sun, Moon, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -12,9 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/providers/auth-provider";
-import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import useSWR, { mutate as globalMutate } from "swr";
 import { notificationsApi, usersApi } from "@/lib/api";
 import { useTheme } from "next-themes";
@@ -120,20 +119,7 @@ export function Header() {
   return (
     <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 lg:px-6">
       {/* Mobile menu */}
-      <Sheet>
-        <SheetTrigger asChild className="lg:hidden">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:bg-accent"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-64">
-          <MobileSidebar />
-        </SheetContent>
-      </Sheet>
+      <SidebarTrigger className="lg:hidden" />
 
       {/* Search */}
       <div className="flex-1 max-w-xl hidden md:block">
@@ -216,7 +202,7 @@ export function Header() {
               Change Password
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-red-600">
+            <DropdownMenuItem onClick={logout} className="text-destructive">
               Logout
             </DropdownMenuItem>
           </DropdownMenuContent>

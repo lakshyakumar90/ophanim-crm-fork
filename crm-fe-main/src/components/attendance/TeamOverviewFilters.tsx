@@ -135,8 +135,8 @@ export function TeamOverviewFilters({
                 disabled={(date) => date > new Date() || date < oneYearAgo}
                 numberOfMonths={1}
                 captionLayout="dropdown"
-                fromYear={oneYearAgo.getFullYear()}
-                toYear={new Date().getFullYear()}
+                startMonth={oneYearAgo}
+                endMonth={new Date()}
               />
             ) : (
               <div className="space-y-3">
@@ -207,8 +207,8 @@ export function TeamOverviewFilters({
                   disabled={(date) => date > new Date() || date < oneYearAgo}
                   numberOfMonths={1}
                   captionLayout="dropdown"
-                  fromYear={oneYearAgo.getFullYear()}
-                  toYear={new Date().getFullYear()}
+                  startMonth={oneYearAgo}
+                  endMonth={new Date()}
                 />
               </div>
             )}

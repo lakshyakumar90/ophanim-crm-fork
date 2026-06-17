@@ -19,8 +19,8 @@ export default function ActivityPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Activity Timeline</h1>
-          <p className="mt-1 text-slate-600">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Activity Timeline</h1>
+          <p className="mt-1 text-muted-foreground">
             Follow the CRM story by resource, entity, and time block instead of a flat event log.
           </p>
         </div>
@@ -41,19 +41,19 @@ export default function ActivityPage() {
       <Card className="border-slate-200 border-none shadow-none bg-transparent">
         <CardHeader className="px-0 pt-2 pb-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <CardTitle className="flex items-center gap-2 text-xl text-slate-900 font-bold">
+            <CardTitle className="flex items-center gap-2 text-xl text-foreground font-bold">
               <Activity className="h-5 w-5 text-primary" />
               Activity Feed
             </CardTitle>
             <div className="flex items-center gap-2">
-              <div className="flex p-1 rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="flex p-1 rounded-lg border border-border bg-card shadow-sm">
                 <button
                   onClick={() => feed.setViewMode("timeline")}
                   className={cn(
                     "px-4 py-1.5 text-xs font-semibold rounded-md transition-all",
                     feed.viewMode === "timeline"
-                      ? "bg-slate-900 text-white shadow"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                      ? "bg-primary text-primary-foreground shadow"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
                   Timeline
@@ -63,8 +63,8 @@ export default function ActivityPage() {
                   className={cn(
                     "px-4 py-1.5 text-xs font-semibold rounded-md transition-all",
                     feed.viewMode === "detailed"
-                      ? "bg-slate-900 text-white shadow"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                      ? "bg-primary text-primary-foreground shadow"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
                   Detailed View
@@ -90,7 +90,7 @@ export default function ActivityPage() {
 
           <div className={feed.viewMode === "timeline" ? "hidden" : "block"}>
             {!feed.canQueryActivities ? (
-              <div className="py-12 text-center text-slate-500">
+              <div className="py-12 text-center text-muted-foreground">
                 {feed.scopeNeedsDept
                   ? "Select a department to load activity."
                   : feed.scopeNeedsUser
@@ -104,10 +104,10 @@ export default function ActivityPage() {
                 ))}
               </div>
             ) : feed.error ? (
-              <div className="py-12 text-center text-red-500">Failed to load activities</div>
+              <div className="py-12 text-center text-destructive">Failed to load activities</div>
             ) : feed.detailedSections.length === 0 ? (
-              <div className="py-12 text-center text-slate-500">
-                <Activity className="mx-auto mb-4 h-12 w-12 text-slate-300" />
+              <div className="py-12 text-center text-muted-foreground">
+                <Activity className="mx-auto mb-4 h-12 w-12 text-muted-foreground/40" />
                 <p>No activities found for the current filters.</p>
               </div>
             ) : (
@@ -118,12 +118,12 @@ export default function ActivityPage() {
                 {feed.detailedSections.map((dateSection) => (
                   <div key={dateSection.dateKey} className="relative">
                     <div className="bg-background/95 backdrop-blur-sm py-2 px-1 mb-4 flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-bold tracking-tight text-slate-800">
+                      <h3 className="text-sm font-bold tracking-tight text-foreground">
                         {dateSection.dateLabel}
                       </h3>
                       <div className="flex items-center gap-3 flex-1 ml-3">
-                        <div className="h-px bg-slate-200 flex-1" />
-                        <Badge variant="secondary" className="text-xs px-2 bg-slate-100 text-slate-600">
+                        <div className="h-px bg-border flex-1" />
+                        <Badge variant="secondary" className="text-xs px-2">
                           {dateSection.resources.reduce((acc, r) => acc + r.activities.length, 0)}{" "}
                           events
                         </Badge>

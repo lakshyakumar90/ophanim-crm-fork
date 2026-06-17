@@ -114,15 +114,14 @@ export function SalesDashboardFilters({
         <PopoverContent className="w-auto p-3" align="start">
           <div className="space-y-3">
             <Calendar
-              initialFocus
               mode="range"
               defaultMonth={draftDate?.from || date?.from}
               selected={draftDate}
               onSelect={(d) => onDraftDateChange(d)}
               numberOfMonths={1}
               captionLayout="dropdown"
-              fromYear={2000}
-              toYear={nowIST().getFullYear() + 1}
+              startMonth={new Date(2000, 0)}
+              endMonth={new Date(nowIST().getFullYear() + 1, 11)}
             />
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">Max custom range: 1 year</p>

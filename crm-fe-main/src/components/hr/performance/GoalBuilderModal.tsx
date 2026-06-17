@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,99 +89,112 @@ export function GoalBuilderModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Set goals</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Label className="shrink-0">Templates</Label>
-            <Select
-              onValueChange={(k) => {
-                if (k && TEMPLATES[k]) setRows(TEMPLATES[k]!.map((g) => ({ ...g })));
-              }}
-            >
-              <SelectTrigger className="max-w-xs">
-                <SelectValue placeholder="Load preset…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="engineering">Engineering standard</SelectItem>
-                <SelectItem value="sales">Sales standard</SelectItem>
-                <SelectItem value="leadership">Leadership standard</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {rows.map((row, i) => (
-            <div key={i} className="rounded-lg border p-3 space-y-2">
-              <div className="flex justify-between">
-                <Label>Goal {i + 1}</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setRows(rows.filter((_, j) => j !== i))}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-              <Input
-                placeholder="Title *"
-                value={row.title}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[i] = { ...next[i]!, title: e.target.value };
-                  setRows(next);
-                }}
-              />
-              <textarea
-                className="w-full min-h-[48px] rounded-md border px-2 py-1.5 text-sm"
-                placeholder="Description / KPI"
-                value={row.kpi || row.description || ""}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[i] = { ...next[i]!, kpi: e.target.value };
-                  setRows(next);
-                }}
-              />
-              <Input
-                placeholder="Target / success criteria"
-                value={row.target || ""}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[i] = { ...next[i]!, target: e.target.value };
-                  setRows(next);
-                }}
-              />
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                placeholder="Weight %"
-                value={row.weight || ""}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[i] = { ...next[i]!, weight: Number(e.target.value) || 0 };
-                  setRows(next);
-                }}
-              />
-            </div>
-          ))}
-          <Button type="button" variant="outline" className="w-full gap-2" onClick={() => setRows([...rows, { title: "", weight: 0 }])}>
-            <Plus className="h-4 w-4" />
-            Add goal
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Set goals"
+      description="Define performance goals and weights (must total 100%)."
+      size="lg"
+      footer={
+        <>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
           </Button>
-          <p
-            className={`text-sm font-medium ${total === 100 ? "text-emerald-600" : "text-destructive"}`}
-          >
-            Total weight: {total}% / 100%
-          </p>
-          <Button className="w-full" disabled={!valid || saving} onClick={() => void submit()}>
+          <Button disabled={!valid || saving} onClick={() => void submit()}>
             {saving ? "Saving…" : "Submit goals"}
           </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Label className="shrink-0">Templates</Label>
+          <Select
+            onValueChange={(k) => {
+              if (k && TEMPLATES[k]) setRows(TEMPLATES[k]!.map((g) => ({ ...g })));
+            }}
+          >
+            <SelectTrigger className="max-w-xs">
+              <SelectValue placeholder="Load preset…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="engineering">Engineering standard</SelectItem>
+              <SelectItem value="sales">Sales standard</SelectItem>
+              <SelectItem value="leadership">Leadership standard</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </DialogContent>
-    </Dialog>
+        {rows.map((row, i) => (
+          <div key={i} className="rounded-lg border p-3 space-y-2">
+            <div className="flex justify-between">
+              <Label>Goal {i + 1}</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setRows(rows.filter((_, j) => j !== i))}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <Input
+              placeholder="Title *"
+              value={row.title}
+              onChange={(e) => {
+                const next = [...rows];
+                next[i] = { ...next[i]!, title: e.target.value };
+                setRows(next);
+              }}
+            />
+            <textarea
+              className="w-full min-h-[48px] rounded-md border px-2 py-1.5 text-sm"
+              placeholder="Description / KPI"
+              value={row.kpi || row.description || ""}
+              onChange={(e) => {
+                const next = [...rows];
+                next[i] = { ...next[i]!, kpi: e.target.value };
+                setRows(next);
+              }}
+            />
+            <Input
+              placeholder="Target / success criteria"
+              value={row.target || ""}
+              onChange={(e) => {
+                const next = [...rows];
+                next[i] = { ...next[i]!, target: e.target.value };
+                setRows(next);
+              }}
+            />
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              placeholder="Weight %"
+              value={row.weight || ""}
+              onChange={(e) => {
+                const next = [...rows];
+                next[i] = { ...next[i]!, weight: Number(e.target.value) || 0 };
+                setRows(next);
+              }}
+            />
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full gap-2"
+          onClick={() => setRows([...rows, { title: "", weight: 0 }])}
+        >
+          <Plus className="h-4 w-4" />
+          Add goal
+        </Button>
+        <p
+          className={`text-sm font-medium ${total === 100 ? "text-emerald-600" : "text-destructive"}`}
+        >
+          Total weight: {total}% / 100%
+        </p>
+      </div>
+    </FormSideSheet>
   );
 }

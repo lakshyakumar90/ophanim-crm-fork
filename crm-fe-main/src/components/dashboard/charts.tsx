@@ -16,15 +16,12 @@ import {
   Line,
 } from "recharts";
 
-const COLORS = [
-  "#3b82f6", // blue
-  "#8b5cf6", // violet
-  "#06b6d4", // cyan
-  "#10b981", // emerald
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#6366f1", // indigo
-  "#ec4899", // pink
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ];
 
 // Custom Tooltip Component for cohesive design
@@ -104,8 +101,8 @@ export function LeadPipelineChart({ data }: PipelineChartProps) {
               />
               <defs>
                 <linearGradient id="gradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#3b82f6" />
-                  <stop offset="100%" stopColor="#8b5cf6" />
+                  <stop offset="0%" stopColor={CHART_COLORS[0]} />
+                  <stop offset="100%" stopColor={CHART_COLORS[1]} />
                 </linearGradient>
               </defs>
             </BarChart>
@@ -149,7 +146,7 @@ export function LeadSourceChart({ data }: SourceChartProps) {
                 {chartData.map((_, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
+                    fill={CHART_COLORS[index % CHART_COLORS.length]}
                   />
                 ))}
               </Pie>
@@ -162,7 +159,7 @@ export function LeadSourceChart({ data }: SourceChartProps) {
             <div key={item.name} className="flex items-center gap-1.5 text-xs">
               <div
                 className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
               />
               <span className="text-muted-foreground">{item.name}</span>
             </div>
@@ -217,8 +214,8 @@ export function TrendChart({ data, title }: TrendChartProps) {
               />
               <defs>
                 <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#3b82f6" />
-                  <stop offset="100%" stopColor="#8b5cf6" />
+                  <stop offset="0%" stopColor={CHART_COLORS[0]} />
+                  <stop offset="100%" stopColor={CHART_COLORS[1]} />
                 </linearGradient>
               </defs>
             </LineChart>

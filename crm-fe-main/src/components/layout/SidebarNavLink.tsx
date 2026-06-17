@@ -18,7 +18,7 @@ export function SidebarNavLink({
   badgeCount?: number;
   badgeColor?: "red" | "amber";
 }) {
-  const badgeBgClass = badgeColor === "amber" ? "bg-amber-500" : "bg-red-500";
+  const badgeVariant = badgeColor === "amber" ? "secondary" : "destructive";
 
   return (
     <Link
@@ -42,14 +42,12 @@ export function SidebarNavLink({
           )}
         />
         {collapsed && badgeCount && badgeCount > 0 && (
-          <span
-            className={cn(
-              "absolute -top-1.5 -right-1.5 min-w-3.5 h-3.5 flex items-center justify-center px-0.5 text-[10px] font-medium text-white rounded-full",
-              badgeBgClass,
-            )}
+          <Badge
+            variant={badgeVariant}
+            className="absolute -top-1.5 -right-1.5 min-w-3.5 h-3.5 flex items-center justify-center px-0.5 text-[10px] rounded-full"
           >
             {badgeCount > 9 ? "9+" : badgeCount}
-          </span>
+          </Badge>
         )}
       </div>
       {!collapsed && (
@@ -57,11 +55,8 @@ export function SidebarNavLink({
           <span className="truncate flex-1">{item.title}</span>
           {badgeCount && badgeCount > 0 && (
             <Badge
-              className={cn(
-                "h-5 min-w-5 flex items-center justify-center px-1.5 text-[10px] text-white",
-                badgeBgClass,
-                `hover:${badgeBgClass}`,
-              )}
+              variant={badgeVariant}
+              className="h-5 min-w-5 flex items-center justify-center px-1.5 text-[10px]"
             >
               {badgeCount > 9 ? "9+" : badgeCount}
             </Badge>

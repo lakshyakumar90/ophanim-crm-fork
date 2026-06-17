@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/shared/error-state";
 
 export default function SalesError({
   reset,
@@ -10,10 +10,7 @@ export default function SalesError({
 }) {
   return (
     <div className="h-full min-h-screen flex items-center justify-center p-6">
-      <div className="text-center space-y-3">
-        <h2 className="text-lg font-semibold">Sales page error</h2>
-        <Button onClick={reset}>Retry</Button>
-      </div>
+      <ErrorState title="Sales page error" onRetry={reset} />
     </div>
   );
 }

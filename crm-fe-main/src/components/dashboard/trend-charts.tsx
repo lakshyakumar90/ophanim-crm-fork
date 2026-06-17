@@ -19,15 +19,12 @@ import {
   Legend,
 } from "recharts";
 
-const COLORS = [
-  "#3b82f6",
-  "#10b981",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ef4444",
-  "#06b6d4",
-  "#ec4899",
-  "#6366f1",
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ];
 
 // Custom Tooltip Component
@@ -90,8 +87,8 @@ export function LeadTrendChart({ data }: LeadTrendChartProps) {
             <AreaChart data={data}>
               <defs>
                 <linearGradient id="leadGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  <stop offset="5%" stopColor={CHART_COLORS[0]} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={CHART_COLORS[0]} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient
                   id="convertedGradient"
@@ -100,8 +97,8 @@ export function LeadTrendChart({ data }: LeadTrendChartProps) {
                   x2="0"
                   y2="1"
                 >
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  <stop offset="5%" stopColor={CHART_COLORS[1]} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={CHART_COLORS[1]} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid
@@ -127,7 +124,7 @@ export function LeadTrendChart({ data }: LeadTrendChartProps) {
                 type="monotone"
                 dataKey="leads"
                 name="New Leads"
-                stroke="#3b82f6"
+                stroke={CHART_COLORS[0]}
                 fill="url(#leadGradient)"
                 strokeWidth={2}
               />
@@ -135,7 +132,7 @@ export function LeadTrendChart({ data }: LeadTrendChartProps) {
                 type="monotone"
                 dataKey="converted"
                 name="Converted"
-                stroke="#10b981"
+                stroke={CHART_COLORS[1]}
                 fill="url(#convertedGradient)"
                 strokeWidth={2}
               />
@@ -196,7 +193,7 @@ export function RevenueTrendChart({ data }: RevenueTrendChartProps) {
                 type="monotone"
                 dataKey="revenue"
                 name="Revenue"
-                stroke="#10b981"
+                stroke={CHART_COLORS[1]}
                 strokeWidth={3}
                 dot={{ r: 4, strokeWidth: 2 }}
                 activeDot={{ r: 6 }}
@@ -205,7 +202,7 @@ export function RevenueTrendChart({ data }: RevenueTrendChartProps) {
                 type="monotone"
                 dataKey="expenses"
                 name="Expenses"
-                stroke="#ef4444"
+                stroke={CHART_COLORS[4]}
                 strokeWidth={3}
                 dot={{ r: 4, strokeWidth: 2 }}
                 activeDot={{ r: 6 }}
@@ -229,11 +226,11 @@ interface ProjectStatusChartProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  "In Progress": "#3b82f6",
-  Completed: "#10b981",
-  Planning: "#f59e0b",
-  "On Hold": "#6b7280",
-  Cancelled: "#ef4444",
+  "In Progress": CHART_COLORS[0],
+  Completed: CHART_COLORS[1],
+  Planning: CHART_COLORS[2],
+  "On Hold": CHART_COLORS[3],
+  Cancelled: CHART_COLORS[4],
 };
 
 export function ProjectStatusChart({ data }: ProjectStatusChartProps) {
@@ -266,7 +263,7 @@ export function ProjectStatusChart({ data }: ProjectStatusChartProps) {
                   <Cell
                     key={`cell-${index}`}
                     fill={
-                      STATUS_COLORS[entry.name] || COLORS[index % COLORS.length]
+                      STATUS_COLORS[entry.name] || CHART_COLORS[index % CHART_COLORS.length]
                     }
                   />
                 ))}
@@ -282,7 +279,7 @@ export function ProjectStatusChart({ data }: ProjectStatusChartProps) {
                 className="w-2.5 h-2.5 rounded-full"
                 style={{
                   backgroundColor:
-                    STATUS_COLORS[item.name] || COLORS[index % COLORS.length],
+                    STATUS_COLORS[item.name] || CHART_COLORS[index % CHART_COLORS.length],
                 }}
               />
               <span className="text-muted-foreground">{item.name}</span>
@@ -349,13 +346,13 @@ export function DepartmentPerformanceChart({
               <Bar
                 dataKey="leads"
                 name="Leads"
-                fill="#3b82f6"
+                fill={CHART_COLORS[0]}
                 radius={[0, 4, 4, 0]}
               />
               <Bar
                 dataKey="tasks"
                 name="Tasks"
-                fill="#8b5cf6"
+                fill={CHART_COLORS[3]}
                 radius={[0, 4, 4, 0]}
               />
             </BarChart>

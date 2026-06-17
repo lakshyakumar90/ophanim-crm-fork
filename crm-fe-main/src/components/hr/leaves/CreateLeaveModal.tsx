@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -206,127 +200,129 @@ export function CreateLeaveModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create leave on behalf</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Department</Label>
-              <Select
-                value={departmentFilter}
-                onValueChange={(v) => {
-                  setDepartmentFilter(v);
-                  setTeamFilter("all");
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All departments" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  <SelectItem value="all">All departments</SelectItem>
-                  {departments.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Team</Label>
-              <Select value={teamFilter} onValueChange={setTeamFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All teams" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  <SelectItem value="all">All teams</SelectItem>
-                  {teams.map((team) => (
-                    <SelectItem key={team.id} value={team.id}>
-                      {team.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div>
-            <Label>Employee</Label>
-            <Select value={targetUserId} onValueChange={setTargetUserId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select employee" />
-              </SelectTrigger>
-              <SelectContent className="max-h-64">
-                {filteredEmployees.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {normName(e) || e.email || e.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Leave type</Label>
-            <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                {leaveTypes.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {loadingBal ? (
-              <p className="text-xs text-muted-foreground mt-1">Loading balance…</p>
-            ) : remainingForType != null && selectedLt ? (
-              <p className="text-xs mt-1">
-                Remaining: <strong>{remainingForType}</strong> of {selectedLt.daysAllowed} days
-                {workingDays > 0 && remainingForType < workingDays ? (
-                  <span className="text-amber-700 dark:text-amber-400 ml-2">
-                    ⚠ Insufficient balance ({remainingForType} days remaining)
-                  </span>
-                ) : null}
-              </p>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Start</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            </div>
-            <div>
-              <Label>End</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-            </div>
-          </div>
-          {startDate && endDate ? (
-            <p className="text-sm text-muted-foreground">
-              Working days (excl. weekends): <strong>{workingDays}</strong>
-            </p>
-          ) : null}
-          <div>
-            <Label>Reason (required)</Label>
-            <Textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="min-h-[80px]"
-            />
-          </div>
-        </div>
-        <DialogFooter>
+    <FormSideSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Create leave on behalf"
+      size="md"
+      footer={
+        <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button disabled={saving} onClick={() => void submit()}>
             {saving ? "Creating…" : "Create"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label>Department</Label>
+            <Select
+              value={departmentFilter}
+              onValueChange={(v) => {
+                setDepartmentFilter(v);
+                setTeamFilter("all");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All departments" />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectItem value="all">All departments</SelectItem>
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Team</Label>
+            <Select value={teamFilter} onValueChange={setTeamFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="All teams" />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectItem value="all">All teams</SelectItem>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    {team.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div>
+          <Label>Employee</Label>
+          <Select value={targetUserId} onValueChange={setTargetUserId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select employee" />
+            </SelectTrigger>
+            <SelectContent className="max-h-64">
+              {filteredEmployees.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {normName(e) || e.email || e.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Leave type</Label>
+          <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              {leaveTypes.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {loadingBal ? (
+            <p className="text-xs text-muted-foreground mt-1">Loading balance…</p>
+          ) : remainingForType != null && selectedLt ? (
+            <p className="text-xs mt-1">
+              Remaining: <strong>{remainingForType}</strong> of {selectedLt.daysAllowed} days
+              {workingDays > 0 && remainingForType < workingDays ? (
+                <span className="text-amber-700 dark:text-amber-400 ml-2">
+                  ⚠ Insufficient balance ({remainingForType} days remaining)
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label>Start</Label>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </div>
+          <div>
+            <Label>End</Label>
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+        </div>
+        {startDate && endDate ? (
+          <p className="text-sm text-muted-foreground">
+            Working days (excl. weekends): <strong>{workingDays}</strong>
+          </p>
+        ) : null}
+        <div>
+          <Label>Reason (required)</Label>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="min-h-[80px]"
+          />
+        </div>
+      </div>
+    </FormSideSheet>
   );
 }

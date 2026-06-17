@@ -23,16 +23,16 @@ export function ActivityTimeSection({
       {buildTimeSections(activities, shiftType).map((section) => (
         <div key={section.key} className="relative">
           <div className="bg-background/95 backdrop-blur-sm py-2 px-1 mb-4 my-2 flex items-center gap-3">
-            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
               {section.label}
             </h3>
-            <Badge variant="secondary" className="text-xs px-2 bg-slate-100 text-slate-600">
+            <Badge variant="secondary" className="text-xs px-2">
               {section.activities.length}
             </Badge>
-            <div className="h-px bg-slate-200 flex-1" />
+            <div className="h-px bg-border flex-1" />
           </div>
           <div className="relative pl-1 sm:pl-2">
-            <div className="absolute top-4 bottom-0 left-[26px] sm:left-[31px] w-px bg-slate-200" />
+            <div className="absolute top-4 bottom-0 left-[26px] sm:left-[31px] w-px bg-border" />
             <div className="space-y-4">
               {section.activities.map((act) => (
                 <TimelineActivityItem

@@ -220,7 +220,7 @@ export default function EmailSettingsForm() {
                     {...register("smtpHost")}
                   />
                   {errors.smtpHost && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-destructive">
                       {errors.smtpHost.message}
                     </p>
                   )}
@@ -233,7 +233,7 @@ export default function EmailSettingsForm() {
                     {...register("smtpPort", { valueAsNumber: true })}
                   />
                   {errors.smtpPort && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-destructive">
                       {errors.smtpPort.message}
                     </p>
                   )}
@@ -250,7 +250,7 @@ export default function EmailSettingsForm() {
                 {...register("smtpUser")}
               />
               {errors.smtpUser && (
-                <p className="text-sm text-red-500">
+                <p className="text-sm text-destructive">
                   {errors.smtpUser.message}
                 </p>
               )}
@@ -270,7 +270,7 @@ export default function EmailSettingsForm() {
                 {...register("smtpPassword")}
               />
               {errors.smtpPassword && (
-                <p className="text-sm text-red-500">
+                <p className="text-sm text-destructive">
                   {errors.smtpPassword.message}
                 </p>
               )}
@@ -336,7 +336,7 @@ export default function EmailSettingsForm() {
                   <Button
                     type="button"
                     variant="ghost"
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                     onClick={() => setShowDeleteConfirm(true)}
                     disabled={isDeleting}
                   >

@@ -750,7 +750,7 @@ export default function UserAttendancePage() {
                                   </p>
                                   <Badge
                                     className={
-                                      statusColors[day.status] || "bg-gray-100 text-gray-700"
+                                      statusColors[day.status] || "bg-muted text-muted-foreground"
                                     }
                                   >
                                     {statusIcons[day.status]} {day.status.replace("_", " ")}

@@ -28,22 +28,22 @@ export function ActivityFiltersBar(feed: Feed) {
   } = feed;
 
   return (
-    <Card className="border-slate-200 overflow-visible shadow-sm">
+    <Card className="border-border overflow-visible shadow-sm">
       <CardContent className="space-y-4 p-5">
         {/* Summary String */}
-        <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/70 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-slate-900">
+            <span className="text-sm font-semibold text-foreground">
               Showing {visibleActivities.length} activities
             </span>
             {activeFilterLabels.length > 0 && (
-              <span className="text-sm text-slate-600">
-                • Filtered by: <span className="font-medium capitalize text-slate-800">{activeFilterLabels.join(" • ")}</span>
+              <span className="text-sm text-muted-foreground">
+                • Filtered by: <span className="font-medium capitalize text-foreground">{activeFilterLabels.join(" • ")}</span>
               </span>
             )}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-600">Show system events</span>
+            <span className="text-sm font-medium text-muted-foreground">Show system events</span>
             <Switch checked={showSystemEvents} onCheckedChange={setShowSystemEvents} />
           </div>
         </div>
@@ -51,11 +51,11 @@ export function ActivityFiltersBar(feed: Feed) {
         {/* Primary Filters Row */}
         <div className="flex flex-wrap items-end gap-3 pt-1">
           <div className="flex-1 min-w-[200px] flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Search
             </label>
             <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Search activities..." 
                 value={searchQuery}
@@ -66,7 +66,7 @@ export function ActivityFiltersBar(feed: Feed) {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Date Range</label>
+            <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Date Range</label>
             <Select value={timePreset} onValueChange={(value) => setTimePreset(value as TimePreset)}>
               <SelectTrigger className="w-40 h-10"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -82,7 +82,7 @@ export function ActivityFiltersBar(feed: Feed) {
           {timePreset === "custom" && (
             <>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   Start Date
                 </label>
                 <Popover>
@@ -90,7 +90,7 @@ export function ActivityFiltersBar(feed: Feed) {
                     <Button
                       variant="outline"
                       className={cn(
-                        "h-10 w-[180px] justify-start text-left font-normal bg-white",
+                        "h-10 w-[180px] justify-start text-left font-normal bg-background",
                         !customStartDate && "text-muted-foreground",
                       )}
                     >
@@ -102,7 +102,6 @@ export function ActivityFiltersBar(feed: Feed) {
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
-                      initialFocus
                       mode="single"
                       selected={parseDateOnly(customStartDate)}
                       onSelect={(date) => {
@@ -122,7 +121,7 @@ export function ActivityFiltersBar(feed: Feed) {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   End Date
                 </label>
                 <Popover>
@@ -130,7 +129,7 @@ export function ActivityFiltersBar(feed: Feed) {
                     <Button
                       variant="outline"
                       className={cn(
-                        "h-10 w-[180px] justify-start text-left font-normal bg-white",
+                        "h-10 w-[180px] justify-start text-left font-normal bg-background",
                         !customEndDate && "text-muted-foreground",
                       )}
                     >
@@ -142,7 +141,6 @@ export function ActivityFiltersBar(feed: Feed) {
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
-                      initialFocus
                       mode="single"
                       selected={parseDateOnly(customEndDate)}
                       onSelect={(date) => {
@@ -164,7 +162,7 @@ export function ActivityFiltersBar(feed: Feed) {
           )}
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Activity Type</label>
+            <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Activity Type</label>
             <Select value={activityType} onValueChange={setActivityType}>
               <SelectTrigger className="w-40 h-10"><SelectValue placeholder="All Types" /></SelectTrigger>
               <SelectContent>
@@ -180,7 +178,7 @@ export function ActivityFiltersBar(feed: Feed) {
 
           {(isAdmin || isManager) && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">User Scope</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">User Scope</label>
               <Select value={scope} onValueChange={(value) => setScope(value as ActivityScope)}>
                 <SelectTrigger className="w-48 h-10"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -202,11 +200,11 @@ export function ActivityFiltersBar(feed: Feed) {
 
         {/* Advanced Filters */}
         {showAdvancedFilters && (
-          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 mt-2">
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-muted px-4 py-4 mt-2">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Resource Type</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Resource Type</label>
               <Select value={resourceType} onValueChange={setResourceType}>
-                <SelectTrigger className="w-44 bg-white"><SelectValue placeholder="All Resources" /></SelectTrigger>
+                <SelectTrigger className="w-44 bg-background"><SelectValue placeholder="All Resources" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Resources</SelectItem>
                   <SelectItem value="lead">Leads</SelectItem>
@@ -219,9 +217,9 @@ export function ActivityFiltersBar(feed: Feed) {
 
             {isAdmin && scope !== "team" && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Org Filter (Dept)</label>
+                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Org Filter (Dept)</label>
                 <Select value={filterDeptId || "all"} onValueChange={(v) => setFilterDeptId(v === "all" ? "" : v)}>
-                  <SelectTrigger className="w-48 bg-white"><SelectValue placeholder="All Departments" /></SelectTrigger>
+                  <SelectTrigger className="w-48 bg-background"><SelectValue placeholder="All Departments" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Departments</SelectItem>
                     {departments.map((d) => (<SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>))}
@@ -232,9 +230,9 @@ export function ActivityFiltersBar(feed: Feed) {
 
             {isAdmin && scope === "team" && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Org Filter (Team)</label>
+                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Org Filter (Team)</label>
                 <Select value={filterTeamId || ""} onValueChange={setFilterTeamId}>
-                  <SelectTrigger className="w-48 bg-white"><SelectValue placeholder="Select Team" /></SelectTrigger>
+                  <SelectTrigger className="w-48 bg-background"><SelectValue placeholder="Select Team" /></SelectTrigger>
                   <SelectContent>
                     {teamsForScope.map((team) => (<SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>))}
                   </SelectContent>
@@ -243,9 +241,9 @@ export function ActivityFiltersBar(feed: Feed) {
             )}
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Role Filter</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Role Filter</label>
               <Select value={filterDesignation} onValueChange={setFilterDesignation}>
-                <SelectTrigger className="w-44 bg-white"><SelectValue placeholder="All Roles" /></SelectTrigger>
+                <SelectTrigger className="w-44 bg-background"><SelectValue placeholder="All Roles" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
                   {isAdmin && <SelectItem value="admin">Admin</SelectItem>}
@@ -257,9 +255,9 @@ export function ActivityFiltersBar(feed: Feed) {
 
             {showUserFilterPanel && scope !== "team" && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">User</label>
+                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">User</label>
                 <Select value={filterUserId || "all"} onValueChange={(v) => setFilterUserId(v === "all" ? "" : v)}>
-                  <SelectTrigger className="w-56 bg-white"><SelectValue placeholder="All Users" /></SelectTrigger>
+                  <SelectTrigger className="w-56 bg-background"><SelectValue placeholder="All Users" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Users</SelectItem>
                     {userOptions.map((o) => (<SelectItem key={o.id} value={o.id}>{o.fullName}</SelectItem>))}
@@ -272,10 +270,10 @@ export function ActivityFiltersBar(feed: Feed) {
 
         {/* Smart Filter Chips */}
         {activeFilterLabels.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 mt-2">
-            <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Active Filters:</span>
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border mt-2">
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Active Filters:</span>
             {activeFilterLabels.map((lbl, i) => (
-              <Badge key={i} variant="secondary" className="px-2.5 py-1 rounded border-slate-200 text-xs font-semibold capitalize bg-white text-slate-700">
+              <Badge key={i} variant="secondary" className="px-2.5 py-1 rounded border-border text-xs font-semibold capitalize text-foreground">
                 {lbl} <X className="h-3 w-3 ml-1.5 -mr-0.5 opacity-50 block" /> {/* Pseudo delete icon, full delete handled by clear all for now */}
               </Badge>
             ))}
@@ -289,7 +287,7 @@ export function ActivityFiltersBar(feed: Feed) {
                 setFilterDesignation("all");
                 setFilterUserId("");
               }}
-              className="text-xs font-medium text-blue-600 ml-2 hover:underline"
+              className="text-xs font-medium text-primary ml-2 hover:underline"
             >
               Clear all
             </button>

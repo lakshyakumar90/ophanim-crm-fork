@@ -187,7 +187,7 @@ function ExpensesPageContent() {
           </Button>
         </div>
       ) : (
-        <div className="border rounded-lg">
+        <div className="rounded-lg border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>

@@ -42,9 +42,9 @@ export function ActivityTrendsCard({
                 <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis fontSize={10} tickLine={false} axisLine={false} />
                 <Tooltip />
-                <Bar dataKey="total" fill="#334155" name="Total Activities" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="status_change" fill="#3b82f6" name="Status Changes" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="comment" fill="#10b981" name="Comments" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="total" fill="var(--chart-5)" name="Total Activities" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="status_change" fill="var(--chart-1)" name="Status Changes" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="comment" fill="var(--chart-2)" name="Comments" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (

@@ -124,8 +124,8 @@ export function MyHistorySection({
                     disabled={(date) => date > new Date() || date < oneYearAgo}
                     numberOfMonths={1}
                     captionLayout="dropdown"
-                    fromYear={oneYearAgo.getFullYear()}
-                    toYear={new Date().getFullYear()}
+                    startMonth={oneYearAgo}
+                    endMonth={new Date()}
                   />
                 </PopoverContent>
               </Popover>
@@ -176,7 +176,7 @@ export function MyHistorySection({
               <p className="text-[10px] text-muted-foreground">On Leave</p>
             </div>
             {myHistoryMode === "month" && (
-              <div className="text-center p-2 bg-slate-50 rounded">
+              <div className="text-center p-2 bg-muted rounded">
                 <p className="text-lg font-bold text-slate-600">
                   {(stats as { week_off?: number }).week_off || 0}
                 </p>
@@ -227,7 +227,7 @@ export function MyHistorySection({
                     <TableCell>
                       <Badge
                         className={
-                          statusColors[rec.status as string] || "bg-gray-100 text-gray-700"
+                          statusColors[rec.status as string] || "bg-muted text-muted-foreground"
                         }
                       >
                         {formatStatusLabel(rec.status as string)}

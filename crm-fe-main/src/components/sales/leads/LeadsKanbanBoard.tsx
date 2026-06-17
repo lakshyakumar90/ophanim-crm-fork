@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
   DragDropContext,
@@ -79,10 +80,10 @@ export function LeadsKanbanBoard({
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`space-y-2 flex-1 min-h-[200px] p-2 rounded-lg transition-colors ${
+                      className={`space-y-2 flex-1 min-h-[200px] rounded-lg border border-border p-2 transition-colors ${
                         snapshot.isDraggingOver
-                          ? "bg-primary/10 border-2 border-dashed border-primary/30"
-                          : "bg-muted/30"
+                          ? "border-2 border-dashed border-primary/30 bg-primary/10"
+                          : "bg-card"
                       }`}
                     >
                       {isInitialKanbanLoading ? (
@@ -97,10 +98,14 @@ export function LeadsKanbanBoard({
                             draggableId={lead.id}
                             index={index}
                           >
-                            {(provided, snapshot) => (
+                            {(provided, snapshot) => {
+                              const { style, ...draggableProps } =
+                                provided.draggableProps;
+                              return (
                               <div
                                 ref={provided.innerRef}
-                                {...provided.draggableProps}
+                                {...draggableProps}
+                                style={style as CSSProperties}
                                 className={`${
                                   snapshot.isDragging ? "opacity-90" : ""
                                 } ${
@@ -192,7 +197,8 @@ export function LeadsKanbanBoard({
                                   </CardContent>
                                 </Card>
                               </div>
-                            )}
+                            );
+                            }}
                           </Draggable>
                         ))
                       )}

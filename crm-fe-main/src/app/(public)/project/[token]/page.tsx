@@ -30,7 +30,7 @@ export default function PublicProjectPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 bg-background">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -39,7 +39,7 @@ export default function PublicProjectPage() {
 
   if (error || !project) {
     return (
-      <Card>
+      <Card className="border-border bg-card">
         <CardContent className="py-12 text-center text-muted-foreground">
           Project not found or link has expired.
         </CardContent>
@@ -51,7 +51,7 @@ export default function PublicProjectPage() {
   const milestones = project.milestones ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-background">
       <div className="flex items-center gap-3">
         <FolderKanban className="h-8 w-8 text-primary" />
         <div>
@@ -64,7 +64,7 @@ export default function PublicProjectPage() {
       </div>
 
       {project.description != null && String(project.description) !== "" && (
-        <Card>
+        <Card className="border-border bg-card">
           <CardHeader>
             <CardTitle className="text-base">Overview</CardTitle>
           </CardHeader>
@@ -76,7 +76,7 @@ export default function PublicProjectPage() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         {project.startDate && (
-          <Card>
+          <Card className="border-border bg-card">
             <CardContent className="py-4 text-sm">
               <p className="text-muted-foreground">Start</p>
               <p className="font-medium">
@@ -86,7 +86,7 @@ export default function PublicProjectPage() {
           </Card>
         )}
         {project.endDate && (
-          <Card>
+          <Card className="border-border bg-card">
             <CardContent className="py-4 text-sm">
               <p className="text-muted-foreground">Target End</p>
               <p className="font-medium">
@@ -98,7 +98,7 @@ export default function PublicProjectPage() {
       </div>
 
       {milestones.length > 0 && (
-        <Card>
+        <Card className="border-border bg-card">
           <CardHeader>
             <CardTitle className="text-base">Milestones</CardTitle>
           </CardHeader>
@@ -106,7 +106,7 @@ export default function PublicProjectPage() {
             {milestones.map((m) => (
               <div
                 key={m.id}
-                className="flex items-center justify-between rounded border px-3 py-2 text-sm"
+                className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm"
               >
                 <span>{m.title ?? m.name}</span>
                 <Badge variant="outline" className="capitalize">

@@ -3,10 +3,8 @@
 import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { useAuth, useIsAdmin } from "@/providers/auth-provider";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   HighPrioritySection,
   StatsCard,
@@ -15,9 +13,11 @@ import {
   ProjectStatusChart,
   DepartmentPerformanceChart,
   TopPerformers,
-  ActivityFeed,
   LeadPipelineChart,
+  DashboardPageHeader,
+  DashboardSkeleton,
 } from "@/components/dashboard";
+import { PageShell } from "@/components/shared/page-shell";
 import {
   RefreshCw,
   Target,
@@ -76,7 +76,11 @@ export default function GlobalDashboardPage() {
   }
 
   if (isLoading) {
-    return <DashboardSkeleton />;
+    return (
+      <PageShell>
+        <DashboardSkeleton kpiCount={6} chartRows={2} />
+      </PageShell>
+    );
   }
 
   if (error) {
@@ -88,39 +92,28 @@ export default function GlobalDashboardPage() {
   }
 
   return (
-    <div className="space-y-6 p-1">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-foreground">
-            Company Overview
-          </h1>
-          <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
-            Admin Dashboard
-          </Badge>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          className="border-border"
-        >
-          <RefreshCw
-            className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </Button>
-      </div>
-
-      {/* High Priority Alerts */}
-      {data?.highPriority && (
-        <div>
-          <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
-            Needs Attention
-          </h2>
-          <HighPrioritySection data={data.highPriority} />
-        </div>
-      )}
+    <PageShell>
+      <DashboardPageHeader
+        title="Company Overview"
+        actions={
+          <>
+            <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
+              Admin Dashboard
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              className="border-border"
+            >
+              <RefreshCw
+                className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </Button>
+          </>
+        }
+      />
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
@@ -198,46 +191,6 @@ export default function GlobalDashboardPage() {
         <LeadPipelineChart data={data?.leads?.pipeline || {}} />
         <TopPerformers performers={data?.topPerformers || []} />
       </div>
-    </div>
-  );
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6 p-1">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-9 w-24" />
-      </div>
-
-      {/* High Priority */}
-      <div>
-        <Skeleton className="h-4 w-32 mb-3" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} className="h-20" />
-          ))}
-        </div>
-      </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {[...Array(6)].map((_, i) => (
-          <Skeleton key={i} className="h-28" />
-        ))}
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Skeleton className="h-72" />
-        <Skeleton className="h-72" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Skeleton className="h-72" />
-        <Skeleton className="h-72 lg:col-span-2" />
-      </div>
-    </div>
+    </PageShell>
   );
 }

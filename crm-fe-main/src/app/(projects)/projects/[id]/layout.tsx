@@ -159,7 +159,7 @@ export default function ProjectLayout({
         {/* Secondary Sidebar */}
         <div
           className={cn(
-            "relative flex flex-col shrink-0 border-r transition-all duration-300 ease-in-out",
+            "relative flex flex-col shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out",
             sidebarCollapsed ? "w-[52px]" : "w-[170px]",
           )}
         >
