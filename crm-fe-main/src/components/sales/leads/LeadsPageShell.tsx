@@ -17,18 +17,17 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth, useIsManager, useIsAdmin } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Plus,
   Pencil,
   Upload,
   Download,
-  X,
   LayoutGrid,
   List,
   Users,
   Bell,
+  UserPlus,
 } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/sales/leads/import-leads-dialog";
 import { ExportLeadsDialog } from "@/components/sales/leads/export-leads-dialog";
@@ -45,10 +44,15 @@ import {
 } from "@/components/sales/leads/leads-reminder-utils";
 import type { Lead } from "@/types";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { BulkActionsBar } from "@/components/shared/bulk-actions-bar";
+import { useSheetQuery } from "@/hooks/use-sheet-query";
+import { LeadDetailSheet } from "@/components/sales/leads/LeadDetailSheet";
 
 export function LeadsPageShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const sheet = useSheetQuery();
   const { user, can } = useAuth();
   const isManager = useIsManager();
   const isAdmin = useIsAdmin();
@@ -299,7 +303,7 @@ export function LeadsPageShell() {
   const mutate = isKanbanView ? kanban.kanbanMutate : table.tableMutate;
 
   return (
-    <div className="space-y-6">
+    <>
       <ImportLeadsDialog
         open={isImportOpen}
         onOpenChange={setIsImportOpen}
@@ -320,170 +324,172 @@ export function LeadsPageShell() {
         }}
       />
 
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Leads</h1>
-          <p className="text-muted-foreground">Manage your sales leads</p>
-          {activeRemindersCount > 0 && (
-            <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-200 px-2.5 py-1 text-xs font-medium text-red-700">
-              <Bell className="h-3.5 w-3.5" />
-              <span>
-                {activeRemindersCount} active reminder
-                {activeRemindersCount > 1 ? "s" : ""}
-                {overdueRemindersCount > 0 &&
-                  ` (${overdueRemindersCount} overdue)`}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex gap-2">
-          {(isAdmin || isManager) && (
-            <div className="flex border rounded-lg overflow-hidden h-fit">
-              <Button
-                variant={viewMode === "table" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className="rounded-none"
-              >
-                <List className="w-4 h-4 mr-2" />
-                Table
-              </Button>
-              <Button
-                variant={viewMode === "kanban" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("kanban")}
-                className="rounded-none"
-              >
-                <LayoutGrid className="w-4 h-4 mr-2" />
-                Kanban
-              </Button>
-            </div>
-          )}
+      <ListPageLayout
+        title="Leads"
+        description="Manage your sales leads"
+        breadcrumbs={[
+          { label: "Sales", href: "/sales" },
+          { label: "Leads" },
+        ]}
+        icon={<UserPlus className="h-4 w-4" />}
+        actions={
+          <div className="flex gap-2">
+            {viewMode === "table" && (
+              <LeadsColumnPicker
+                visibleColumns={table.visibleColumns}
+                onToggleColumn={table.toggleColumn}
+              />
+            )}
 
-          {viewMode === "table" && (
-            <LeadsColumnPicker
-              visibleColumns={table.visibleColumns}
-              onToggleColumn={table.toggleColumn}
-            />
-          )}
+            {(canImportLeads || canExportLeads || canCreateLeads) && (
+              <>
+                {canImportLeads && (
+                  <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import
+                  </Button>
+                )}
+                {canExportLeads && (
+                  <Button variant="outline" onClick={() => setIsExportOpen(true)}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                )}
+                {canCreateLeads && (
+                  <Button
+                    onClick={() => router.push(`/sales/leads/new`)}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Lead
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        }
+        filters={
+          <>
+            {activeRemindersCount > 0 && (
+              <div className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-200 px-2.5 py-1 text-xs font-medium text-red-700">
+                <Bell className="h-3.5 w-3.5" />
+                <span>
+                  {activeRemindersCount} active reminder
+                  {activeRemindersCount > 1 ? "s" : ""}
+                  {overdueRemindersCount > 0 &&
+                    ` (${overdueRemindersCount} overdue)`}
+                </span>
+              </div>
+            )}
 
-          {(canImportLeads || canExportLeads || canCreateLeads) && (
-            <>
-              {canImportLeads && (
-                <Button variant="outline" onClick={() => setIsImportOpen(true)}>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Import
-                </Button>
-              )}
-              {canExportLeads && (
-                <Button variant="outline" onClick={() => setIsExportOpen(true)}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export
-                </Button>
-              )}
-              {canCreateLeads && (
+            {(isAdmin || isManager) && (
+              <div className="flex border rounded-lg overflow-hidden h-fit w-fit">
                 <Button
-                  onClick={() => router.push(`/sales/leads/new`)}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  variant={viewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("table")}
+                  className="rounded-none"
                 >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Lead
+                  <List className="w-4 h-4 mr-2" />
+                  Table
                 </Button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+                <Button
+                  variant={viewMode === "kanban" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("kanban")}
+                  className="rounded-none"
+                >
+                  <LayoutGrid className="w-4 h-4 mr-2" />
+                  Kanban
+                </Button>
+              </div>
+            )}
 
-      {isAdmin && table.selectedIds.length > 0 && viewMode === "table" && (
-        <Card className="bg-primary/5 border-primary/20">
-          <CardContent className="p-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">
-                {table.selectedIds.length} lead(s) selected
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={table.clearSelection}
-                className="h-7"
-              >
-                <X className="w-3 h-3 mr-1" />
-                Clear
-              </Button>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => table.setIsBulkAssignOpen(true)}
-              >
-                <Users className="w-3 h-3 mr-1" />
-                Assign Selected
-              </Button>
-              <Button size="sm" onClick={() => setIsBulkEditOpen(true)}>
-                <Pencil className="w-3 h-3 mr-1" />
-                Edit Selected
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            <LeadsFiltersToolbar
+              viewMode={viewMode}
+              isAdmin={isAdmin}
+              isManager={isManager}
+              assignedToUserId={assignedToUserId}
+              onAssignedToUserIdChange={setAssignedToUserId}
+              assignmentFilter={table.assignmentFilter}
+              onAssignmentFilterChange={table.setAssignmentFilter}
+              status={table.status}
+              onStatusChange={table.setStatus}
+              onPageReset={() => table.setPage(1)}
+              userStats={userStats}
+              kanbanTeamId={kanban.kanbanTeamId}
+              onKanbanTeamIdChange={kanban.setKanbanTeamId}
+              teams={kanban.teams}
+              kanbanTotalLeads={isKanbanView ? kanban.kanbanTotalLeads : undefined}
+            />
+          </>
+        }
+      >
+        {viewMode === "kanban" && (
+          <LeadsKanbanBoard
+            onDragEnd={kanban.handleDragEnd}
+            getLeadsByStatus={kanban.getLeadsByStatus}
+            getTotalCountByStatus={kanban.getTotalCountByStatus}
+            loadMoreForStatus={kanban.loadMoreForStatus}
+            isInitialKanbanLoading={kanban.isInitialKanbanLoading}
+            kanbanValidating={kanban.kanbanValidating}
+            updatingLeadId={kanban.updatingLeadId}
+            leadsWithReminders={leadsWithReminders}
+            leadsWithOverdueReminders={leadsWithOverdueReminders}
+            duplicateLeadIds={duplicateLeadIds}
+          />
+        )}
 
-      <LeadsFiltersToolbar
-        viewMode={viewMode}
-        isAdmin={isAdmin}
-        isManager={isManager}
-        assignedToUserId={assignedToUserId}
-        onAssignedToUserIdChange={setAssignedToUserId}
-        assignmentFilter={table.assignmentFilter}
-        onAssignmentFilterChange={table.setAssignmentFilter}
-        status={table.status}
-        onStatusChange={table.setStatus}
-        onPageReset={() => table.setPage(1)}
-        userStats={userStats}
-        kanbanTeamId={kanban.kanbanTeamId}
-        onKanbanTeamIdChange={kanban.setKanbanTeamId}
-        teams={kanban.teams}
-        kanbanTotalLeads={isKanbanView ? kanban.kanbanTotalLeads : undefined}
+        {viewMode === "table" && (
+          <LeadsTableView
+            router={table.router}
+            isAdmin={table.isAdmin}
+            userId={table.user?.id}
+            visibleColumns={table.visibleColumns}
+            tableLeads={table.tableLeads}
+            selectedIds={table.selectedIds}
+            isLoading={table.tableLoading}
+            error={table.error}
+            meta={table.meta}
+            pageSize={table.pageSize}
+            onPageSizeChange={table.setPageSize}
+            onPageChange={table.setPage}
+            toggleSelectAll={table.toggleSelectAll}
+            toggleSelect={table.toggleSelect}
+            renderCell={table.renderCell}
+            openReassignDialog={table.openReassignDialog}
+            leadsWithReminders={leadsWithReminders}
+            leadsWithOverdueReminders={leadsWithOverdueReminders}
+            onOpenDetail={sheet.openDetail}
+          />
+        )}
+      </ListPageLayout>
+
+      <LeadDetailSheet
+        leadId={sheet.selectedId}
+        open={Boolean(sheet.selectedId)}
+        onOpenChange={(open) => !open && sheet.closeDetail()}
       />
 
-      {viewMode === "kanban" && (
-        <LeadsKanbanBoard
-          onDragEnd={kanban.handleDragEnd}
-          getLeadsByStatus={kanban.getLeadsByStatus}
-          getTotalCountByStatus={kanban.getTotalCountByStatus}
-          loadMoreForStatus={kanban.loadMoreForStatus}
-          isInitialKanbanLoading={kanban.isInitialKanbanLoading}
-          kanbanValidating={kanban.kanbanValidating}
-          updatingLeadId={kanban.updatingLeadId}
-          leadsWithReminders={leadsWithReminders}
-          leadsWithOverdueReminders={leadsWithOverdueReminders}
-          duplicateLeadIds={duplicateLeadIds}
-        />
-      )}
-
-      {viewMode === "table" && (
-        <LeadsTableView
-          router={table.router}
-          isAdmin={table.isAdmin}
-          userId={table.user?.id}
-          visibleColumns={table.visibleColumns}
-          tableLeads={table.tableLeads}
-          selectedIds={table.selectedIds}
-          isLoading={table.tableLoading}
-          error={table.error}
-          meta={table.meta}
-          pageSize={table.pageSize}
-          onPageSizeChange={table.setPageSize}
-          onPageChange={table.setPage}
-          toggleSelectAll={table.toggleSelectAll}
-          toggleSelect={table.toggleSelect}
-          renderCell={table.renderCell}
-          openReassignDialog={table.openReassignDialog}
-          leadsWithReminders={leadsWithReminders}
-          leadsWithOverdueReminders={leadsWithOverdueReminders}
-        />
+      {isAdmin && viewMode === "table" && (
+        <BulkActionsBar
+          count={table.selectedIds.length}
+          label={`${table.selectedIds.length} lead(s) selected`}
+          onClear={table.clearSelection}
+        >
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => table.setIsBulkAssignOpen(true)}
+          >
+            <Users className="w-3 h-3 mr-1" />
+            Assign Selected
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setIsBulkEditOpen(true)}>
+            <Pencil className="w-3 h-3 mr-1" />
+            Edit Selected
+          </Button>
+        </BulkActionsBar>
       )}
 
       <Dialog open={table.isReassignOpen} onOpenChange={table.setIsReassignOpen}>
@@ -601,6 +607,6 @@ export function LeadsPageShell() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

@@ -42,6 +42,7 @@ import { useRouter } from "next/navigation";
 import { formatDistanceToNowIST, formatIST } from "@/lib/date-utils";
 import type { Task } from "@/types";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 const priorityConfig = {
   high: {
@@ -180,85 +181,71 @@ function ProjectTasksPageContent() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-full bg-background">
-        <div className="p-6 border-b">
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-64" />
+      <ListPageLayout
+        className="p-3 lg:p-4"
+        title="Project Tasks"
+        description="Loading tasks…"
+        breadcrumbs={[
+          { label: "Projects", href: "/projects" },
+          { label: "Tasks" },
+        ]}
+      >
+        <div className="flex items-center justify-center h-40">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
-        <div className="p-6">
-          <div className="flex items-center justify-center h-40">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        </div>
-      </div>
+      </ListPageLayout>
     );
   }
 
-  return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Project Context Bar */}
-      {projectId && contextProject && (
-        <div className="flex items-center gap-3 px-6 py-2.5 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-900 text-sm">
-          <FolderKanban className="h-4 w-4 text-blue-600 shrink-0" />
-          <span className="font-medium text-blue-800 dark:text-blue-300">
-            {contextProject.name}
-          </span>
-          <span className="text-blue-600/70 dark:text-blue-400/70">
-            · Viewing tasks for this project
-          </span>
-          <Link
-            href={`/projects/${contextProject.id}/overview`}
-            className="ml-auto flex items-center gap-1 text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-200 font-medium transition-colors"
-          >
-            Open Project <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      )}
+  const taskDescription =
+    projectId && contextProject
+      ? `Filtered to: ${contextProject.name}`
+      : isAdmin
+        ? "All project tasks across the organization"
+        : isManager
+          ? "Tasks for your projects"
+          : "Your assigned project tasks (sorted by priority)";
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 p-4 lg:p-6 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Project Tasks</h1>
-            <p className="text-muted-foreground">
-              {projectId && contextProject
-                ? `Filtered to: ${contextProject.name}`
-                : isAdmin
-                  ? "All project tasks across the organization"
-                  : isManager
-                    ? "Tasks for your projects"
-                    : "Your assigned project tasks (sorted by priority)"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {projectId && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push("/projects/tasks")}
-                className="text-xs"
-              >
-                Clear Filter
-              </Button>
-            )}
-            <Button size="sm" onClick={sheet.openCreate}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Task
-            </Button>
+  return (
+    <>
+    <ListPageLayout
+      className="p-3 lg:p-4"
+      title="Project Tasks"
+      description={taskDescription}
+      icon={<CheckSquare className="h-4 w-4" />}
+      breadcrumbs={[
+        { label: "Projects", href: "/projects" },
+        { label: "Tasks" },
+      ]}
+      actions={
+        <div className="flex items-center gap-2">
+          {projectId && (
             <Button
               variant="outline"
-              size="icon"
-              onClick={fetchTasks}
-              disabled={isLoading}
+              size="sm"
+              onClick={() => router.push("/projects/tasks")}
+              className="text-xs"
             >
-              <RefreshCw
-                className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
-              />
+              Clear Filter
             </Button>
-          </div>
+          )}
+          <Button size="sm" onClick={sheet.openCreate}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Task
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={fetchTasks}
+            disabled={isLoading}
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+            />
+          </Button>
         </div>
-
-        {/* Filters */}
+      }
+      filters={
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -292,10 +279,27 @@ function ProjectTasksPageContent() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+      }
+    >
+      {projectId && contextProject && (
+        <div className="flex items-center gap-3 px-4 py-2.5 mb-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg text-sm">
+          <FolderKanban className="h-4 w-4 text-blue-600 shrink-0" />
+          <span className="font-medium text-blue-800 dark:text-blue-300">
+            {contextProject.name}
+          </span>
+          <span className="text-blue-600/70 dark:text-blue-400/70">
+            · Viewing tasks for this project
+          </span>
+          <Link
+            href={`/projects/${contextProject.id}/overview`}
+            className="ml-auto flex items-center gap-1 text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-200 font-medium transition-colors"
+          >
+            Open Project <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
 
-      {/* Content */}
-      <div className="flex-1 p-4 lg:p-6 overflow-y-auto space-y-6">
+      <div className="space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
@@ -448,7 +452,8 @@ function ProjectTasksPageContent() {
         onCreated={fetchTasks}
         defaultProjectId={projectId || null}
       />
-    </div>
+    </ListPageLayout>
+    </>
   );
 }
 

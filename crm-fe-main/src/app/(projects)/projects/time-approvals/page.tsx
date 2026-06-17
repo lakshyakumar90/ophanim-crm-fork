@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function TimeApprovalsPage() {
   const { user, can } = useAuth();
@@ -68,15 +69,16 @@ export default function TimeApprovalsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Clock className="h-6 w-6 text-primary" />
-          Time Approvals
-        </h1>
-        <p className="text-muted-foreground">Review and approve submitted timesheets</p>
-      </div>
-
+    <ListPageLayout
+      className="p-3 lg:p-4"
+      title="Time Approvals"
+      description="Review and approve submitted timesheets"
+      icon={<Clock className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "Projects", href: "/projects" },
+        { label: "Time Approvals" },
+      ]}
+    >
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -136,6 +138,6 @@ export default function TimeApprovalsPage() {
           </TableBody>
         </Table>
       </div>
-    </div>
+    </ListPageLayout>
   );
 }

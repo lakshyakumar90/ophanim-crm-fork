@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import useSWR from "swr";
 import { financeAnalyticsApi } from "@/lib/finance-api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -21,36 +20,40 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
   BarChart,
   Bar,
-  Legend,
 } from "recharts";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { ChartCard } from "@/components/charts/chart-card";
+import { buildChartConfig, chartAxisProps, chartGridProps } from "@/components/charts/chart-config";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { formatCurrency, formatCompactCurrency } from "@/lib/invoice-line-item-math";
 
-const COLORS = [
-  "#10b981",
-  "#3b82f6",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#06b6d4",
-];
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+] as const;
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "#94a3b8",
-  pending_approval: "#f59e0b",
-  sent: "#3b82f6",
-  paid: "#10b981",
-  overdue: "#ef4444",
-  cancelled: "#6b7280",
-};
+const revenueTrendConfig = buildChartConfig({
+  revenue: { label: "Revenue", colorIndex: 1 },
+  expenses: { label: "Expenses", colorIndex: 4 },
+});
 
-import { formatCurrency } from "@/lib/invoice-line-item-math";
+const outstandingConfig = buildChartConfig({
+  outstanding: { label: "Outstanding", colorIndex: 2 },
+});
 
 function formatMonth(month: string): string {
   const date = new Date(month + "-01");
@@ -111,6 +114,19 @@ export default function FinanceAnalyticsPage() {
 
   const { revenueTrend, invoiceStatus, outstandingClients } = data || {};
 
+  const invoiceStatusChartData = (invoiceStatus || []).map(
+    (entry: { status: string; count: number }, index: number) => ({
+      ...entry,
+      fill: CHART_COLORS[index % CHART_COLORS.length],
+    }),
+  );
+
+  const invoiceStatusConfig = buildChartConfig(
+    Object.fromEntries(
+      invoiceStatusChartData.map((d: { status: string }) => [d.status, { label: d.status }]),
+    ),
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -132,173 +148,152 @@ export default function FinanceAnalyticsPage() {
         </Button>
       </div>
 
-      {/* Revenue Trend Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-medium flex items-center gap-2">
+      <ChartCard
+        title={
+          <span className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-emerald-500" />
             Revenue vs Expenses (12 Months)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {revenueTrend && revenueTrend.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={revenueTrend}>
-                <defs>
-                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient
-                    id="colorExpenses"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis
-                  dataKey="month"
-                  tickFormatter={formatMonth}
-                  className="text-xs"
-                />
-                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  formatter={(value: number | undefined) =>
-                    formatCurrency(value || 0, baseCurrency)
-                  }
-                  labelFormatter={(label) =>
-                    new Date(label + "-01").toLocaleDateString("en-IN", {
-                      month: "long",
-                      year: "numeric",
-                    })
-                  }
-                />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#10b981"
-                  fillOpacity={1}
-                  fill="url(#colorRevenue)"
-                  name="Revenue"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="expenses"
-                  stroke="#ef4444"
-                  fillOpacity={1}
-                  fill="url(#colorExpenses)"
-                  name="Expenses"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No revenue data available
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </span>
+        }
+        height={280}
+      >
+        {revenueTrend && revenueTrend.length > 0 ? (
+          <ChartContainer config={revenueTrendConfig} className="h-full w-full">
+            <AreaChart data={revenueTrend} margin={{ left: 0, right: 8 }}>
+              <CartesianGrid {...chartGridProps} />
+              <XAxis
+                dataKey="month"
+                tickFormatter={formatMonth}
+                {...chartAxisProps}
+              />
+              <YAxis
+                {...chartAxisProps}
+                width={40}
+                tickFormatter={(v) => formatCompactCurrency(Number(v), baseCurrency)}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    labelFormatter={(label) =>
+                      new Date(String(label) + "-01").toLocaleDateString("en-IN", {
+                        month: "long",
+                        year: "numeric",
+                      })
+                    }
+                    formatter={(value) => formatCurrency(Number(value ?? 0), baseCurrency)}
+                  />
+                }
+              />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Area
+                type="monotone"
+                dataKey="revenue"
+                stroke="var(--color-revenue)"
+                fill="var(--color-revenue)"
+                fillOpacity={0.15}
+                strokeWidth={2}
+              />
+              <Area
+                type="monotone"
+                dataKey="expenses"
+                stroke="var(--color-expenses)"
+                fill="var(--color-expenses)"
+                fillOpacity={0.15}
+                strokeWidth={2}
+              />
+            </AreaChart>
+          </ChartContainer>
+        ) : (
+          <p className="px-(--card-spacing) text-sm text-muted-foreground text-center py-8">
+            No revenue data available
+          </p>
+        )}
+      </ChartCard>
 
-      {/* Invoice Status & Outstanding Clients */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Invoice Status Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-medium flex items-center gap-2">
+        <ChartCard
+          title={
+            <span className="flex items-center gap-2">
               <PieChartIcon className="h-4 w-4 text-blue-500" />
               Invoice Status Distribution
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {invoiceStatus && invoiceStatus.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={invoiceStatus}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="count"
-                    nameKey="status"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {invoiceStatus.map(
-                      (entry: { status: string }, index: number) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={
-                            STATUS_COLORS[entry.status] ||
-                            COLORS[index % COLORS.length]
-                          }
-                        />
-                      ),
-                    )}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                No invoice data available
-              </p>
-            )}
-          </CardContent>
-        </Card>
+            </span>
+          }
+          height={280}
+        >
+          {invoiceStatusChartData.length > 0 ? (
+            <ChartContainer config={invoiceStatusConfig} className="h-full w-full">
+              <PieChart>
+                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                <Pie
+                  data={invoiceStatusChartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  outerRadius={90}
+                  dataKey="count"
+                  nameKey="status"
+                  label={({ name, value }) => `${name}: ${value}`}
+                >
+                  {invoiceStatusChartData.map(
+                    (entry: { fill: string }, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ),
+                  )}
+                </Pie>
+                <ChartLegend content={<ChartLegendContent nameKey="status" />} />
+              </PieChart>
+            </ChartContainer>
+          ) : (
+            <p className="px-(--card-spacing) text-sm text-muted-foreground text-center py-8">
+              No invoice data available
+            </p>
+          )}
+        </ChartCard>
 
-        {/* Top Outstanding Clients */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-medium flex items-center gap-2">
+        <ChartCard
+          title={
+            <span className="flex items-center gap-2">
               <Users className="h-4 w-4 text-amber-500" />
               Top Outstanding Clients
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {outstandingClients && outstandingClients.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={outstandingClients} layout="vertical">
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-muted"
-                  />
-                  <XAxis
-                    type="number"
-                    tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="client"
-                    width={100}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <Tooltip
-                    formatter={(value: number | undefined) =>
-                      formatCurrency(value || 0, baseCurrency)
-                    }
-                  />
-                  <Bar
-                    dataKey="outstanding"
-                    fill="#f59e0b"
-                    name="Outstanding"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                No outstanding amounts
-              </p>
-            )}
-          </CardContent>
-        </Card>
+            </span>
+          }
+          height={280}
+        >
+          {outstandingClients && outstandingClients.length > 0 ? (
+            <ChartContainer config={outstandingConfig} className="h-full w-full">
+              <BarChart data={outstandingClients} layout="vertical" margin={{ left: 0, right: 8 }}>
+                <CartesianGrid {...chartGridProps} horizontal={false} vertical />
+                <XAxis
+                  type="number"
+                  {...chartAxisProps}
+                  tickFormatter={(v) => formatCompactCurrency(Number(v), baseCurrency)}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="client"
+                  width={100}
+                  {...chartAxisProps}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => formatCurrency(Number(value ?? 0), baseCurrency)}
+                    />
+                  }
+                />
+                <Bar
+                  dataKey="outstanding"
+                  fill="var(--color-outstanding)"
+                  radius={[0, 4, 4, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <p className="px-(--card-spacing) text-sm text-muted-foreground text-center py-8">
+              No outstanding amounts
+            </p>
+          )}
+        </ChartCard>
       </div>
     </div>
   );

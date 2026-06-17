@@ -44,26 +44,26 @@ const priorityConfig = {
   high: {
     label: "High",
     icon: ArrowUpCircle,
-    color: "text-red-600 bg-red-100 border-red-200",
+    color: "text-red-700 bg-red-100 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900",
   },
   medium: {
     label: "Medium",
     icon: ArrowRightCircle,
-    color: "text-orange-600 bg-orange-100 border-orange-200",
+    color: "text-orange-700 bg-orange-100 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900",
   },
   low: {
     label: "Low",
     icon: ArrowDownCircle,
-    color: "text-green-600 bg-green-100 border-green-200",
+    color: "text-green-700 bg-green-100 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900",
   },
 };
 
 const statusConfig: Record<string, { label: string; color: string }> = {
-  todo: { label: "To Do", color: "bg-slate-100 text-slate-700" },
-  in_progress: { label: "In Progress", color: "bg-blue-100 text-blue-700" },
-  review: { label: "Review", color: "bg-yellow-100 text-yellow-700" },
-  completed: { label: "Completed", color: "bg-green-100 text-green-700" },
-  cancelled: { label: "Cancelled", color: "bg-red-100 text-red-700" },
+  todo: { label: "To Do", color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
+  in_progress: { label: "In Progress", color: "bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300" },
+  review: { label: "Review", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300" },
+  completed: { label: "Completed", color: "bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300" },
+  cancelled: { label: "Cancelled", color: "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300" },
 };
 
 export default function ProjectTasksPage() {
@@ -157,7 +157,7 @@ export default function ProjectTasksPage() {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex flex-col gap-4 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
+      <div className="flex flex-col gap-4 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10 px-4 py-4 lg:px-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Tasks</h1>
@@ -234,7 +234,7 @@ export default function ProjectTasksPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto space-y-6">
+      <div className="flex-1 overflow-y-auto space-y-6 px-4 py-4 lg:px-6">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>

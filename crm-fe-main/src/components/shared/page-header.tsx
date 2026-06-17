@@ -32,10 +32,10 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("space-y-2 pt-2", className)}>
       {breadcrumbs && breadcrumbs.length > 0 ? (
         <Breadcrumb>
-          <BreadcrumbList>
+          <BreadcrumbList className="text-xs">
             {breadcrumbs.map((crumb, index) => (
               <span key={`${crumb.label}-${index}`} className="contents">
                 {index > 0 ? <BreadcrumbSeparator /> : null}
@@ -51,14 +51,14 @@ export function PageHeader({
           </BreadcrumbList>
         </Breadcrumb>
       ) : null}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-foreground">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-0.5">
+          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
             {icon}
             {title}
           </h1>
           {description ? (
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className="text-xs text-muted-foreground">{description}</p>
           ) : null}
         </div>
         {actions ? (

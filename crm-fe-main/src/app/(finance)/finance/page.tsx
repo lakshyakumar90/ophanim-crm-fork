@@ -57,7 +57,7 @@ export default function FinanceDashboardPage() {
 
   if (isLoading) {
     return (
-      <PageShell>
+      <PageShell variant="canvas">
         <DashboardSkeleton />
       </PageShell>
     );
@@ -98,7 +98,7 @@ export default function FinanceDashboardPage() {
         : undefined;
 
   return (
-    <PageShell>
+    <PageShell variant="canvas">
       <DashboardPageHeader
         title="Finance Dashboard"
         description="Overview of revenue, expenses, and pending approvals"
@@ -114,7 +114,7 @@ export default function FinanceDashboardPage() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatsCard
           title="Total Revenue"
           value={formatCurrency(displayRevenue || 0, displayCurrency)}
@@ -199,7 +199,7 @@ export default function FinanceDashboardPage() {
       )}
 
       {/* Expense Breakdown & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Expense Breakdown */}
         <Card>
           <CardHeader>

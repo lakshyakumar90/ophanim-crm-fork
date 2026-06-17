@@ -64,9 +64,9 @@ export function NavMain() {
           isActive={isNavItemActive(pathname, item.href)}
           tooltip={item.title}
         >
-          <Link href={item.href}>
-            <item.icon />
-            <span>{item.title}</span>
+          <Link href={item.href} className="transition-interactive">
+            <item.icon className="h-4 w-4" />
+            <span className="text-xs">{item.title}</span>
           </Link>
         </SidebarMenuButton>
         {badge && badge > 0 ? (

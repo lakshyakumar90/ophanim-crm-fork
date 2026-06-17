@@ -345,7 +345,13 @@ function buildInvoiceHtml(
     }
     .watermark img { width: 320px; height: auto; }
 
-    .doc { position: relative; z-index: 2; }
+    .doc {
+      position: relative;
+      z-index: 2;
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 28px 36px 32px;
+    }
 
     /* ── Header row: logo+company LEFT, invoice meta RIGHT ── */
     /*

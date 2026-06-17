@@ -30,19 +30,22 @@ import type { Project } from "@/types";
 
 const STATUS_CONFIG: Record<
   string,
-  { label: string; color: string }
+  { label: string; variant: "info" | "warning" | "success" | "danger" | "secondary" }
 > = {
-  planned: { label: "Planned", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  in_progress: { label: "In Progress", color: "bg-purple-100 text-purple-700 border-purple-200" },
-  on_hold: { label: "On Hold", color: "bg-orange-100 text-orange-700 border-orange-200" },
-  completed: { label: "Completed", color: "bg-green-100 text-green-700 border-green-200" },
-  cancelled: { label: "Cancelled", color: "bg-red-100 text-red-700 border-red-200" },
+  planned: { label: "Planned", variant: "info" },
+  in_progress: { label: "In Progress", variant: "info" },
+  on_hold: { label: "On Hold", variant: "warning" },
+  completed: { label: "Completed", variant: "success" },
+  cancelled: { label: "Cancelled", variant: "danger" },
 };
 
-const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
-  low: { label: "Low", color: "bg-slate-100 text-slate-600 border-slate-200" },
-  medium: { label: "Medium", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  high: { label: "High", color: "bg-red-100 text-red-700 border-red-200" },
+const PRIORITY_CONFIG: Record<
+  string,
+  { label: string; variant: "secondary" | "warning" | "danger" }
+> = {
+  low: { label: "Low", variant: "secondary" },
+  medium: { label: "Medium", variant: "warning" },
+  high: { label: "High", variant: "danger" },
 };
 
 interface NavItem {
@@ -127,22 +130,16 @@ export default function ProjectLayout({
               </span>
               {project.status && STATUS_CONFIG[project.status] && (
                 <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[11px] px-1.5 py-0 h-5 shrink-0",
-                    STATUS_CONFIG[project.status].color,
-                  )}
+                  variant={STATUS_CONFIG[project.status].variant}
+                  className="h-5 shrink-0 px-1.5 py-0 text-[11px]"
                 >
                   {STATUS_CONFIG[project.status].label}
                 </Badge>
               )}
               {project.priority && PRIORITY_CONFIG[project.priority] && (
                 <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[11px] px-1.5 py-0 h-5 shrink-0",
-                    PRIORITY_CONFIG[project.priority].color,
-                  )}
+                  variant={PRIORITY_CONFIG[project.priority].variant}
+                  className="h-5 shrink-0 px-1.5 py-0 text-[11px]"
                 >
                   {PRIORITY_CONFIG[project.priority].label}
                 </Badge>

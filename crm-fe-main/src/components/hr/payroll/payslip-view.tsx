@@ -62,16 +62,16 @@ export function PayslipView({
         </div>
       </div>
 
-      <div className="p-6 md:p-10 space-y-6 print:p-8">
-        <header className="flex flex-col gap-5 border-b pb-6">
+      <div className="p-4 md:p-6 space-y-5 print:p-6">
+        <header className="flex flex-col gap-4 border-b pb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="relative h-10 w-10 overflow-hidden rounded-md border bg-white">
+              <div className="relative h-9 w-9 overflow-hidden rounded-md border bg-white">
                 <Image src="/logo.png" alt="Ophanim Technologies" fill className="object-contain p-1" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">{companyName}</h1>
-                <p className="text-sm text-muted-foreground">Salary Payslip</p>
+                <h1 className="text-lg font-semibold tracking-tight">{companyName}</h1>
+                <p className="text-xs text-muted-foreground">Salary Payslip</p>
               </div>
             </div>
             <div className="text-right text-sm">
@@ -149,7 +149,7 @@ export function PayslipView({
         </section>
 
         <section className="rounded-lg bg-muted/50 p-4 print:bg-transparent print:border">
-          <div className="flex items-center justify-between text-lg">
+          <div className="flex items-center justify-between text-base">
             <span className="font-semibold">Net pay</span>
             <span className="font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
               {formatINR(record.net_pay)}

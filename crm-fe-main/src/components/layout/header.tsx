@@ -117,7 +117,7 @@ export function Header() {
   };
 
   return (
-    <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 lg:px-6">
+    <header className="flex h-12 items-center justify-between border-b border-border bg-background px-3 lg:px-4">
       {/* Mobile menu */}
       <SidebarTrigger className="lg:hidden" />
 
@@ -174,9 +174,9 @@ export function Header() {
               variant="ghost"
               className="flex items-center gap-2 pl-2 pr-3 text-muted-foreground hover:bg-accent"
             >
-              <Avatar className="h-8 w-8">
+              <Avatar className="h-7 w-7">
                 <AvatarImage src={user?.avatarUrl || undefined} />
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                   {user?.fullName ? getInitials(user.fullName) : "U"}
                 </AvatarFallback>
               </Avatar>

@@ -37,6 +37,8 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMemo, useState } from "react";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface DuplicateLead {
   id: string;
@@ -190,109 +192,110 @@ export default function DuplicateLeadsPage() {
   const getLeadHref = (leadId: string) => `/sales/leads/${leadId}`;
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Copy className="h-5 w-5 text-amber-500" />
-            Duplicate Leads
-          </h1>
-          <p className="text-muted-foreground">
-            {isAdmin || isManager
-              ? "Leads sharing the same email or phone number"
-              : "Your assigned leads that have duplicates"}
-          </p>
-        </div>
-        {!isLoading && (
+    <ListPageLayout
+      title="Duplicate Leads"
+      description={
+        isAdmin || isManager
+          ? "Leads sharing the same email or phone number"
+          : "Your assigned leads that have duplicates"
+      }
+      breadcrumbs={[
+        { label: "Sales", href: "/sales" },
+        { label: "Duplicate Leads" },
+      ]}
+      icon={<Copy className="h-4 w-4" />}
+      actions={
+        !isLoading ? (
           <Badge
             variant={groups.length > 0 ? "destructive" : "outline"}
             className="text-sm px-3 py-1"
           >
-            {userFilteredGroups.length} group{userFilteredGroups.length !== 1 ? "s" : ""} found
+            {userFilteredGroups.length} group
+            {userFilteredGroups.length !== 1 ? "s" : ""} found
           </Badge>
-        )}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2 items-center bg-card border rounded-xl p-3">
-        <div className="relative flex-1 min-w-[160px] max-w-xs">
-          <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search email, phone, name..."
-            className="pl-8 h-8 text-xs"
-          />
-        </div>
-
-        <Input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          className="h-8 text-xs w-[130px]"
-          title="From date"
-        />
-        <Input
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          className="h-8 text-xs w-[130px]"
-          title="To date"
-        />
-
-        {(isAdmin || isManager) && (
-          <div className="w-[220px]">
-            <UserSelector
-              users={filterUsers}
-              value={selectedUserId}
-              onValueChange={setSelectedUserId}
-              placeholder="All Users"
-              className="h-8 text-xs"
+        ) : undefined
+      }
+      filters={
+        <div className="flex flex-wrap gap-2 items-center bg-card border rounded-xl p-3">
+          <div className="relative flex-1 min-w-[160px] max-w-xs">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search email, phone, name..."
+              className="pl-8 h-8 text-xs"
             />
           </div>
-        )}
 
-        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-          <SelectTrigger className="h-8 w-[130px] text-xs">
-            <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="latest">
-              <span className="flex items-center gap-1.5">
-                <SortDesc className="h-3.5 w-3.5" /> Latest first
-              </span>
-            </SelectItem>
-            <SelectItem value="oldest">
-              <span className="flex items-center gap-1.5">
-                <SortAsc className="h-3.5 w-3.5" /> Oldest first
-              </span>
-            </SelectItem>
-            <SelectItem value="name">
-              <span className="flex items-center gap-1.5">
-                <ArrowUpDown className="h-3.5 w-3.5" /> Name A–Z
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-8 text-xs w-[130px]"
+            title="From date"
+          />
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-8 text-xs w-[130px]"
+            title="To date"
+          />
 
-        {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs text-muted-foreground"
-            onClick={() => {
-              setSearch("");
-              setDateFrom("");
-              setDateTo("");
-              setSelectedUserId("");
-            }}
-          >
-            Clear
-          </Button>
-        )}
-      </div>
+          {(isAdmin || isManager) && (
+            <div className="w-[220px]">
+              <UserSelector
+                users={filterUsers}
+                value={selectedUserId}
+                onValueChange={setSelectedUserId}
+                placeholder="All Users"
+                className="h-8 text-xs"
+              />
+            </div>
+          )}
 
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="latest">
+                <span className="flex items-center gap-1.5">
+                  <SortDesc className="h-3.5 w-3.5" /> Latest first
+                </span>
+              </SelectItem>
+              <SelectItem value="oldest">
+                <span className="flex items-center gap-1.5">
+                  <SortAsc className="h-3.5 w-3.5" /> Oldest first
+                </span>
+              </SelectItem>
+              <SelectItem value="name">
+                <span className="flex items-center gap-1.5">
+                  <ArrowUpDown className="h-3.5 w-3.5" /> Name A–Z
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-muted-foreground"
+              onClick={() => {
+                setSearch("");
+                setDateFrom("");
+                setDateTo("");
+                setSelectedUserId("");
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      }
+    >
       {isLoading ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -307,25 +310,25 @@ export default function DuplicateLeadsPage() {
           ))}
         </div>
       ) : groups.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-center gap-3">
-          <Users className="h-12 w-12 text-muted-foreground" />
-          <h3 className="font-semibold text-lg">
-            {hasActiveFilters
+        <EmptyState
+          icon={<Users className="h-12 w-12 opacity-50" />}
+          title={
+            hasActiveFilters
               ? "No groups match your filters"
               : userFilteredGroups.length === 0
                 ? "No duplicate leads found"
-                : "No groups match your filters"}
-          </h3>
-          <p className="text-muted-foreground text-sm">
-            {hasActiveFilters
+                : "No groups match your filters"
+          }
+          description={
+            hasActiveFilters
               ? selectedUserId && userFilteredGroups.length === 0
                 ? `${selectedUserName} has no duplicate lead groups.`
                 : "Try adjusting or clearing your filters."
               : isAdmin || isManager
                 ? "All leads have unique email addresses and phone numbers."
-                : "None of your assigned leads have duplicates."}
-          </p>
-        </div>
+                : "None of your assigned leads have duplicates."
+          }
+        />
       ) : (
         <div className="space-y-4">
           {hasActiveFilters && (
@@ -434,6 +437,6 @@ export default function DuplicateLeadsPage() {
           ))}
         </div>
       )}
-    </div>
+    </ListPageLayout>
   );
 }

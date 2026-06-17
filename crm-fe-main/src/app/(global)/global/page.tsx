@@ -28,6 +28,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { TodayReminders } from "@/components/dashboard/today-reminders";
+import { ErrorState } from "@/components/shared/error-state";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 const API_URL =
@@ -77,7 +78,7 @@ export default function GlobalDashboardPage() {
 
   if (isLoading) {
     return (
-      <PageShell>
+      <PageShell variant="canvas">
         <DashboardSkeleton kpiCount={6} chartRows={2} />
       </PageShell>
     );
@@ -85,14 +86,14 @@ export default function GlobalDashboardPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-red-500">Failed to load dashboard data</p>
-      </div>
+      <PageShell variant="canvas">
+        <ErrorState title="Failed to load dashboard" message="Please try refreshing the page." />
+      </PageShell>
     );
   }
 
   return (
-    <PageShell>
+    <PageShell variant="canvas">
       <DashboardPageHeader
         title="Company Overview"
         actions={
@@ -116,7 +117,7 @@ export default function GlobalDashboardPage() {
       />
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3">
         <StatsCard
           title="Total Leads"
           value={data?.leads?.total || 0}
@@ -155,7 +156,7 @@ export default function GlobalDashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="md:col-span-2">
           {/* High Priority Alerts */}
           {data?.highPriority && (
@@ -173,13 +174,13 @@ export default function GlobalDashboardPage() {
       </div>
 
       {/* Trend Charts Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
         <LeadTrendChart data={data?.trends?.leads || []} />
         <RevenueTrendChart data={data?.trends?.revenue || []} />
       </div>
 
       {/* Charts and Performance Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
         <ProjectStatusChart data={data?.charts?.projectStatus || []} />
         <DepartmentPerformanceChart
           data={data?.charts?.departmentPerformance || []}
@@ -187,7 +188,7 @@ export default function GlobalDashboardPage() {
       </div>
 
       {/* Bottom Row - Pipeline + Activity + Performers */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <LeadPipelineChart data={data?.leads?.pipeline || {}} />
         <TopPerformers performers={data?.topPerformers || []} />
       </div>

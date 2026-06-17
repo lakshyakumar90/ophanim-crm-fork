@@ -129,7 +129,7 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
   return (
     <AppShell>
       <StartupAlertsDialog />
-      <div className="h-full p-4 lg:p-6">{children}</div>
+      <div className="h-full p-3 lg:p-4">{children}</div>
     </AppShell>
   );
 }

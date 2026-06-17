@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { CreateSkillModal } from "@/components/hr/skills/CreateSkillModal";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function SkillsPage() {
   const { user, can } = useAuth();
@@ -40,23 +41,23 @@ export default function SkillsPage() {
   useHeaderRefresh({ onRefresh: handleRefresh, isRefreshing, enabled: Boolean(user) });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Sparkles className="h-6 w-6 text-primary" />
-            Skills
-          </h1>
-          <p className="text-muted-foreground">Skills catalog and competency tracking</p>
-        </div>
-        {canManage ? (
+    <ListPageLayout
+      title="Skills"
+      description="Skills catalog and competency tracking"
+      icon={<Sparkles className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Skills" },
+      ]}
+      actions={
+        canManage ? (
           <Button className="gap-2" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
             Add skill
           </Button>
-        ) : null}
-      </div>
-
+        ) : undefined
+      }
+    >
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -103,6 +104,6 @@ export default function SkillsPage() {
           await mutate();
         }}
       />
-    </div>
+    </ListPageLayout>
   );
 }

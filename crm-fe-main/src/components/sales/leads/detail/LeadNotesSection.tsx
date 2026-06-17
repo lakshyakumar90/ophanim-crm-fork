@@ -48,7 +48,7 @@ export function LeadNotesSection({
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
           rows={3}
-          className="resize-none text-sm"
+          className="min-w-0 w-full resize-none text-sm"
         />
         <Button
           onClick={handleAddComment}

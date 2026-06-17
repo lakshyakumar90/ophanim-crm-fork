@@ -67,7 +67,7 @@ export default function HRDashboardPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell variant="canvas">
       <DashboardPageHeader
         title={title}
         description={description}

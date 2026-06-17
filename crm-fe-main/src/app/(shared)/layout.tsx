@@ -9,7 +9,7 @@ export default function SharedLayout({
 }) {
   return (
     <AppShell>
-      <div className="p-4 lg:p-6 h-full">{children}</div>
+      <div className="p-3 lg:p-4 h-full">{children}</div>
     </AppShell>
   );
 }

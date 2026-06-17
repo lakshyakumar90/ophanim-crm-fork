@@ -38,6 +38,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { useDepartment } from "@/providers/department-context";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 function TeamsPageContent() {
   const sheet = useSheetQuery();
@@ -97,15 +99,16 @@ function TeamsPageContent() {
 
   return (
     <>
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Teams</h1>
-          <p className="text-muted-foreground">
-            Manage teams and their members
-          </p>
-        </div>
-        {isAdmin && (
+    <ListPageLayout
+      title="Teams"
+      description="Manage teams and their members"
+      breadcrumbs={[
+        { label: "Sales", href: "/sales" },
+        { label: "Teams" },
+      ]}
+      icon={<Users className="h-4 w-4" />}
+      actions={
+        isAdmin ? (
           <Button
             onClick={sheet.openCreate}
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -113,9 +116,9 @@ function TeamsPageContent() {
             <Plus className="w-4 h-4 mr-2" />
             Create Team
           </Button>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       {isTeamsLoading || isDeptLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(3)].map((_, i) => (
@@ -127,9 +130,10 @@ function TeamsPageContent() {
           Failed to load teams
         </div>
       ) : teams.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          No teams found
-        </div>
+        <EmptyState
+          icon={<Users className="h-12 w-12 opacity-50" />}
+          title="No teams found"
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {teams.map((team: Team) => (
@@ -228,7 +232,7 @@ function TeamsPageContent() {
         variant="destructive"
         onConfirm={() => deleteTeamId && handleDelete(deleteTeamId)}
       />
-    </div>
+    </ListPageLayout>
 
     {isAdmin && (
       <CreateTeamSheet

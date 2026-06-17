@@ -45,6 +45,7 @@ import type { Team } from "@/types";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 function GlobalTeamsPageContent() {
   const sheet = useSheetQuery();
@@ -113,14 +114,14 @@ function GlobalTeamsPageContent() {
 
   return (
     <>
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">All Teams</h1>
-          <p className="text-muted-foreground">
-            Manage teams across all departments
-          </p>
-        </div>
+    <ListPageLayout
+      title="All Teams"
+      description="Manage teams across all departments"
+      breadcrumbs={[
+        { label: "Global", href: "/global" },
+        { label: "Teams" },
+      ]}
+      actions={
         <div className="flex items-center gap-4">
           <Select
             value={selectedDepartment}
@@ -146,8 +147,8 @@ function GlobalTeamsPageContent() {
             Create Team
           </Button>
         </div>
-      </div>
-
+      }
+    >
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
@@ -249,7 +250,7 @@ function GlobalTeamsPageContent() {
         variant="destructive"
         onConfirm={() => deleteTeamId && handleDelete(deleteTeamId)}
       />
-    </div>
+    </ListPageLayout>
 
     <CreateTeamSheet
       open={sheet.createOpen}

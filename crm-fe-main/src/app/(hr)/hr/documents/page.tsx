@@ -15,6 +15,7 @@ import { UploadDocumentSheet } from "@/components/hr/documents/UploadDocumentShe
 import { EditDocumentModal } from "@/components/hr/documents/EditDocumentModal";
 import { DeleteDocumentDialog } from "@/components/hr/documents/DeleteDocumentDialog";
 import { DocumentTypesTab } from "@/components/hr/documents/DocumentTypesTab";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function HrDocumentsPage() {
   const docView = usePermission("hr:documents_view");
@@ -28,7 +29,7 @@ export default function HrDocumentsPage() {
   const canDelete = docDelete || hrManage;
 
   const { documents, setDocuments, loading, load } = useDocumentsList();
-  const { types, loading: typesLoading, load: loadTypes, patchType, addType } =
+  const { types, loading: typesLoading, load: loadTypes, loadActive: loadActiveTypes, patchType, addType } =
     useDocumentTypes();
   const { stats, loading: statsLoading, load: loadStats } = useDocumentStats();
 
@@ -50,7 +51,9 @@ export default function HrDocumentsPage() {
   const refreshAll = useCallback(async () => {
     setEmpLoading(true);
     try {
-      await Promise.all([load(undefined, true), loadStats(), loadTypes()]);
+      const loads: Promise<unknown>[] = [load(undefined, true), loadStats()];
+      loads.push(canManage ? loadTypes() : loadActiveTypes());
+      await Promise.all(loads);
       try {
         const em = await fetchHrEmployees();
         setEmployees(em);
@@ -60,7 +63,7 @@ export default function HrDocumentsPage() {
     } finally {
       setEmpLoading(false);
     }
-  }, [load, loadStats, loadTypes]);
+  }, [load, loadStats, loadTypes, loadActiveTypes, canManage]);
 
   useEffect(() => {
     if (!canView) return;
@@ -93,12 +96,14 @@ export default function HrDocumentsPage() {
   const kpiLoading = statsLoading || (loading && documents.length === 0);
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">HR documents</h1>
-        <p className="text-muted-foreground mt-1">Uploads, verification, and document types.</p>
-      </div>
-
+    <ListPageLayout
+      title="HR documents"
+      description="Uploads, verification, and document types."
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Documents" },
+      ]}
+    >
       <DocumentKPICards
         stats={stats}
         documents={documents}
@@ -172,6 +177,6 @@ export default function HrDocumentsPage() {
           }}
         />
       ) : null}
-    </div>
+    </ListPageLayout>
   );
 }

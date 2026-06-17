@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { PageShell } from "@/components/shared/page-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import type { BreadcrumbItemConfig } from "@/components/shared/page-header";
@@ -12,6 +13,8 @@ type ListPageLayoutProps = {
   filters?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  className?: string;
+  contentClassName?: string;
 };
 
 export function ListPageLayout({
@@ -23,9 +26,11 @@ export function ListPageLayout({
   filters,
   children,
   footer,
+  className,
+  contentClassName,
 }: ListPageLayoutProps) {
   return (
-    <PageShell>
+    <PageShell className={className}>
       <PageHeader
         title={title}
         description={description}
@@ -34,7 +39,7 @@ export function ListPageLayout({
         breadcrumbs={breadcrumbs}
       />
       {filters ? <div className="flex flex-col gap-3">{filters}</div> : null}
-      <div className="min-w-0">{children}</div>
+      <div className={cn("min-w-0 space-y-6", contentClassName)}>{children}</div>
       {footer}
     </PageShell>
   );

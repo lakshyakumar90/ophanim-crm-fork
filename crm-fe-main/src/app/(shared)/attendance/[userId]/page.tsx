@@ -51,14 +51,32 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from "recharts";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { ChartCard } from "@/components/charts/chart-card";
+import { buildChartConfig, chartAxisProps, chartGridProps } from "@/components/charts/chart-config";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+] as const;
+
+const hoursConfig = buildChartConfig({
+  hours: { label: "Worked", colorIndex: 4 },
+});
 
 const statusColors: Record<string, string> = {
   present: "bg-green-100 text-green-700",
@@ -337,14 +355,23 @@ export default function UserAttendancePage() {
 
   const pieData = history?.summary
     ? [
-        { name: "Present", value: history.summary.present ?? 0, color: "#22c55e" },
-        { name: "Late", value: history.summary.late ?? 0, color: "#eab308" },
-        { name: "Half Day", value: history.summary.halfDay ?? 0, color: "#f97316" },
-        { name: "Absent", value: history.summary.absent ?? 0, color: "#ef4444" },
-        { name: "Leave", value: history.summary.leave ?? 0, color: "#3b82f6" },
-        { name: "Holiday", value: history.summary.holiday ?? 0, color: "#8b5cf6" },
-      ].filter((item) => item.value > 0)
+        { name: "Present", value: history.summary.present ?? 0 },
+        { name: "Late", value: history.summary.late ?? 0 },
+        { name: "Half Day", value: history.summary.halfDay ?? 0 },
+        { name: "Absent", value: history.summary.absent ?? 0 },
+        { name: "Leave", value: history.summary.leave ?? 0 },
+        { name: "Holiday", value: history.summary.holiday ?? 0 },
+      ]
+        .filter((item) => item.value > 0)
+        .map((item, index) => ({
+          ...item,
+          fill: CHART_COLORS[index % CHART_COLORS.length],
+        }))
     : [];
+
+  const pieConfig = buildChartConfig(
+    Object.fromEntries(pieData.map((d) => [d.name, { label: d.name }])),
+  );
 
   const handleAdminRestore = async () => {
     if (!todayAttendance?.id) return;
@@ -640,81 +667,73 @@ export default function UserAttendancePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Attendance Distribution</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {pieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={250}>
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                        label={({ name, percent }) =>
-                          `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                        }
-                        labelLine={false}
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                    No attendance data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <ChartCard title="Attendance Distribution" height={280}>
+              {pieData.length > 0 ? (
+                <ChartContainer config={pieConfig} className="h-full w-full">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={90}
+                      paddingAngle={5}
+                      dataKey="value"
+                      nameKey="name"
+                      label={({ name, percent }) =>
+                        `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                      }
+                      labelLine={false}
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                    <ChartLegend content={<ChartLegendContent />} />
+                  </PieChart>
+                </ChartContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-muted-foreground">
+                  No attendance data available
+                </div>
+              )}
+            </ChartCard>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Daily Worked Hours</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={250}>
-                    <AreaChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip
-                        formatter={(value: number | undefined) => [
-                          formatHoursToReadable(value ?? 0, "0m"),
-                          "Worked",
-                        ]}
-                        labelFormatter={(_, payload) => {
-                          const date = payload?.[0]?.payload?.date;
-                          if (!date) return "";
-                          return format(new Date(`${date}T00:00:00+05:30`), "EEE, MMM d, yyyy");
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="hours"
-                        stroke="#8b5cf6"
-                        fill="#8b5cf6"
-                        fillOpacity={0.2}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                    No chart data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <ChartCard title="Daily Worked Hours" height={280}>
+              {chartData.length > 0 ? (
+                <ChartContainer config={hoursConfig} className="h-full w-full">
+                  <AreaChart data={chartData} margin={{ left: 0, right: 8 }}>
+                    <CartesianGrid {...chartGridProps} />
+                    <XAxis dataKey="label" {...chartAxisProps} />
+                    <YAxis {...chartAxisProps} width={32} />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value) => formatHoursToReadable(Number(value ?? 0), "0m")}
+                          labelFormatter={(_, payload) => {
+                            const date = payload?.[0]?.payload?.date;
+                            if (!date) return "";
+                            return format(new Date(`${date}T00:00:00+05:30`), "EEE, MMM d, yyyy");
+                          }}
+                        />
+                      }
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="hours"
+                      stroke="var(--color-hours)"
+                      fill="var(--color-hours)"
+                      fillOpacity={0.2}
+                    />
+                  </AreaChart>
+                </ChartContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-muted-foreground">
+                  No chart data available
+                </div>
+              )}
+            </ChartCard>
           </div>
 
           <Card>

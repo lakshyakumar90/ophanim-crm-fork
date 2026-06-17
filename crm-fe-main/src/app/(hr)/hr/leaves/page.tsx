@@ -202,7 +202,7 @@ export default function HrLeavesPage() {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 lg:p-6">
           {tab === "overview" ? (
-            <div className="mb-4 shrink-0">
+            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
               <LeaveKPICards
                 stats={stats}
                 onLeaveToday={onLeaveToday}
@@ -210,15 +210,12 @@ export default function HrLeavesPage() {
                 activeTab={tab}
                 onTabChange={setTab}
               />
-            </div>
-          ) : null}
-
-          {tab === "overview" ? (
-            <div className="flex-1 overflow-y-auto rounded-xl border bg-card p-4 md:p-5">
-              <h2 className="text-lg font-semibold">Leave Overview</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Use the metric cards above to quickly jump into pending approvals and all requests.
-              </p>
+              <div className="rounded-xl border bg-card p-4 md:p-5">
+                <h2 className="text-lg font-semibold">Leave Overview</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Use the metric cards above to quickly jump into pending approvals and all requests.
+                </p>
+              </div>
             </div>
           ) : null}
 

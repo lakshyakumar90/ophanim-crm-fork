@@ -12,8 +12,8 @@ import { useAuth } from "@/providers/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ClipboardCheck,
   FileText,
@@ -27,6 +27,8 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 export default function ApprovalsPage() {
   const { user } = useAuth();
@@ -126,130 +128,121 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <ClipboardCheck className="h-6 w-6 text-primary" />
-            Approvals
-          </h1>
-          <p className="text-muted-foreground">
-            Review and approve pending items
-          </p>
-        </div>
+    <ListPageLayout
+      title="Approvals"
+      description="Review and approve pending items"
+      breadcrumbs={[
+        { label: "Finance", href: "/finance" },
+        { label: "Approvals" },
+      ]}
+      icon={<ClipboardCheck className="h-4 w-4" />}
+      actions={
         <Button variant="outline" size="sm" onClick={handleRefresh}>
           <RefreshCw
             className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
           />
           Refresh
         </Button>
-      </div>
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="invoice">Invoices</TabsTrigger>
-          <TabsTrigger value="expense">Expenses</TabsTrigger>
-          <TabsTrigger value="email">Emails</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={activeTab} className="mt-6">
-          {isLoading ? (
-            <div className="space-y-3">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-24" />
-              ))}
-            </div>
-          ) : approvals.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Check className="h-12 w-12 text-emerald-500 mb-4" />
-                <p className="text-lg font-medium">All caught up!</p>
-                <p className="text-muted-foreground">
-                  No pending approvals at this time
-                </p>
+      }
+      filters={
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="invoice">Invoices</TabsTrigger>
+            <TabsTrigger value="expense">Expenses</TabsTrigger>
+            <TabsTrigger value="email">Emails</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      }
+    >
+      {isLoading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+      ) : approvals.length === 0 ? (
+        <EmptyState
+          icon={<Check className="h-12 w-12 text-emerald-500" />}
+          title="All caught up!"
+          description="No pending approvals at this time"
+        />
+      ) : (
+        <div className="space-y-3">
+          {approvals.map((approval: any) => (
+            <Card key={approval.id}>
+              <CardContent className="flex items-center justify-between py-4">
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`p-2 rounded-lg ${getTypeColor(
+                      approval.approval_type,
+                    )}`}
+                  >
+                    {getTypeIcon(approval.approval_type)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="capitalize">
+                        {approval.approval_type}
+                      </Badge>
+                      {approval.entity && (
+                        <span className="font-medium">
+                          {approval.entity.invoice_number ||
+                            approval.entity.expense_number ||
+                            approval.entity.subject ||
+                            "—"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                      <span>
+                        Requested by{" "}
+                        {approval.requester?.full_name || "Unknown"}
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {format(
+                          new Date(approval.requested_at),
+                          "dd MMM yyyy HH:mm",
+                        )}
+                      </span>
+                    </div>
+                    {approval.entity?.total_amount && (
+                      <p className="text-sm font-medium mt-1">
+                        Amount: ₹
+                        {Number(
+                          approval.entity.total_amount ||
+                            approval.entity.amount,
+                        ).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleReject(approval)}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Reject
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleApprove(approval)}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    <Check className="h-4 w-4 mr-1" />
+                    Approve
+                  </Button>
+                </div>
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-3">
-              {approvals.map((approval: any) => (
-                <Card key={approval.id}>
-                  <CardContent className="flex items-center justify-between py-4">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`p-2 rounded-lg ${getTypeColor(
-                          approval.approval_type,
-                        )}`}
-                      >
-                        {getTypeIcon(approval.approval_type)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="capitalize">
-                            {approval.approval_type}
-                          </Badge>
-                          {approval.entity && (
-                            <span className="font-medium">
-                              {approval.entity.invoice_number ||
-                                approval.entity.expense_number ||
-                                approval.entity.subject ||
-                                "—"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                          <span>
-                            Requested by{" "}
-                            {approval.requester?.full_name || "Unknown"}
-                          </span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {format(
-                              new Date(approval.requested_at),
-                              "dd MMM yyyy HH:mm",
-                            )}
-                          </span>
-                        </div>
-                        {approval.entity?.total_amount && (
-                          <p className="text-sm font-medium mt-1">
-                            Amount: ₹
-                            {Number(
-                              approval.entity.total_amount ||
-                                approval.entity.amount,
-                            ).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleReject(approval)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Reject
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleApprove(approval)}
-                        className="bg-emerald-600 hover:bg-emerald-700"
-                      >
-                        <Check className="h-4 w-4 mr-1" />
-                        Approve
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
-    </div>
+          ))}
+        </div>
+      )}
+    </ListPageLayout>
   );
 }

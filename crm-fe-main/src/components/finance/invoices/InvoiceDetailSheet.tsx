@@ -8,7 +8,7 @@ import { InvoiceHeader } from "@/components/finance/invoices/InvoiceHeader";
 import { InvoiceLineItemsTable } from "@/components/finance/invoices/InvoiceLineItemsTable";
 import { InvoicePaymentsPanel } from "@/components/finance/invoices/InvoicePaymentsPanel";
 import { InvoiceEditSheet } from "@/components/finance/invoices/InvoiceEditSheet";
-import { FormSideSheet } from "@/components/ui/form-side-sheet";
+import { RecordDetailSheet } from "@/components/shared/record-detail-sheet";
 
 export function InvoiceDetailBody({ invoiceId }: { invoiceId: string }) {
   const detail = useInvoiceDetail(invoiceId);
@@ -24,7 +24,7 @@ export function InvoiceDetailBody({ invoiceId }: { invoiceId: string }) {
   }
 
   if (!invoice) {
-    return <p className="text-muted-foreground text-sm">Invoice not found.</p>;
+    return <p className="text-sm text-muted-foreground">Invoice not found.</p>;
   }
 
   const currency = invoice.currency || "INR";
@@ -32,7 +32,7 @@ export function InvoiceDetailBody({ invoiceId }: { invoiceId: string }) {
   const canEditInvoice = canManageInvoice && invoice.status === "draft";
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <InvoiceHeader detail={detail} invoice={invoice} embedded />
 
       {canManageInvoice && !canEditInvoice && (
@@ -44,24 +44,22 @@ export function InvoiceDetailBody({ invoiceId }: { invoiceId: string }) {
         </div>
       )}
 
-      <div className="grid gap-4 text-sm">
-        <Card>
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm">Client</CardTitle>
+      <div className="grid gap-3 text-sm">
+        <Card size="sm">
+          <CardHeader className="py-2">
+            <CardTitle>Client</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1 text-sm">
+          <CardContent className="space-y-1 text-xs">
             <p>{invoice.client_name}</p>
             <p className="text-muted-foreground">{invoice.client_email}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm">Details</CardTitle>
+        <Card size="sm">
+          <CardHeader className="py-2">
+            <CardTitle>Details</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <p>
-              Date: {format(new Date(invoice.invoice_date), "dd MMM yyyy")}
-            </p>
+          <CardContent className="space-y-1 text-xs">
+            <p>Date: {format(new Date(invoice.invoice_date), "dd MMM yyyy")}</p>
             <p>Due: {format(new Date(invoice.due_date), "dd MMM yyyy")}</p>
             <p>Currency: {currency}</p>
           </CardContent>
@@ -85,14 +83,17 @@ export function InvoiceDetailSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <FormSideSheet
+    <RecordDetailSheet
       open={open}
       onOpenChange={onOpenChange}
       title="Invoice"
-      size="3xl"
-      className="sm:w-[min(100%,56rem)]"
+      breadcrumbs={[
+        { label: "Finance", href: "/finance" },
+        { label: "Invoices", href: "/finance/invoices" },
+        { label: "Detail" },
+      ]}
     >
       {invoiceId && open ? <InvoiceDetailBody invoiceId={invoiceId} /> : null}
-    </FormSideSheet>
+    </RecordDetailSheet>
   );
 }

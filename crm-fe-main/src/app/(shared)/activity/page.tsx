@@ -11,19 +11,18 @@ import { ActivityFiltersBar } from "@/components/activity/ActivityFiltersBar";
 import { ActivityTimeSection } from "@/components/activity/ActivityTimeSection";
 import { ActivityResourceGroup } from "@/components/activity/ActivityResourceGroup";
 import { ScrollAnchor } from "@/components/activity/ScrollAnchor";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function ActivityPage() {
   const feed = useActivityFeed();
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Activity Timeline</h1>
-          <p className="mt-1 text-muted-foreground">
-            Follow the CRM story by resource, entity, and time block instead of a flat event log.
-          </p>
-        </div>
+    <ListPageLayout
+      title="Activity Timeline"
+      description="Follow the CRM story by resource, entity, and time block instead of a flat event log."
+      icon={<Activity className="h-4 w-4 text-primary" />}
+      breadcrumbs={[{ label: "Activity" }]}
+      actions={
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="secondary" className="px-3 py-1 text-sm font-medium">
             {feed.meta.total} total records
@@ -34,12 +33,11 @@ export default function ActivityPage() {
             </Button>
           )}
         </div>
-      </div>
-
-      <ActivityFiltersBar {...feed} />
-
-      <Card className="border-slate-200 border-none shadow-none bg-transparent">
-        <CardHeader className="px-0 pt-2 pb-4">
+      }
+      filters={<ActivityFiltersBar {...feed} />}
+    >
+      <Card className="border-border shadow-sm">
+        <CardHeader className="pb-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <CardTitle className="flex items-center gap-2 text-xl text-foreground font-bold">
               <Activity className="h-5 w-5 text-primary" />
@@ -73,7 +71,7 @@ export default function ActivityPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0 sm:p-2">
+        <CardContent>
           {feed.viewMode === "timeline" &&
             feed.canQueryActivities &&
             !feed.isLoading &&
@@ -167,6 +165,6 @@ export default function ActivityPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </ListPageLayout>
   );
 }

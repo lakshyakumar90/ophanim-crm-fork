@@ -38,6 +38,7 @@ import { ReviewCycleCard } from "@/components/hr/performance/ReviewCycleCard";
 import { HRPerformanceDashboardWidgets } from "@/components/hr/performance/PerformanceAnalytics";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 function PerformanceCyclesPageContent() {
   const router = useRouter();
@@ -152,22 +153,23 @@ function PerformanceCyclesPageContent() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Performance reviews</h1>
-          <p className="text-muted-foreground mt-1">
-            Review cycles, calibration, and team progress.
-          </p>
-        </div>
-        {canManage ? (
+    <ListPageLayout
+      title="Performance reviews"
+      description="Review cycles, calibration, and team progress."
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Performance" },
+      ]}
+      actions={
+        canManage ? (
           <Button onClick={sheet.openCreate} className="gap-2">
             <Plus className="h-4 w-4" />
             Create review cycle
           </Button>
-        ) : null}
-      </div>
-
+        ) : undefined
+      }
+    >
+      <div className="space-y-6">
       <HRPerformanceDashboardWidgets />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -337,7 +339,8 @@ function PerformanceCyclesPageContent() {
         onOpenChange={(open) => !open && sheet.closeDetail()}
         onUpdated={() => void refresh()}
       />
-    </div>
+      </div>
+    </ListPageLayout>
   );
 }
 

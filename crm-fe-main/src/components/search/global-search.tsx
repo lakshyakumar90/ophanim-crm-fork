@@ -109,15 +109,11 @@ export function GlobalSearch() {
         </kbd>
       </Button>
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <div className="flex items-center border-b border-border px-3">
-          <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground opacity-50" />
-          <input
-            className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder="Type to search..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+        <CommandInput
+          placeholder="Type to search..."
+          value={query}
+          onValueChange={setQuery}
+        />
 
         {/* Filters */}
         <div className="flex gap-2 border-b border-border bg-muted/30 p-2">

@@ -41,10 +41,13 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { STATUS_COLORS } from "@/lib/invoice-line-item-math";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 function formatCurrency(amount: number, currency: CurrencyCode = "INR") {
   return new Intl.NumberFormat("en-US", {
@@ -64,6 +67,7 @@ export default function InvoicesPage() {
 }
 
 function InvoicesPageContent() {
+  const router = useRouter();
   const { user } = useAuth();
   const isAdmin = useIsAdmin();
   const isManager = useIsManager();
@@ -116,18 +120,15 @@ function InvoicesPageContent() {
 
   return (
     <>
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <FileText className="h-6 w-6 text-primary" />
-            Invoices
-          </h1>
-          <p className="text-muted-foreground">
-            Manage invoices and track payments
-          </p>
-        </div>
+    <ListPageLayout
+      title="Invoices"
+      description="Manage invoices and track payments"
+      breadcrumbs={[
+        { label: "Finance", href: "/finance" },
+        { label: "Invoices" },
+      ]}
+      icon={<FileText className="h-4 w-4" />}
+      actions={
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw
@@ -144,36 +145,35 @@ function InvoicesPageContent() {
             </Link>
           )}
         </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search invoices..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
+      }
+      filters={
+        <div className="flex gap-4 items-center">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search invoices..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="pending_approval">Pending Approval</SelectItem>
+              <SelectItem value="sent">Sent</SelectItem>
+              <SelectItem value="paid">Paid</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="pending_approval">Pending Approval</SelectItem>
-            <SelectItem value="sent">Sent</SelectItem>
-            <SelectItem value="paid">Paid</SelectItem>
-            <SelectItem value="overdue">Overdue</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
+      }
+    >
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -181,17 +181,18 @@ function InvoicesPageContent() {
           ))}
         </div>
       ) : invoices.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No invoices found</p>
-          <Link href="/finance/invoices/new">
-            <Button variant="link" className="mt-2">
-              Create your first invoice
-            </Button>
-          </Link>
-        </div>
+        <EmptyState
+          icon={<FileText className="h-12 w-12 opacity-50" />}
+          title="No invoices found"
+          actionLabel={canCreateInvoice ? "Create your first invoice" : undefined}
+          onAction={
+            canCreateInvoice
+              ? () => router.push("/finance/invoices/new")
+              : undefined
+          }
+        />
       ) : (
-        <div className="rounded-lg border border-border bg-card">
+        <div className="rounded-xl ring-1 ring-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -271,7 +272,7 @@ function InvoicesPageContent() {
           </Table>
         </div>
       )}
-    </div>
+    </ListPageLayout>
 
     <InvoiceDetailSheet
       invoiceId={sheet.selectedId}

@@ -41,6 +41,7 @@ import {
   dateToKey,
 } from "@/components/calendar/calendar-primitives";
 import { cn } from "@/lib/utils";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function HRHolidaysPage() {
   const { user, can } = useAuth();
@@ -202,55 +203,56 @@ export default function HRHolidaysPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
-      <div className="shrink-0 flex flex-col gap-3 px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-20">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <CalendarDays className="h-5 w-5 text-primary" />
-            <h1 className="text-xl font-bold tracking-tight">Holiday Calendar</h1>
-            <Badge variant="secondary">{sorted.length}</Badge>
+    <ListPageLayout
+      title="Holiday Calendar"
+      description={`${sorted.length} holidays in ${currentYear}`}
+      icon={<CalendarDays className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Holidays" },
+      ]}
+      actions={
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="secondary">{sorted.length}</Badge>
+          <div className="flex border rounded-md overflow-hidden">
+            {(["day", "week", "month"] as const).map((v) => (
+              <button
+                key={v}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors capitalize",
+                  viewMode === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+                )}
+                onClick={() => setViewMode(v)}
+              >
+                {v}
+              </button>
+            ))}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex border rounded-md overflow-hidden">
-              {(["day", "week", "month"] as const).map((v) => (
-                <button
-                  key={v}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                    viewMode === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-                  )}
-                  onClick={() => setViewMode(v)}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1 border rounded-md">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-medium px-2 min-w-45 text-center">{headerLabel}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goForward}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setCurrentDate(today)}>
-              Today
+          <div className="flex items-center gap-1 border rounded-md">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack}>
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-
-            {canManageHolidays ? (
-              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => openCreate(currentDate)}>
-                <Plus className="h-3.5 w-3.5" />
-                Add Holiday
-              </Button>
-            ) : null}
+            <span className="text-sm font-medium px-2 min-w-45 text-center">{headerLabel}</span>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goForward}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
-        </div>
-      </div>
 
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setCurrentDate(today)}>
+            Today
+          </Button>
+
+          {canManageHolidays ? (
+            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => openCreate(currentDate)}>
+              <Plus className="h-3.5 w-3.5" />
+              Add Holiday
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
+      <div className="flex flex-col min-h-[500px] overflow-hidden rounded-lg border">
       <div className="shrink-0 flex items-center gap-3 px-4 py-1 border-b border-border/40 text-[11px] bg-background/50">
         {(["holiday", "weekend"] as const).map((type) => {
           const Icon = TYPE_ICONS[type];
@@ -329,6 +331,7 @@ export default function HRHolidaysPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </ListPageLayout>
   );
 }

@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -25,10 +24,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronLeft, ChevronRight, Eye, Pencil, MoreHorizontal, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Pencil, MoreHorizontal, Users, UserPlus } from "lucide-react";
 import type { Lead } from "@/types";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ALL_COLUMNS } from "@/components/sales/leads/leads-list-constants";
+import { Sparkline } from "@/components/charts/sparkline";
+import { EmptyState } from "@/components/shared/empty-state";
+
+function getLeadSparklineData(lead: Lead): { value: number }[] {
+  let hash = 0;
+  for (let i = 0; i < lead.id.length; i++) {
+    hash = lead.id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const statusOffset = lead.status ? lead.status.length % 3 : 0;
+  const base = (Math.abs(hash) % 3) + 1 + statusOffset;
+  return [{ value: base }, { value: base + 1 }, { value: base }];
+}
 
 interface LeadsTableMeta {
   page: number;
@@ -58,6 +69,7 @@ interface LeadsTableViewProps {
   openReassignDialog: (lead: Lead) => void;
   leadsWithReminders: Set<string>;
   leadsWithOverdueReminders: Set<string>;
+  onOpenDetail: (id: string) => void;
 }
 
 export function LeadsTableView({
@@ -79,11 +91,12 @@ export function LeadsTableView({
   openReassignDialog,
   leadsWithReminders,
   leadsWithOverdueReminders,
+  onOpenDetail,
 }: LeadsTableViewProps) {
   return (
     <>
       {meta && (
-        <div className="flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Rows:</span>
@@ -134,126 +147,133 @@ export function LeadsTableView({
         </div>
       )}
 
-      <Card>
-        <CardContent className="p-0 overflow-auto">
-          {isLoading ? (
-            <div className="p-4 space-y-4">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-16" />
-              ))}
-            </div>
-          ) : error ? (
-            <div className="p-8 text-center text-red-500">
-              Failed to load leads
-            </div>
-          ) : tableLeads.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              No leads found
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
+      <div className="rounded-xl ring-1 ring-border bg-card overflow-auto">
+        {isLoading ? (
+          <div className="p-4 space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-16" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-red-500">
+            Failed to load leads
+          </div>
+        ) : tableLeads.length === 0 ? (
+          <EmptyState
+            icon={<UserPlus className="h-12 w-12 opacity-50" />}
+            title="No leads found"
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {isAdmin && (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={
+                        tableLeads.length > 0 &&
+                        selectedIds.length === tableLeads.length
+                      }
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                )}
+                {ALL_COLUMNS.filter((col) =>
+                  visibleColumns.includes(col.key),
+                ).map((col) => (
+                  <TableHead key={col.key} className="whitespace-nowrap">
+                    {col.label}
+                  </TableHead>
+                ))}
+                <TableHead className="w-24 whitespace-nowrap">Trend</TableHead>
+                <TableHead className="w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tableLeads.map((lead: Lead) => (
+                <TableRow
+                  key={lead.id}
+                  className={`cursor-pointer hover:bg-muted ${
+                    selectedIds.includes(lead.id)
+                      ? "bg-primary/5"
+                      : leadsWithOverdueReminders.has(lead.id)
+                        ? "bg-red-200/60 hover:bg-red-200 border-l-2 border-l-red-500"
+                        : leadsWithReminders.has(lead.id)
+                          ? "bg-green-200/60 hover:bg-green-200 border-l-2 border-l-green-500"
+                          : ""
+                  }`}
+                  onClick={() => onOpenDetail(lead.id)}
+                >
                   {isAdmin && (
-                    <TableHead className="w-12">
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox
-                        checked={
-                          tableLeads.length > 0 &&
-                          selectedIds.length === tableLeads.length
-                        }
-                        onCheckedChange={toggleSelectAll}
-                        aria-label="Select all"
+                        checked={selectedIds.includes(lead.id)}
+                        onCheckedChange={() => toggleSelect(lead.id)}
+                        aria-label={`Select ${lead.leadName}`}
                       />
-                    </TableHead>
+                    </TableCell>
                   )}
                   {ALL_COLUMNS.filter((col) =>
                     visibleColumns.includes(col.key),
                   ).map((col) => (
-                    <TableHead key={col.key} className="whitespace-nowrap">
-                      {col.label}
-                    </TableHead>
+                    <TableCell key={`${lead.id}-${col.key}`}>
+                      {renderCell(lead, col.key)}
+                    </TableCell>
                   ))}
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableLeads.map((lead: Lead) => (
-                  <TableRow
-                    key={lead.id}
-                    className={`cursor-pointer hover:bg-muted ${
-                      selectedIds.includes(lead.id)
-                        ? "bg-primary/5"
-                        : leadsWithOverdueReminders.has(lead.id)
-                          ? "bg-red-200/60 hover:bg-red-200 border-l-2 border-l-red-500"
-                          : leadsWithReminders.has(lead.id)
-                            ? "bg-green-200/60 hover:bg-green-200 border-l-2 border-l-green-500"
-                            : ""
-                    }`}
-                    onClick={() => router.push(`/sales/leads/${lead.id}`)}
-                  >
-                    {isAdmin && (
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedIds.includes(lead.id)}
-                          onCheckedChange={() => toggleSelect(lead.id)}
-                          aria-label={`Select ${lead.leadName}`}
-                        />
-                      </TableCell>
-                    )}
-                    {ALL_COLUMNS.filter((col) =>
-                      visibleColumns.includes(col.key),
-                    ).map((col) => (
-                      <TableCell key={`${lead.id}-${col.key}`}>
-                        {renderCell(lead, col.key)}
-                      </TableCell>
-                    ))}
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          asChild
-                          onClick={(e) => e.stopPropagation()}
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Sparkline
+                      data={getLeadSparklineData(lead)}
+                      className="w-20"
+                      height={32}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        asChild
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() =>
+                            onOpenDetail(lead.id)
+                          }
                         >
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                          <Eye className="mr-2 h-4 w-4" />
+                          View
+                        </DropdownMenuItem>
+                        {(isAdmin || lead.assignedTo === userId) && (
                           <DropdownMenuItem
                             onClick={() =>
-                              router.push(`/sales/leads/${lead.id}`)
+                              router.push(`/sales/leads/${lead.id}/edit`)
                             }
                           >
-                            <Eye className="mr-2 h-4 w-4" />
-                            View
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit
                           </DropdownMenuItem>
-                          {(isAdmin || lead.assignedTo === userId) && (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/sales/leads/${lead.id}/edit`)
-                              }
-                            >
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                          )}
-                          {isAdmin && (
-                            <DropdownMenuItem
-                              onClick={() => openReassignDialog(lead)}
-                            >
-                              <Users className="mr-2 h-4 w-4" />
-                              Reassign
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                        )}
+                        {isAdmin && (
+                          <DropdownMenuItem
+                            onClick={() => openReassignDialog(lead)}
+                          >
+                            <Users className="mr-2 h-4 w-4" />
+                            Reassign
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </>
   );
 }

@@ -1,16 +1,22 @@
+"use client";
+
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { ChartCard } from "@/components/charts/chart-card";
+import { buildChartConfig, chartAxisProps, chartGridProps } from "@/components/charts/chart-config";
 import type { ActivityPoint } from "@/hooks/sales/useSalesAnalytics";
 import { EmptyState } from "./EmptyState";
 import { SummaryBadge } from "./SummaryBadge";
+
+const activityConfig = buildChartConfig({
+  total: { label: "Total Activities", colorIndex: 4 },
+  status_change: { label: "Status Changes", colorIndex: 0 },
+  comment: { label: "Comments", colorIndex: 1 },
+});
 
 interface ActivityTrendsCardProps {
   activityData: ActivityPoint[];
@@ -26,38 +32,33 @@ export function ActivityTrendsCard({
   totalNotes,
 }: ActivityTrendsCardProps) {
   return (
-    <Card className="lg:col-span-4">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Activity Trends</CardTitle>
-        <CardDescription className="text-xs">
-          Tracked activity only (status changes, comments, and total actions)
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[280px]">
-          {activityData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={activityData} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis fontSize={10} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Bar dataKey="total" fill="var(--chart-5)" name="Total Activities" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="status_change" fill="var(--chart-1)" name="Status Changes" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="comment" fill="var(--chart-2)" name="Comments" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState message="No tracked activity for selected filters" />
-          )}
-        </div>
+    <ChartCard
+      title="Activity Trends"
+      description="Tracked activity only (status changes, comments, and total actions)"
+      className="lg:col-span-4"
+      height={220}
+    >
+      {activityData.length > 0 ? (
+        <ChartContainer config={activityConfig} className="h-full w-full">
+          <BarChart data={activityData} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+            <CartesianGrid {...chartGridProps} />
+            <XAxis dataKey="date" {...chartAxisProps} />
+            <YAxis {...chartAxisProps} width={28} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Bar dataKey="total" fill="var(--color-total)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="status_change" fill="var(--color-status_change)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="comment" fill="var(--color-comment)" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ChartContainer>
+      ) : (
+        <EmptyState message="No tracked activity for selected filters" />
+      )}
 
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-          <SummaryBadge label="Total Activities" value={totalActivities} />
-          <SummaryBadge label="Status Changes" value={totalStatusChanges} />
-          <SummaryBadge label="Comments" value={totalNotes} />
-        </div>
-      </CardContent>
-    </Card>
+      <div className="mt-3 grid grid-cols-3 gap-2 px-3 text-xs">
+        <SummaryBadge label="Total Activities" value={totalActivities} />
+        <SummaryBadge label="Status Changes" value={totalStatusChanges} />
+        <SummaryBadge label="Comments" value={totalNotes} />
+      </div>
+    </ChartCard>
   );
 }

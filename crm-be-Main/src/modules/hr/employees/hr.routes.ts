@@ -156,7 +156,6 @@ router.post(
 
 router.get(
   "/document-types/active",
-  requireAnyPermission(["hr:leave_manage", "hr:manage"]) as any,
   asyncHandler(hrController.get_document_types_active) as RequestHandler,
 );
 
@@ -262,9 +261,6 @@ router.post(
 
 router.get(
   "/analytics/headcount",
-  requireAnyPermission(["hr:leave_approve", "hr:manage"]) as any,
-  validateParams(leaveRequestIdParamSchema),
-  validateBody(hrLeaveDecisionSchema),
   asyncHandler(hrController.get_analytics_headcount) as RequestHandler,
 );
 
@@ -275,9 +271,6 @@ router.get(
 
 router.get(
   "/analytics/recruitment",
-  requireAnyPermission(["hr:leave_approve", "hr:manage"]) as any,
-  validateParams(leaveRequestIdParamSchema),
-  validateBody(hrLeaveDecisionSchema),
   asyncHandler(hrController.get_analytics_recruitment) as RequestHandler,
 );
 

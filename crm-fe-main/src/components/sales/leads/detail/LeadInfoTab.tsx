@@ -33,13 +33,15 @@ import type { Lead } from "@/types";
 import type { LeadDetailState } from "@/hooks/sales/useLeadDetail";
 import { LeadNotesSection } from "@/components/sales/leads/detail/LeadNotesSection";
 import { LeadReminderWidget } from "@/components/sales/leads/lead-reminder-widget";
+import { cn } from "@/lib/utils";
 
 interface LeadInfoTabProps {
   detail: LeadDetailState;
   lead: Lead;
+  compact?: boolean;
 }
 
-export function LeadInfoTab({ detail, lead }: LeadInfoTabProps) {
+export function LeadInfoTab({ detail, lead, compact = false }: LeadInfoTabProps) {
   const {
     id,
     isAdmin,
@@ -86,8 +88,15 @@ export function LeadInfoTab({ detail, lead }: LeadInfoTabProps) {
   } = detail;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[30%_70%] gap-4">
-      <div className="space-y-4">
+    <div
+      className={cn(
+        "grid min-w-0 grid-cols-1 gap-4",
+        compact
+          ? "@min-[720px]:grid-cols-[minmax(260px,36%)_minmax(0,1fr)]"
+          : "xl:grid-cols-[minmax(280px,35%)_minmax(0,1fr)]",
+      )}
+    >
+      <div className="min-w-0 space-y-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Info</CardTitle>
@@ -566,7 +575,7 @@ export function LeadInfoTab({ detail, lead }: LeadInfoTabProps) {
         />
       </div>
 
-      <Card>
+      <Card className="min-w-0">
         <CardContent className="pt-6">
           <LeadNotesSection
             comments={comments}
@@ -581,6 +590,7 @@ export function LeadInfoTab({ detail, lead }: LeadInfoTabProps) {
             setEditingCommentContent={setEditingCommentContent}
             handleUpdateComment={handleUpdateComment}
             handleDeleteComment={handleDeleteComment}
+            isMobile={compact}
           />
         </CardContent>
       </Card>

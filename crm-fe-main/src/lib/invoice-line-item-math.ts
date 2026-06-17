@@ -71,6 +71,22 @@ export function formatCurrency(amount: number, currency: CurrencyCode = "INR") {
   }).format(amount || 0);
 }
 
+const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
+  USD: "$",
+  CAD: "C$",
+  GBP: "£",
+  EUR: "€",
+  INR: "₹",
+};
+
+export function formatCompactCurrency(amount: number, currency: CurrencyCode = "INR") {
+  const symbol = CURRENCY_SYMBOLS[currency] || currency;
+  const value = Number(amount) || 0;
+  if (Math.abs(value) >= 1_000_000) return `${symbol}${(value / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1_000) return `${symbol}${(value / 1_000).toFixed(0)}k`;
+  return `${symbol}${value.toFixed(0)}`;
+}
+
 export function getPaymentModeLabel(mode?: string) {
   return PAYMENT_MODE_OPTIONS.find((item) => item.value === mode)?.label || mode || "-";
 }

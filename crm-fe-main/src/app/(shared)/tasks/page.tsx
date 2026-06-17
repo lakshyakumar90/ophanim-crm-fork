@@ -33,6 +33,7 @@ import {
   Check,
 } from "lucide-react";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 type StatusFilter = "all" | "todo" | "in_progress" | "completed" | "cancelled";
 type PriorityFilter = "all" | "low" | "medium" | "high";
@@ -173,18 +174,13 @@ export default function GlobalTasksPage() {
   }, [mutate]);
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <CheckSquare className="h-6 w-6" />
-            Tasks
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            All tasks you have access to, across departments.
-          </p>
-        </div>
-        {canCreate && (
+    <ListPageLayout
+      title="Tasks"
+      description="All tasks you have access to, across departments."
+      icon={<CheckSquare className="h-4 w-4" />}
+      breadcrumbs={[{ label: "Tasks" }]}
+      actions={
+        canCreate ? (
           <>
             <Button className="gap-1" onClick={() => setCreateTaskOpen(true)}>
               <Plus className="h-4 w-4" />
@@ -196,9 +192,10 @@ export default function GlobalTasksPage() {
               onCreated={() => mutate()}
             />
           </>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
+      <div className="space-y-6">
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -362,7 +359,8 @@ export default function GlobalTasksPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </ListPageLayout>
   );
 }
 

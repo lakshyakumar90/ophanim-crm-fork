@@ -26,7 +26,7 @@ export function DetailPageLayout({
   className,
 }: DetailPageLayoutProps) {
   return (
-    <PageShell className={cn(className)} fullWidth>
+    <PageShell variant="canvas" className={cn(className)} fullWidth>
       <PageHeader
         title={title}
         description={description}

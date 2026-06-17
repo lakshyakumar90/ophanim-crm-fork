@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { StartExitChecklistModal } from "@/components/hr/exit/StartExitChecklistModal";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 function countCompletedItems(checklist: {
   template_json?: Array<{ id?: string; title?: string }>;
@@ -59,21 +60,21 @@ export default function ExitPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <LogOut className="h-6 w-6 text-primary" />
-            Exit Management
-          </h1>
-          <p className="text-muted-foreground">Offboarding checklists and exit workflows</p>
-        </div>
+    <ListPageLayout
+      title="Exit Management"
+      description="Offboarding checklists and exit workflows"
+      icon={<LogOut className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Exit" },
+      ]}
+      actions={
         <Button className="gap-2" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           Start checklist
         </Button>
-      </div>
-
+      }
+    >
       {isLoading ? (
         <Skeleton className="h-48 w-full" />
       ) : checklists.length === 0 ? (
@@ -124,6 +125,6 @@ export default function ExitPage() {
           await mutate();
         }}
       />
-    </div>
+    </ListPageLayout>
   );
 }

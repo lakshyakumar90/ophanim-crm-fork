@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/providers/auth-provider";
 import { projectsApi } from "@/lib/projects-api";
@@ -19,6 +19,7 @@ import {
   Plus,
   Save,
   X,
+  Paperclip,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { format, isAfter, isBefore, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
@@ -55,11 +57,11 @@ interface NoteWithProject extends Note {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  planned: "bg-blue-100 text-blue-700",
-  in_progress: "bg-purple-100 text-purple-700",
-  on_hold: "bg-orange-100 text-orange-700",
-  completed: "bg-green-100 text-green-700",
-  cancelled: "bg-slate-100 text-slate-600",
+  planned: "bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300",
+  in_progress: "bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300",
+  on_hold: "bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300",
+  completed: "bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300",
+  cancelled: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
 
 // Strip file-reference markdown: 📎 [name](file:id)
@@ -80,6 +82,9 @@ export default function GlobalNotesPage() {
   const [newNote, setNewNote] = useState("");
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Filters
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
@@ -164,6 +169,42 @@ export default function GlobalNotesPage() {
 
   const isLoading = isLoadingProjects || isLoadingNotes;
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !composeProjectId) {
+      if (!composeProjectId) toast.error("Select a project first");
+      return;
+    }
+
+    setUploadingFile(true);
+    try {
+      const token = localStorage.getItem("crm_access_token");
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${API_URL}/projects/${composeProjectId}/files`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err?.error?.message || "Upload failed");
+        return;
+      }
+      const data = await res.json();
+      const uploaded = data.data as { id: string; name: string };
+      const ref = `\n📎 [${uploaded.name}](file:${uploaded.id})`;
+      setNewNote((prev) => prev + ref);
+      textareaRef.current?.focus();
+      toast.success("File attached");
+    } catch {
+      toast.error("Failed to upload file");
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
   const handleSubmitNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNote.trim() || !composeProjectId) return;
@@ -195,18 +236,16 @@ export default function GlobalNotesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Lock className="h-5 w-5 text-muted-foreground" />
-            My Notes
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Your private notes across all projects
-          </p>
-        </div>
+    <ListPageLayout
+      className="p-3 lg:p-4"
+      title="My Notes"
+      description="Your private notes across all projects"
+      icon={<Lock className="h-4 w-4 text-muted-foreground" />}
+      breadcrumbs={[
+        { label: "Projects", href: "/projects" },
+        { label: "Notes" },
+      ]}
+      actions={
         <Button
           variant="outline"
           size="sm"
@@ -217,8 +256,8 @@ export default function GlobalNotesPage() {
           <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
           Refresh
         </Button>
-      </div>
-
+      }
+    >
       {/* Compose */}
       {composing ? (
         <div className="border rounded-2xl bg-card shadow-sm overflow-hidden">
@@ -241,6 +280,7 @@ export default function GlobalNotesPage() {
                 </SelectContent>
               </Select>
               <Textarea
+                ref={textareaRef}
                 placeholder="Write a note..."
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
@@ -251,7 +291,31 @@ export default function GlobalNotesPage() {
                 }}
               />
             </div>
-            <div className="border-t px-4 py-2.5 flex items-center justify-end gap-2 bg-muted/30">
+            <div className="border-t px-4 py-2.5 flex items-center justify-between gap-2 bg-muted/30">
+              <div className="flex items-center gap-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  disabled={!composeProjectId || uploadingFile}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadingFile ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Paperclip className="h-3.5 w-3.5" />
+                  )}
+                  Attach file
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="ghost"
@@ -279,6 +343,7 @@ export default function GlobalNotesPage() {
                 )}
                 Save Note
               </Button>
+              </div>
             </div>
           </form>
         </div>
@@ -442,6 +507,6 @@ export default function GlobalNotesPage() {
           ))}
         </div>
       )}
-    </div>
+    </ListPageLayout>
   );
 }

@@ -10,7 +10,7 @@ import { projectsApi } from "@/lib/projects-api";
 import useSWR from "swr";
 import { getTodayIST } from "@/lib/date-utils";
 import { useAuth, useIsManager, useIsAdmin } from "@/providers/auth-provider";
-import { getProjectMemberAssignees, type ProjectAssignee } from "@/lib/projects-scope";
+import { getTaskAssignableUsers, canPickTaskAssignee, type ProjectAssignee } from "@/lib/projects-scope";
 import type { Project } from "@/types";
 import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
@@ -69,7 +69,7 @@ function CreateTaskFormBody({
   const projectId = fixedProjectId || selectedProjectId;
 
   const { data: usersData, isLoading: loadingUsers } = useSWR(
-    !projectId && (isManager || isAdmin) ? "users-list" : null,
+    isManager || isAdmin ? "users-list" : null,
     () => usersApi.list(),
   );
   const users = usersData?.data || [];
@@ -86,17 +86,18 @@ function CreateTaskFormBody({
   const projects: Project[] = Array.isArray(projectsData) ? projectsData : [];
 
   const assignableUsers = useMemo((): ProjectAssignee[] => {
-    if (projectId && projectData) {
-      return getProjectMemberAssignees(projectData);
-    }
-    return (users as ProjectAssignee[]).map((u) => ({
-      id: u.id,
-      fullName: u.fullName,
-    }));
-  }, [projectId, projectData, users]);
+    return getTaskAssignableUsers({
+      isAdmin,
+      isManager,
+      currentUser: user,
+      project: projectId && projectData ? projectData : null,
+      allUsers: users as { id: string; fullName: string; teamId?: string | null }[],
+    });
+  }, [isAdmin, isManager, user, projectId, projectData, users]);
 
-  const loadingAssignees = projectId ? loadingProject : loadingUsers;
-  const canPickAssignee = isAdmin || isManager || Boolean(projectId);
+  const loadingAssignees =
+    (isManager || isAdmin) && (projectId ? loadingProject : loadingUsers);
+  const canPickAssignee = canPickTaskAssignee(isAdmin, isManager);
 
   const {
     register,

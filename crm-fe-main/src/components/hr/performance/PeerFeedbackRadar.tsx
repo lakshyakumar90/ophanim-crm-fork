@@ -1,12 +1,12 @@
 "use client";
 
+import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts";
 import {
-  PolarAngleAxis,
-  PolarGrid,
-  Radar,
-  RadarChart,
-  ResponsiveContainer,
-} from "recharts";
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { buildChartConfig } from "@/components/charts/chart-config";
 import type { PerformanceReviewRow } from "@/types/performance";
 
 const DIM_LABELS: Record<string, string> = {
@@ -16,6 +16,8 @@ const DIM_LABELS: Record<string, string> = {
   reliability: "Reliability",
 };
 
+const radarConfig = buildChartConfig({ score: { label: "Score", colorIndex: 0 } });
+
 export function PeerFeedbackRadar({
   peerFeedback,
 }: {
@@ -24,7 +26,7 @@ export function PeerFeedbackRadar({
   const list = peerFeedback || [];
   if (!list.length) {
     return (
-      <p className="text-sm text-muted-foreground py-6 text-center">
+      <p className="py-6 text-center text-xs text-muted-foreground">
         No aggregated peer feedback yet. Once peers respond, this section shows only dimension-wise averages and counts.
       </p>
     );
@@ -44,29 +46,30 @@ export function PeerFeedbackRadar({
         Individual peer submissions are confidential. You see only aggregated averages by dimension.
         {totalResponses > 0 ? ` (${totalResponses} raw scores across dimensions)` : null}
       </p>
-      <div className="h-70 w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-56 w-full">
+        <ChartContainer config={radarConfig} className="h-full w-full">
           <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">
-            <PolarGrid />
-            <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11 }} />
+            <PolarGrid className="stroke-border/50" />
+            <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+            <ChartTooltip content={<ChartTooltipContent />} />
             <Radar
               name="Score"
               dataKey="score"
-              stroke="hsl(var(--primary))"
-              fill="hsl(var(--primary))"
-              fillOpacity={0.35}
+              stroke="var(--color-score)"
+              fill="var(--color-score)"
+              fillOpacity={0.2}
             />
           </RadarChart>
-        </ResponsiveContainer>
+        </ChartContainer>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
         {list.map((p) => (
-          <div key={p.dimension} className="flex justify-between rounded border px-2 py-1">
+          <div key={p.dimension} className="flex justify-between rounded-lg border px-2 py-1">
             <span>{DIM_LABELS[p.dimension] || p.dimension}</span>
             <span className="font-medium">
               {p.aggregated_score ?? "—"}
               {p.response_count != null ? (
-                <span className="text-muted-foreground ml-1">({p.response_count})</span>
+                <span className="ml-1 text-muted-foreground">({p.response_count})</span>
               ) : null}
             </span>
           </div>

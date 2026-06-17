@@ -30,6 +30,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { CreatePersonalTaskSheet } from "@/components/projects/CreatePersonalTaskSheet";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 // Mock types for now - these would match backend types
 interface Task {
@@ -135,25 +136,28 @@ export default function MyTasksPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-4 lg:p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">My Tasks</h1>
-          <p className="text-muted-foreground">
-            Manage your personal tasks and assigned work.
-          </p>
-        </div>
-        <Button onClick={() => setIsNewTaskOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Personal Task
-        </Button>
-        <CreatePersonalTaskSheet
-          open={isNewTaskOpen}
-          onOpenChange={setIsNewTaskOpen}
-          onCreated={fetchTasks}
-        />
-      </div>
-
+    <ListPageLayout
+      className="p-3 lg:p-4"
+      title="My Tasks"
+      description="Manage your personal tasks and assigned work."
+      breadcrumbs={[
+        { label: "Projects", href: "/projects" },
+        { label: "My Tasks" },
+      ]}
+      actions={
+        <>
+          <Button onClick={() => setIsNewTaskOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Personal Task
+          </Button>
+          <CreatePersonalTaskSheet
+            open={isNewTaskOpen}
+            onOpenChange={setIsNewTaskOpen}
+            onCreated={fetchTasks}
+          />
+        </>
+      }
+    >
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {/* Task Columns or List - keeping it simple list for now due to time */}
         {loading ? (
@@ -226,6 +230,6 @@ export default function MyTasksPage() {
           ))
         )}
       </div>
-    </div>
+    </ListPageLayout>
   );
 }

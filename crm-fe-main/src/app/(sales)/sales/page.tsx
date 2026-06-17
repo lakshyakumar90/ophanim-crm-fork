@@ -58,7 +58,7 @@ export default function SalesDashboardPage() {
   if (isLoading) return <SalesDashboardSkeleton />;
 
   return (
-    <PageShell>
+    <PageShell variant="canvas">
       <DashboardPageHeader
         title="Sales Dashboard"
         description="Real-time operational overview of your sales pipeline."
@@ -116,7 +116,7 @@ export default function SalesDashboardPage() {
 
       <TasksRemindersCards tasks={tasks} reminders={reminders} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6 ">
+      <div className="grid grid-cols-1 lg:grid-cols-7 gap-3">
         <RecentActivityList activities={activities} />
         <Leaderboard leaderboard={leaderboard} />
       </div>

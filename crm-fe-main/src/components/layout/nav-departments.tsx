@@ -180,7 +180,7 @@ export function NavDepartments() {
             )}
           >
             <Briefcase className="h-4 w-4" />
-            <span>Departments</span>
+            <span className="text-xs font-normal">Departments</span>
             <ChevronRight className="ml-auto transition-transform group-data-[state=open]/departments:rotate-90" />
           </CollapsibleTrigger>
         </SidebarGroupLabel>

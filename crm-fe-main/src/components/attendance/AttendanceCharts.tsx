@@ -7,18 +7,23 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from "recharts";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { ChartCard } from "@/components/charts/chart-card";
+import { buildChartConfig, chartAxisProps, chartGridProps } from "@/components/charts/chart-config";
 import { formatHoursToReadable, formatStoredTime } from "@/lib/date-utils";
-import { PIE_COLORS } from "@/lib/attendance-types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertCircle,
   BarChart as BarChartIcon,
@@ -29,6 +34,18 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { UsersTodayItem } from "@/lib/attendance-types";
+
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+] as const;
+
+const hoursConfig = buildChartConfig({
+  hours: { label: "Hours", colorIndex: 0 },
+});
 
 function WeeklyTooltip({
   active,
@@ -72,49 +89,59 @@ type PersonalPieChartProps = {
 export function PersonalAttendancePieChart({ summary }: PersonalPieChartProps) {
   const pieData = summary
     ? [
-        { name: "Present", value: summary.present || 0, color: PIE_COLORS.present },
-        { name: "Late", value: summary.late || 0, color: PIE_COLORS.late },
-        { name: "Half Day", value: summary.half_day || 0, color: PIE_COLORS.halfDay },
-        { name: "Absent", value: summary.absent || 0, color: PIE_COLORS.absent },
-        { name: "Leave", value: summary.leave || 0, color: PIE_COLORS.leave },
-      ].filter((item) => item.value > 0)
+        { name: "Present", value: summary.present || 0 },
+        { name: "Late", value: summary.late || 0 },
+        { name: "Half Day", value: summary.half_day || 0 },
+        { name: "Absent", value: summary.absent || 0 },
+        { name: "Leave", value: summary.leave || 0 },
+      ]
+        .filter((item) => item.value > 0)
+        .map((item, index) => ({
+          ...item,
+          fill: CHART_COLORS[index % CHART_COLORS.length],
+        }))
     : [];
 
+  const pieConfig = buildChartConfig(
+    Object.fromEntries(pieData.map((d) => [d.name, { label: d.name }])),
+  );
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
+    <ChartCard
+      title={
+        <span className="flex items-center gap-2">
           <TrendingUp className="h-4 w-4" />
           Your Attendance
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {pieData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={120}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                innerRadius={25}
-                outerRadius={45}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {pieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex items-center justify-center h-[120px] text-muted-foreground text-sm">
-            No data yet
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </span>
+      }
+      height={220}
+    >
+      {pieData.length > 0 ? (
+        <ChartContainer config={pieConfig} className="h-full w-full">
+          <PieChart>
+            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+            <Pie
+              data={pieData}
+              cx="50%"
+              cy="50%"
+              innerRadius={40}
+              outerRadius={70}
+              paddingAngle={3}
+              dataKey="value"
+              nameKey="name"
+            >
+              {pieData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ChartContainer>
+      ) : (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          No data yet
+        </div>
+      )}
+    </ChartCard>
   );
 }
 
@@ -141,104 +168,105 @@ export function WeeklyHoursChart({
   onSelectedUserIdChange,
   usersAttendance,
 }: WeeklyHoursChartProps) {
+  const weekControls = (
+    <div className="flex flex-wrap items-center gap-2">
+      {canManageTeamAttendance && (
+        <select
+          value={selectedUserId}
+          onChange={(e) => onSelectedUserIdChange(e.target.value)}
+          className="h-8 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        >
+          <option value="">My Hours</option>
+          {usersAttendance.map((ua) => (
+            <option key={ua.user.id} value={ua.user.id}>
+              {ua.user.fullName}
+            </option>
+          ))}
+        </select>
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onWeekOffsetChange((prev) => prev - 1)}
+      >
+        <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+      </Button>
+      <span className="text-sm text-muted-foreground min-w-[120px] text-center">
+        {format(new Date(weekStartDate), "MMM d")} -{" "}
+        {format(
+          new Date(new Date(weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000),
+          "MMM d, yyyy",
+        )}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onWeekOffsetChange((prev) => prev + 1)}
+        disabled={weekOffset >= 0}
+      >
+        Next <ChevronRight className="h-4 w-4 ml-1" />
+      </Button>
+    </div>
+  );
+
   return (
-    <Card className="mt-6">
-      <CardHeader className="pb-2">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <CardTitle className="text-base flex items-center gap-2">
-            <BarChartIcon className="h-4 w-4" />
-            Weekly Working Hours
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            {canManageTeamAttendance && (
-              <select
-                value={selectedUserId}
-                onChange={(e) => onSelectedUserIdChange(e.target.value)}
-                className="h-8 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              >
-                <option value="">My Hours</option>
-                {usersAttendance.map((ua) => (
-                  <option key={ua.user.id} value={ua.user.id}>
-                    {ua.user.fullName}
-                  </option>
-                ))}
-              </select>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onWeekOffsetChange((prev) => prev - 1)}
-            >
-              <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-            </Button>
-            <span className="text-sm text-muted-foreground min-w-[120px] text-center">
-              {format(new Date(weekStartDate), "MMM d")} -{" "}
-              {format(
-                new Date(new Date(weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000),
-                "MMM d, yyyy",
-              )}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onWeekOffsetChange((prev) => prev + 1)}
-              disabled={weekOffset >= 0}
-            >
-              Next <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loadingWeeklyHours ? (
-          <Skeleton className="h-[200px] w-full" />
-        ) : weeklyHoursData && weeklyHoursData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={weeklyHoursData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="day"
-                stroke="#888888"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-              />
+    <ChartCard
+      title={
+        <span className="flex items-center gap-2">
+          <BarChartIcon className="h-4 w-4" />
+          Weekly Working Hours
+        </span>
+      }
+      action={weekControls}
+      className="mt-6"
+      height={220}
+    >
+      {loadingWeeklyHours ? (
+        <Skeleton className="mx-(--card-spacing) h-full w-[calc(100%-2*var(--card-spacing))]" />
+      ) : weeklyHoursData && weeklyHoursData.length > 0 ? (
+        <>
+          <ChartContainer config={hoursConfig} className="h-full w-full">
+            <BarChart data={weeklyHoursData} margin={{ left: 0, right: 8 }}>
+              <CartesianGrid {...chartGridProps} />
+              <XAxis dataKey="day" {...chartAxisProps} />
               <YAxis
-                stroke="#888888"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
+                {...chartAxisProps}
+                width={32}
                 tickFormatter={(value) => `${value}h`}
                 domain={[0, 12]}
               />
-              <Tooltip content={WeeklyTooltip} />
-              <Bar dataKey="hours" radius={[4, 4, 0, 0]} fill="#3b82f6">
+              <ChartTooltip content={<WeeklyTooltip />} />
+              <Bar dataKey="hours" radius={[4, 4, 0, 0]}>
                 {weeklyHoursData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={(entry as { isWeekend?: boolean }).isWeekend ? "#94a3b8" : "#3b82f6"}
+                    fill={
+                      (entry as { isWeekend?: boolean }).isWeekend
+                        ? "var(--chart-4)"
+                        : "var(--color-hours)"
+                    }
                   />
                 ))}
               </Bar>
             </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
-            No working-hour data for this week
+          </ChartContainer>
+          <div className="mt-2 flex items-center justify-center gap-4 px-(--card-spacing) text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-[var(--chart-1)]" />
+              Weekday
+            </span>
+            <span className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-[var(--chart-4)]" />
+              Weekend (Office Off)
+            </span>
           </div>
-        )}
-        <div className="flex items-center justify-center gap-4 mt-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-blue-500" />
-            Weekday
-          </span>
-          <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-slate-400" />
-            Weekend (Office Off)
-          </span>
+        </>
+      ) : (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          No working-hour data for this week
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </ChartCard>
   );
 }
 
@@ -253,21 +281,39 @@ export function TeamAnalyticsCharts({
 }: TeamAnalyticsChartsProps) {
   const adminPieData = analytics
     ? [
-        { name: "Present", value: analytics.present || 0, color: PIE_COLORS.present },
-        { name: "Late", value: analytics.late || 0, color: PIE_COLORS.late },
-        { name: "Absent", value: analytics.absent || 0, color: PIE_COLORS.absent },
-      ].filter((item) => item.value > 0)
+        { name: "Present", value: analytics.present || 0 },
+        { name: "Late", value: analytics.late || 0 },
+        { name: "Absent", value: analytics.absent || 0 },
+      ]
+        .filter((item) => item.value > 0)
+        .map((item, index) => ({
+          ...item,
+          fill: CHART_COLORS[index % CHART_COLORS.length],
+        }))
     : [];
 
   const statusBarData = analytics
     ? [
-        { status: "Present", count: analytics.present || 0, fill: PIE_COLORS.present },
-        { status: "Late", count: analytics.late || 0, fill: PIE_COLORS.late },
-        { status: "Absent", count: analytics.absent || 0, fill: PIE_COLORS.absent },
-        { status: "Half Day", count: analytics.half_day || 0, fill: PIE_COLORS.halfDay },
-        { status: "Leave", count: analytics.leave || 0, fill: PIE_COLORS.leave },
-      ].filter((item) => item.count > 0)
+        { status: "Present", count: analytics.present || 0 },
+        { status: "Late", count: analytics.late || 0 },
+        { status: "Absent", count: analytics.absent || 0 },
+        { status: "Half Day", count: analytics.half_day || 0 },
+        { status: "Leave", count: analytics.leave || 0 },
+      ]
+        .filter((item) => item.count > 0)
+        .map((item, index) => ({
+          ...item,
+          fill: CHART_COLORS[index % CHART_COLORS.length],
+        }))
     : [];
+
+  const statusBarConfig = buildChartConfig(
+    Object.fromEntries(statusBarData.map((d) => [d.status, { label: d.status }])),
+  );
+
+  const adminPieConfig = buildChartConfig(
+    Object.fromEntries(adminPieData.map((d) => [d.name, { label: d.name }])),
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -334,69 +380,61 @@ export function TeamAnalyticsCharts({
         ) : null}
       </div>
 
-      <Card className="lg:col-span-1">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Status Distribution</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {statusBarData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={statusBarData} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="status"
-                  tick={{ fontSize: 11 }}
-                  width={60}
-                />
-                <Tooltip />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                  {statusBarData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm">
-              No data
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ChartCard title="Status Distribution" className="lg:col-span-1" height={220}>
+        {statusBarData.length > 0 ? (
+          <ChartContainer config={statusBarConfig} className="h-full w-full">
+            <BarChart data={statusBarData} layout="vertical" margin={{ left: 0, right: 8 }}>
+              <CartesianGrid {...chartGridProps} horizontal={false} vertical />
+              <XAxis type="number" hide />
+              <YAxis
+                type="category"
+                dataKey="status"
+                width={60}
+                {...chartAxisProps}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                {statusBarData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ChartContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            No data
+          </div>
+        )}
+      </ChartCard>
 
-      <Card className="lg:col-span-1">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Period Totals</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {adminPieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={180}>
-              <PieChart>
-                <Pie
-                  data={adminPieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={35}
-                  outerRadius={60}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {adminPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend iconSize={8} wrapperStyle={{ fontSize: "10px" }} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm">
-              No data
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ChartCard title="Period Totals" className="lg:col-span-1" height={220}>
+        {adminPieData.length > 0 ? (
+          <ChartContainer config={adminPieConfig} className="h-full w-full">
+            <PieChart>
+              <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+              <Pie
+                data={adminPieData}
+                cx="50%"
+                cy="50%"
+                innerRadius={45}
+                outerRadius={70}
+                paddingAngle={3}
+                dataKey="value"
+                nameKey="name"
+              >
+                {adminPieData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <ChartLegend content={<ChartLegendContent />} />
+            </PieChart>
+          </ChartContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            No data
+          </div>
+        )}
+      </ChartCard>
     </div>
   );
 }

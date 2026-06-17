@@ -45,6 +45,49 @@ export interface ProjectAssignee {
   fullName: string;
 }
 
+type UserWithTeam = { id: string; fullName: string; teamId?: string | null };
+
+export function canPickTaskAssignee(isAdmin: boolean, isManager: boolean): boolean {
+  return isAdmin || isManager;
+}
+
+export function getTaskAssignableUsers(options: {
+  isAdmin: boolean;
+  isManager: boolean;
+  currentUser: User | null | undefined;
+  project: Project | null | undefined;
+  allUsers: UserWithTeam[];
+}): ProjectAssignee[] {
+  const { isAdmin, isManager, currentUser, project, allUsers } = options;
+
+  if (!canPickTaskAssignee(isAdmin, isManager)) {
+    if (!currentUser) return [];
+    return [{ id: currentUser.id, fullName: currentUser.fullName || "Me" }];
+  }
+
+  if (project) {
+    const members = getProjectMemberAssignees(project);
+    if (isAdmin) return members;
+    const teamId = currentUser?.teamId;
+    if (!teamId) {
+      return members.filter((m) => m.id === currentUser?.id);
+    }
+    const teamUserIds = new Set(
+      allUsers.filter((u) => u.teamId === teamId).map((u) => u.id),
+    );
+    return members.filter((m) => teamUserIds.has(m.id));
+  }
+
+  if (isAdmin) {
+    return allUsers.map((u) => ({ id: u.id, fullName: u.fullName }));
+  }
+
+  const teamId = currentUser?.teamId;
+  return allUsers
+    .filter((u) => !teamId || u.teamId === teamId)
+    .map((u) => ({ id: u.id, fullName: u.fullName }));
+}
+
 export function getProjectMemberAssignees(
   project: Project | null | undefined,
 ): ProjectAssignee[] {

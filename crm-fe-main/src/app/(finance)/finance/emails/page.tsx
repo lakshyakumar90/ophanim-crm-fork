@@ -35,6 +35,8 @@ import { Mail, Plus, MoreVertical, Eye, Check, X, Send, RefreshCw } from "lucide
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -112,17 +114,15 @@ function EmailRequestsPageContent() {
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Mail className="h-6 w-6 text-primary" />
-              Email Requests
-            </h1>
-            <p className="text-muted-foreground">
-              Manage finance email approvals and sending
-            </p>
-          </div>
+      <ListPageLayout
+        title="Email Requests"
+        description="Manage finance email approvals and sending"
+        breadcrumbs={[
+          { label: "Finance", href: "/finance" },
+          { label: "Emails" },
+        ]}
+        icon={<Mail className="h-4 w-4" />}
+        actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleRefresh}>
               <RefreshCw
@@ -137,25 +137,26 @@ function EmailRequestsPageContent() {
               </Button>
             )}
           </div>
-        </div>
-
-        <div className="flex gap-4 items-center">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="pending_approval">Pending Approval</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-              <SelectItem value="sent">Sent</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
+        }
+        filters={
+          <div className="flex gap-4 items-center">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="sent">Sent</SelectItem>
+                <SelectItem value="failed">Failed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        }
+      >
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(5)].map((_, i) => (
@@ -163,12 +164,12 @@ function EmailRequestsPageContent() {
             ))}
           </div>
         ) : requests.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No email requests found</p>
-          </div>
+          <EmptyState
+            icon={<Mail className="h-12 w-12 opacity-50" />}
+            title="No email requests found"
+          />
         ) : (
-          <div className="rounded-lg border border-border bg-card">
+          <div className="rounded-xl ring-1 ring-border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -261,7 +262,7 @@ function EmailRequestsPageContent() {
             </Table>
           </div>
         )}
-      </div>
+      </ListPageLayout>
 
       {canCreate && (
         <CreateEmailSheet

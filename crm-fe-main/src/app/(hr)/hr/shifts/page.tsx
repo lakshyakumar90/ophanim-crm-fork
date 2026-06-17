@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { CreateShiftModal } from "@/components/hr/shifts/CreateShiftModal";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function ShiftsPage() {
   const { user, can } = useAuth();
@@ -47,25 +48,25 @@ export default function ShiftsPage() {
   useHeaderRefresh({ onRefresh: handleRefresh, isRefreshing, enabled: Boolean(user) });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <CalendarClock className="h-6 w-6 text-primary" />
-            {isHrView ? "Shift Schedule" : "My Shifts"}
-          </h1>
-          <p className="text-muted-foreground">
-            {isHrView ? "Manage employee shift schedules" : "Your upcoming shifts"}
-          </p>
-        </div>
-        {canManage ? (
+    <ListPageLayout
+      title={isHrView ? "Shift Schedule" : "My Shifts"}
+      description={
+        isHrView ? "Manage employee shift schedules" : "Your upcoming shifts"
+      }
+      icon={<CalendarClock className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Shifts" },
+      ]}
+      actions={
+        canManage ? (
           <Button className="gap-2" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
             Create shift
           </Button>
-        ) : null}
-      </div>
-
+        ) : undefined
+      }
+    >
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -127,6 +128,6 @@ export default function ShiftsPage() {
           await mutate();
         }}
       />
-    </div>
+    </ListPageLayout>
   );
 }

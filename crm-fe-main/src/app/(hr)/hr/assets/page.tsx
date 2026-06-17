@@ -21,6 +21,7 @@ import { AssetModal } from "@/components/hr/assets/AssetModal";
 import { AssignAssetModal } from "@/components/hr/assets/AssignAssetModal";
 import { toast } from "sonner";
 import { toastHrError } from "@/lib/hr-error-toast";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 type AssetRow = {
   id: string;
@@ -70,23 +71,23 @@ export default function AssetsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Laptop className="h-6 w-6 text-primary" />
-            Assets
-          </h1>
-          <p className="text-muted-foreground">Company equipment and asset assignments</p>
-        </div>
-        {canManage ? (
+    <ListPageLayout
+      title="Assets"
+      description="Company equipment and asset assignments"
+      icon={<Laptop className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Assets" },
+      ]}
+      actions={
+        canManage ? (
           <Button className="gap-2" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
             Add asset
           </Button>
-        ) : null}
-      </div>
-
+        ) : undefined
+      }
+    >
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -200,6 +201,6 @@ export default function AssetsPage() {
           }}
         />
       ) : null}
-    </div>
+    </ListPageLayout>
   );
 }

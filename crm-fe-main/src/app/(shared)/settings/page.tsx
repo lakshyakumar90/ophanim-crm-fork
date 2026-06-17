@@ -8,6 +8,7 @@ import { SecurityForm } from "@/components/settings/security-form";
 import { NotificationsForm } from "@/components/settings/notifications-form";
 import { AppearanceForm } from "@/components/settings/appearance-form";
 import EmailSettingsForm from "@/components/settings/email-settings-form";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -15,12 +16,11 @@ export default function SettingsPage() {
   if (!user) return null;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground">Manage your account preferences</p>
-      </div>
-
+    <ListPageLayout
+      title="Settings"
+      description="Manage your account preferences"
+      breadcrumbs={[{ label: "Settings" }]}
+    >
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="grid w-full lg:w-[500px] grid-cols-5">
           <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -55,6 +55,6 @@ export default function SettingsPage() {
           <NotificationsForm />
         </TabsContent>
       </Tabs>
-    </div>
+    </ListPageLayout>
   );
 }

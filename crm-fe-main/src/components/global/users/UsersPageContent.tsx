@@ -10,8 +10,10 @@ import { JOB_TITLES } from "./users.constants";
 import { UsersAccessDenied } from "./UsersAccessDenied";
 import { UsersBulkSelectionBar } from "./UsersBulkSelectionBar";
 import { UsersFilters } from "./UsersFilters";
-import { UsersPageHeader } from "./UsersPageHeader";
 import { UsersTable } from "./UsersTable";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function UsersPageContent() {
   const sheet = useSheetQuery();
@@ -48,16 +50,27 @@ export function UsersPageContent() {
 
   return (
     <>
-    <div className="space-y-6">
-      <UsersPageHeader onAddUser={sheet.openCreate} />
-
-      <UsersFilters
-        search={search}
-        onSearchChange={setSearch}
-        jobTitleFilter={jobTitleFilter}
-        onJobTitleFilterChange={setJobTitleFilter}
-      />
-
+    <ListPageLayout
+      title="Users"
+      description="Manage users and their roles"
+      breadcrumbs={[
+        { label: "Global", href: "/global" },
+        { label: "Users" },
+      ]}
+      actions={
+        <Button onClick={sheet.openCreate} size="lg" className="h-11 rounded-xl px-5 shadow-sm">
+          <Plus className="mr-2 h-4 w-4" /> Add User
+        </Button>
+      }
+      filters={
+        <UsersFilters
+          search={search}
+          onSearchChange={setSearch}
+          jobTitleFilter={jobTitleFilter}
+          onJobTitleFilterChange={setJobTitleFilter}
+        />
+      }
+    >
       <UsersBulkSelectionBar
         selectedCount={selectedIds.length}
         bulkEditMode={bulkEditMode}
@@ -124,7 +137,7 @@ export function UsersPageContent() {
           <p className="text-sm text-muted-foreground">Showing all {users.length} users</p>
         </div>
       ) : null}
-    </div>
+    </ListPageLayout>
 
     <CreateUserSheet
       open={sheet.createOpen}

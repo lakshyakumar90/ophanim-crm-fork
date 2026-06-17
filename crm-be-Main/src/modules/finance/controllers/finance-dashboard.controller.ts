@@ -2,6 +2,7 @@ import { Response, NextFunction } from "express";
 import type { AuthenticatedRequest } from "../../../types/api.types.js";
 import { sendSuccess } from "../../../utils/responses.js";
 import * as dashboardService from "../services/finance-dashboard.service.js";
+import { getBaseCurrency } from "../services/finance-currency.util.js";
 
 export const get_dashboard = async (
   req: AuthenticatedRequest,
@@ -109,6 +110,7 @@ export const get_analytics = async (
   try {
 
     const departmentId = req.query["department_id"] as string;
+    const baseCurrency = await getBaseCurrency();
 
     const [revenueTrend, invoiceStatus, outstandingClients] = await Promise.all(
       [
@@ -119,6 +121,7 @@ export const get_analytics = async (
     );
 
     sendSuccess(res, {
+      base_currency: baseCurrency,
       revenueTrend,
       invoiceStatus,
       outstandingClients,

@@ -27,7 +27,7 @@ export function AppSidebar() {
           </span>
         </Link>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="pt-2">
         <NavMain />
       </SidebarContent>
       <NavUser />

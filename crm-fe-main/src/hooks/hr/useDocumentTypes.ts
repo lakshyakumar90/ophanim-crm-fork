@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import {
   createDocumentType,
+  fetchActiveDocumentTypesForSelf,
   fetchDocumentTypes,
   updateDocumentType,
 } from "@/lib/hr-document-api";
@@ -15,6 +16,21 @@ export function useDocumentTypes() {
     setLoading(true);
     try {
       const rows = await fetchDocumentTypes(false);
+      setTypes(rows);
+      return rows;
+    } catch (e) {
+      toastHrError(e, "Failed to load document types");
+      setTypes([]);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadActive = useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await fetchActiveDocumentTypesForSelf();
       setTypes(rows);
       return rows;
     } catch (e) {
@@ -44,5 +60,5 @@ export function useDocumentTypes() {
     [],
   );
 
-  return { types, setTypes, loading, load, patchType, addType };
+  return { types, setTypes, loading, load, loadActive, patchType, addType };
 }

@@ -7,7 +7,6 @@ import { useAuth } from "@/providers/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -27,6 +26,8 @@ import { CircleDollarSign, ExternalLink, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 const STATUS_COLORS: Record<string, string> = {
   success:
@@ -78,32 +79,28 @@ export default function PaymentsPage() {
   const payments = data?.data || [];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <CircleDollarSign className="h-6 w-6 text-primary" />
-            Payments
-          </h1>
-          <p className="text-muted-foreground">
-            Track all payment transactions
-          </p>
-        </div>
+    <ListPageLayout
+      title="Payments"
+      description="Track all payment transactions"
+      breadcrumbs={[
+        { label: "Finance", href: "/finance" },
+        { label: "Payments" },
+      ]}
+      icon={<CircleDollarSign className="h-4 w-4" />}
+      actions={
         <Button variant="outline" size="sm" onClick={handleRefresh}>
           <RefreshCw
             className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
           />
           Refresh
         </Button>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-4 items-center">
-        <Select value={modeFilter} onValueChange={setModeFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Payment Mode" />
-          </SelectTrigger>
+      }
+      filters={
+        <div className="flex gap-4 items-center">
+          <Select value={modeFilter} onValueChange={setModeFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Payment Mode" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Modes</SelectItem>
               <SelectItem value="cash">Cash</SelectItem>
@@ -117,10 +114,10 @@ export default function PaymentsPage() {
               <SelectItem value="cheque">Cheque</SelectItem>
               <SelectItem value="other">Other</SelectItem>
             </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
+          </Select>
+        </div>
+      }
+    >
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -128,12 +125,12 @@ export default function PaymentsPage() {
           ))}
         </div>
       ) : payments.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <CircleDollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No payments found</p>
-        </div>
+        <EmptyState
+          icon={<CircleDollarSign className="h-12 w-12 opacity-50" />}
+          title="No payments found"
+        />
       ) : (
-        <div className="rounded-lg border border-border bg-card">
+        <div className="rounded-xl ring-1 ring-border bg-card">
           <Table>
             <TableHeader>
                 <TableRow>
@@ -202,6 +199,6 @@ export default function PaymentsPage() {
           </Table>
         </div>
       )}
-    </div>
+    </ListPageLayout>
   );
 }

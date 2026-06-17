@@ -2,7 +2,14 @@
 
 import { useEffect, useState, Component, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { ChartCard } from "@/components/charts/chart-card";
+import { buildChartConfig, chartAxisProps, chartGridProps } from "@/components/charts/chart-config";
 import { fetchPerformanceAnalytics, fetchHRPerformanceAnalytics } from "@/lib/performance-api";
 import type { PerformanceAnalytics as PerfAnalyticsType, HRPerformanceAnalytics } from "@/types/performance";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,43 +78,36 @@ export function CyclePerformanceAnalytics({ cycleId }: { cycleId: string }) {
     value,
   }));
 
+  const ratingConfig = buildChartConfig({ value: { label: "Count", colorIndex: 0 } });
+  const statusConfig = buildChartConfig({ value: { label: "Count", colorIndex: 1 } });
+
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2">
       <WidgetBoundary>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Rating distribution</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={ratingRows}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ChartCard title="Rating distribution" height={220}>
+          <ChartContainer config={ratingConfig} className="h-full w-full">
+            <BarChart data={ratingRows} margin={{ left: 0, right: 8 }}>
+              <CartesianGrid {...chartGridProps} />
+              <XAxis dataKey="name" {...chartAxisProps} />
+              <YAxis allowDecimals={false} {...chartAxisProps} width={28} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="value" fill="var(--color-value)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </ChartCard>
       </WidgetBoundary>
       <WidgetBoundary>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Review status funnel</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={statusRows}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ChartCard title="Review status funnel" height={220}>
+          <ChartContainer config={statusConfig} className="h-full w-full">
+            <BarChart layout="vertical" data={statusRows} margin={{ left: 0, right: 8 }}>
+              <CartesianGrid {...chartGridProps} horizontal={false} vertical />
+              <XAxis type="number" allowDecimals={false} {...chartAxisProps} />
+              <YAxis type="category" dataKey="name" width={90} {...chartAxisProps} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </ChartCard>
       </WidgetBoundary>
       <Card>
         <CardHeader className="pb-2">
@@ -195,16 +195,22 @@ export function HRPerformanceDashboardWidgets() {
           <CardHeader className="pb-1">
             <CardTitle className="text-xs font-medium text-muted-foreground">Status mix (HR)</CardTitle>
           </CardHeader>
-          <CardContent className="h-[140px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={Array.isArray(data.reviewStatusDistribution) ? data.reviewStatusDistribution : []}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="status" tick={{ fontSize: 9 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 9 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+          <CardContent className="h-[120px]">
+            <ChartContainer
+              config={buildChartConfig({ count: { label: "Reviews", colorIndex: 2 } })}
+              className="h-full w-full"
+            >
+              <BarChart
+                data={Array.isArray(data.reviewStatusDistribution) ? data.reviewStatusDistribution : []}
+                margin={{ left: 0, right: 8 }}
+              >
+                <CartesianGrid {...chartGridProps} />
+                <XAxis dataKey="status" {...chartAxisProps} />
+                <YAxis allowDecimals={false} {...chartAxisProps} width={24} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </CardContent>
         </Card>
       </div>

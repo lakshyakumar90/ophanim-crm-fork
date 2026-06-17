@@ -9,7 +9,7 @@ import { tasksApi, usersApi, projectsApi } from "@/lib/api";
 import useSWR from "swr";
 import { getTodayIST } from "@/lib/date-utils";
 import { useAuth, useIsManager, useIsAdmin } from "@/providers/auth-provider";
-import { getProjectMemberAssignees } from "@/lib/projects-scope";
+import { getTaskAssignableUsers, canPickTaskAssignee } from "@/lib/projects-scope";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -115,21 +115,18 @@ function CreateProjectTaskFormBody({
     : (sprintsData as any)?.data ?? [];
 
   const assignableUsers = useMemo(() => {
-    if (selectedProjectId && projectData) {
-      return getProjectMemberAssignees(projectData);
-    }
-    if (isManager || isAdmin) {
-      return (users as { id: string; fullName: string }[]).map((u) => ({
-        id: u.id,
-        fullName: u.fullName,
-      }));
-    }
-    return [];
-  }, [selectedProjectId, projectData, users, isManager, isAdmin]);
+    return getTaskAssignableUsers({
+      isAdmin,
+      isManager,
+      currentUser: user,
+      project: selectedProjectId && projectData ? projectData : null,
+      allUsers: users as { id: string; fullName: string; teamId?: string | null }[],
+    });
+  }, [isAdmin, isManager, user, selectedProjectId, projectData, users]);
 
-  const loadingAssignees = selectedProjectId ? loadingProject : loadingUsers;
-  const canPickAssignee =
-    isAdmin || isManager || Boolean(selectedProjectId || defaultProjectId);
+  const loadingAssignees =
+    (isManager || isAdmin) && (selectedProjectId ? loadingProject : loadingUsers);
+  const canPickAssignee = canPickTaskAssignee(isAdmin, isManager);
 
   // Build due date ISO string
   const buildDueDateISO = (): string | undefined => {

@@ -35,9 +35,9 @@ interface LeadDetailPageData {
 const LEAD_DETAIL_INITIAL_CALL_BUDGET = 3;
 const INLINE_FIELD_UPDATE_DEBOUNCE_MS = 300;
 
-export function useLeadDetail() {
+export function useLeadDetail(overrideId?: string) {
   const params = useParams();
-  const { id } = params;
+  const id = overrideId ?? (params.id as string | undefined);
   const router = useRouter();
   const { user } = useAuth();
   const isAdmin = useIsAdmin();

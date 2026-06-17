@@ -34,6 +34,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 interface Project {
   id: string;
@@ -128,30 +129,34 @@ export default function MyProjectsPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-6 p-4 lg:p-6">
-        <div>
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-64" />
-        </div>
+      <ListPageLayout
+        className="p-3 lg:p-4"
+        title="My Projects"
+        description="Projects you manage or are assigned to as a team member."
+        breadcrumbs={[
+          { label: "Projects", href: "/projects" },
+          { label: "My Projects" },
+        ]}
+      >
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-64" />
           ))}
         </div>
-      </div>
+      </ListPageLayout>
     );
   }
 
   return (
-    <div className="flex flex-col gap-8 p-4 lg:p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">My Projects</h1>
-        <p className="text-muted-foreground">
-          Projects you manage or are assigned to as a team member.
-        </p>
-      </div>
-
+    <ListPageLayout
+      className="p-3 lg:p-4"
+      title="My Projects"
+      description="Projects you manage or are assigned to as a team member."
+      breadcrumbs={[
+        { label: "Projects", href: "/projects" },
+        { label: "My Projects" },
+      ]}
+    >
       {projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-slate-50">
           <Layout className="h-10 w-10 text-muted-foreground mb-4" />
@@ -205,7 +210,7 @@ export default function MyProjectsPage() {
           )}
         </>
       )}
-    </div>
+    </ListPageLayout>
   );
 }
 

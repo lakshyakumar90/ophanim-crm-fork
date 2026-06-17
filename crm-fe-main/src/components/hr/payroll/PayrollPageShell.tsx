@@ -30,6 +30,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { PayrollPageState } from "@/hooks/hr/usePayrollPage";
+import { PageShell } from "@/components/shared/page-shell";
+import { PageHeader } from "@/components/shared/page-header";
 
 type PayrollPageShellProps = PayrollPageState & {
   onViewRun?: (runId: string) => void;
@@ -108,35 +110,37 @@ export function PayrollPageShell(props: PayrollPageShellProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
-      <div className="flex flex-col flex-wrap sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Payroll</h1>
-          <p className="text-muted-foreground mt-1">
-            Runs, increments, analytics, and compensation administration.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            className="gap-2 print:hidden"
-            onClick={() => router.push("/hr/payroll/my-payslips")}
-          >
-            My payslips
-          </Button>
-          {canManage && (
-            <Button variant="outline" className="gap-2" onClick={() => router.push("/hr/payroll/salary-bands")}>
-              <FileText className="h-4 w-4" />
-              Salary bands
+    <PageShell>
+      <PageHeader
+        title="Payroll"
+        description="Runs, increments, analytics, and compensation administration."
+        breadcrumbs={[
+          { label: "HR", href: "/hr" },
+          { label: "Payroll" },
+        ]}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className="gap-2 print:hidden"
+              onClick={() => router.push("/hr/payroll/my-payslips")}
+            >
+              My payslips
             </Button>
-          )}
-          {canManage && (
-            <Button className="gap-2" onClick={() => setInitOpen(true)}>
-              Run payroll
-            </Button>
-          )}
-        </div>
-      </div>
+            {canManage && (
+              <Button variant="outline" className="gap-2" onClick={() => router.push("/hr/payroll/salary-bands")}>
+                <FileText className="h-4 w-4" />
+                Salary bands
+              </Button>
+            )}
+            {canManage && (
+              <Button className="gap-2" onClick={() => setInitOpen(true)}>
+                Run payroll
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -380,6 +384,6 @@ export function PayrollPageShell(props: PayrollPageShellProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }

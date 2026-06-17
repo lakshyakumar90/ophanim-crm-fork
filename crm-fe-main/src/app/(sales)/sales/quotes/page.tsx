@@ -29,6 +29,8 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 function QuotesPageContent() {
   const { user, can } = useAuth();
@@ -61,75 +63,75 @@ function QuotesPageContent() {
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold">
-              <FileText className="h-6 w-6 text-primary" />
-              Quotes
-            </h1>
-            <p className="text-muted-foreground">Manage sales quotes and proposals</p>
-          </div>
-          {canCreate && (
+      <ListPageLayout
+        title="Quotes"
+        description="Manage sales quotes and proposals"
+        breadcrumbs={[
+          { label: "Sales", href: "/sales" },
+          { label: "Quotes" },
+        ]}
+        icon={<FileText className="h-4 w-4" />}
+        actions={
+          canCreate ? (
             <Button onClick={sheet.openCreate}>
               <Plus className="mr-2 h-4 w-4" />
               New Quote
             </Button>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search quotes..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          ) : undefined
+        }
+        filters={
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Search quotes..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="sent">Sent</SelectItem>
+                <SelectItem value="accepted">Accepted</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="sent">Sent</SelectItem>
-              <SelectItem value="accepted">Accepted</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Quote #</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell colSpan={5}>
-                      <Skeleton className="h-8 w-full" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : quotes.length === 0 ? (
+        }
+      >
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-16" />
+            ))}
+          </div>
+        ) : quotes.length === 0 ? (
+          <EmptyState
+            icon={<FileText className="h-12 w-12 opacity-50" />}
+            title="No quotes found"
+            actionLabel={canCreate ? "Create your first quote" : undefined}
+            onAction={canCreate ? sheet.openCreate : undefined}
+          />
+        ) : (
+          <div className="rounded-xl ring-1 ring-border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    No quotes found
-                  </TableCell>
+                  <TableHead>Quote #</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ) : (
-                quotes.map((quote) => (
+              </TableHeader>
+              <TableBody>
+                {quotes.map((quote) => (
                   <TableRow
                     key={quote.id}
                     className="cursor-pointer hover:bg-muted/50"
@@ -149,12 +151,12 @@ function QuotesPageContent() {
                       </Badge>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </ListPageLayout>
 
       {canCreate && (
         <CreateQuoteSheet

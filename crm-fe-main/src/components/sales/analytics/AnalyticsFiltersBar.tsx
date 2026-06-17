@@ -97,10 +97,11 @@ export function AnalyticsFiltersBar({
             <span>{dateLabel}</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-3" align="start">
-          <div className="space-y-3">
+        <PopoverContent className="w-auto overflow-hidden p-0" align="start">
+          <div className="space-y-3 p-3">
             <Calendar
               mode="range"
+              className="p-0"
               defaultMonth={draftDate?.from || date?.from}
               selected={draftDate}
               onSelect={(d) => onSetDraftDate(d)}

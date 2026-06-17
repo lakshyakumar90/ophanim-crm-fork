@@ -10,7 +10,6 @@ import { useSheetQuery } from "@/hooks/use-sheet-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -35,10 +34,11 @@ import {
   Eye,
   CalendarClock,
 } from "lucide-react";
-import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 const FREQUENCY_LABELS: Record<string, string> = {
   weekly: "Weekly",
@@ -115,18 +115,15 @@ function RecurringSchedulesPageContent() {
 
   return (
     <>
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <CalendarClock className="h-6 w-6 text-primary" />
-            Recurring Invoices
-          </h1>
-          <p className="text-muted-foreground">
-            Manage automated invoice schedules
-          </p>
-        </div>
+    <ListPageLayout
+      title="Recurring Invoices"
+      description="Manage automated invoice schedules"
+      breadcrumbs={[
+        { label: "Finance", href: "/finance" },
+        { label: "Recurring" },
+      ]}
+      icon={<CalendarClock className="h-4 w-4" />}
+      actions={
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCwIcon
@@ -141,9 +138,8 @@ function RecurringSchedulesPageContent() {
             </Button>
           )}
         </div>
-      </div>
-
-      {/* Table */}
+      }
+    >
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
@@ -151,19 +147,18 @@ function RecurringSchedulesPageContent() {
           ))}
         </div>
       ) : schedules.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <CalendarClock className="h-12 w-12 text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground">No recurring schedules</p>
-            {(isAdmin || isManager) && (
-              <Button variant="link" className="mt-2" onClick={sheet.openCreate}>
-                Create your first schedule
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<CalendarClock className="h-12 w-12 opacity-50" />}
+          title="No recurring schedules"
+          actionLabel={
+            isAdmin || isManager ? "Create your first schedule" : undefined
+          }
+          onAction={
+            isAdmin || isManager ? sheet.openCreate : undefined
+          }
+        />
       ) : (
-        <div className="rounded-lg border border-border bg-card">
+        <div className="rounded-xl ring-1 ring-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -261,7 +256,7 @@ function RecurringSchedulesPageContent() {
           </Table>
         </div>
       )}
-    </div>
+    </ListPageLayout>
 
     {(isAdmin || isManager) && (
       <CreateRecurringSheet

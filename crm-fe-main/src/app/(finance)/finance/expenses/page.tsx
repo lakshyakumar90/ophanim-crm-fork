@@ -49,6 +49,8 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
@@ -121,18 +123,15 @@ function ExpensesPageContent() {
 
   return (
     <>
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Receipt className="h-6 w-6 text-primary" />
-            Expenses
-          </h1>
-          <p className="text-muted-foreground">
-            Track and manage expense submissions
-          </p>
-        </div>
+    <ListPageLayout
+      title="Expenses"
+      description="Track and manage expense submissions"
+      breadcrumbs={[
+        { label: "Finance", href: "/finance" },
+        { label: "Expenses" },
+      ]}
+      icon={<Receipt className="h-4 w-4" />}
+      actions={
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw
@@ -145,33 +144,32 @@ function ExpensesPageContent() {
             Submit Expense
           </Button>
         </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search expenses..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
+      }
+      filters={
+        <div className="flex gap-4 items-center">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search expenses..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
+      }
+    >
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -179,15 +177,14 @@ function ExpensesPageContent() {
           ))}
         </div>
       ) : expenses.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <Receipt className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No expenses found</p>
-          <Button variant="link" className="mt-2" onClick={sheet.openCreate}>
-            Submit your first expense
-          </Button>
-        </div>
+        <EmptyState
+          icon={<Receipt className="h-12 w-12 opacity-50" />}
+          title="No expenses found"
+          actionLabel="Submit your first expense"
+          onAction={sheet.openCreate}
+        />
       ) : (
-        <div className="rounded-lg border border-border bg-card">
+        <div className="rounded-xl ring-1 ring-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -271,7 +268,7 @@ function ExpensesPageContent() {
           </Table>
         </div>
       )}
-    </div>
+    </ListPageLayout>
 
     <CreateExpenseSheet
       open={sheet.createOpen}

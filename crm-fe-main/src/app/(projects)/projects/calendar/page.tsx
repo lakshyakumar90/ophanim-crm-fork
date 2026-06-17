@@ -45,6 +45,7 @@ import {
 import { cn } from "@/lib/utils";
 import { projectsApi, tasksApi } from "@/lib/api";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -483,72 +484,73 @@ export default function ProjectCalendarPage() {
   }, [viewMode, weekStart, currentDate, rangeStart, rangeEnd]);
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex flex-col gap-3 px-6 py-4 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-20">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <CalendarDays className="h-5 w-5 text-primary" />
-            <h1 className="text-xl font-bold tracking-tight">Project Calendar</h1>
+    <ListPageLayout
+      className="flex h-full min-h-0 flex-col overflow-hidden p-3 lg:p-4"
+      contentClassName="flex min-h-0 flex-1 flex-col"
+      title="Project Calendar"
+      description="Tasks and project deadlines across your portfolio"
+      icon={<CalendarDays className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "Projects", href: "/projects" },
+        { label: "Calendar" },
+      ]}
+      actions={
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex border rounded-md overflow-hidden">
+            {(["week", "month"] as const).map((v) => (
+              <button
+                key={v}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors capitalize",
+                  viewMode === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+                )}
+                onClick={() => { setViewMode(v); setRangeStart(""); setRangeEnd(""); }}
+              >
+                {v}
+              </button>
+            ))}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex border rounded-md overflow-hidden">
-              {(["week", "month"] as const).map((v) => (
-                <button
-                  key={v}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                    viewMode === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-                  )}
-                  onClick={() => { setViewMode(v); setRangeStart(""); setRangeEnd(""); }}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1 border rounded-md">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-medium px-2 min-w-[180px] text-center">{headerLabel}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goForward}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={goToday}>
-              Today
+          <div className="flex items-center gap-1 border rounded-md">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack}>
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-
-            <Button
-              variant={showFilters ? "default" : "outline"}
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => setShowFilters((s) => !s)}
-            >
-              <Filter className="h-3.5 w-3.5" />
-              Filters
-              {filterProjectId !== "all" || (rangeStart && rangeEnd) ? (
-                <Badge className="h-4 w-4 p-0 flex items-center justify-center text-[9px] ml-0.5">!</Badge>
-              ) : null}
-            </Button>
-
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => { setCreateDefaultDate(today); setCreateModalOpen(true); }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Task
+            <span className="text-sm font-medium px-2 min-w-[180px] text-center">{headerLabel}</span>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goForward}>
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={goToday}>
+            Today
+          </Button>
+
+          <Button
+            variant={showFilters ? "default" : "outline"}
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setShowFilters((s) => !s)}
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filters
+            {filterProjectId !== "all" || (rangeStart && rangeEnd) ? (
+              <Badge className="h-4 w-4 p-0 flex items-center justify-center text-[9px] ml-0.5">!</Badge>
+            ) : null}
+          </Button>
+
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => { setCreateDefaultDate(today); setCreateModalOpen(true); }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Task
+          </Button>
         </div>
-
-        {/* Filter bar */}
-        {showFilters && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50">
+      }
+      filters={
+        showFilters ? (
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={filterProjectId} onValueChange={setFilterProjectId}>
               <SelectTrigger className="h-8 w-[200px] text-xs">
                 <SelectValue placeholder="All Projects" />
@@ -584,9 +586,10 @@ export default function ProjectCalendarPage() {
               )}
             </div>
           </div>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
       {/* ── Legend ──────────────────────────────────────────────────────── */}
       {allProjects.length > 0 && filterProjectId === "all" && (
         <div className="flex-shrink-0 flex items-center gap-2 px-6 py-1.5 border-b border-border/40 text-[11px] bg-background/50 overflow-x-auto whitespace-nowrap">
@@ -602,7 +605,7 @@ export default function ProjectCalendarPage() {
       )}
 
       {/* ── Calendar Grid ───────────────────────────────────────────────── */}
-      <div ref={scrollRef} className="flex-1 overflow-x-auto overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
         <div
           className="grid h-full"
           style={{ gridTemplateColumns: `repeat(${calDays.length}, minmax(160px, 1fr))`, minHeight: "500px" }}
@@ -640,6 +643,7 @@ export default function ProjectCalendarPage() {
         projects={allProjects}
         onCreated={() => mutateTasks()}
       />
-    </div>
+      </div>
+    </ListPageLayout>
   );
 }

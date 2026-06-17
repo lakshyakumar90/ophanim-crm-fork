@@ -8,28 +8,8 @@ import { useAuth } from "@/providers/auth-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
-
-function OrgNode({ node, depth = 0 }: { node: any; depth?: number }) {
-  const children = node.children ?? node.reports ?? [];
-  return (
-    <div className={depth > 0 ? "ml-6 border-l pl-4" : ""}>
-      <Card className="mb-2">
-        <CardContent className="py-3 text-sm">
-          <p className="font-medium">{node.full_name ?? node.name}</p>
-          <p className="text-muted-foreground">
-            {node.designation || node.job_title || node.role?.replace(/_/g, " ") || "—"}
-          </p>
-          {node.department_name ? (
-            <p className="text-xs text-muted-foreground mt-1">{node.department_name}</p>
-          ) : null}
-        </CardContent>
-      </Card>
-      {children.map((child: any) => (
-        <OrgNode key={child.id} node={child} depth={depth + 1} />
-      ))}
-    </div>
-  );
-}
+import { OrgChartTree } from "@/components/hr/org-chart/org-chart-tree";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function OrgChartPage() {
   const { user } = useAuth();
@@ -48,18 +28,24 @@ export default function OrgChartPage() {
 
   useHeaderRefresh({ onRefresh: handleRefresh, isRefreshing, enabled: Boolean(user) });
 
-  const roots = Array.isArray(data) ? data : (data as any)?.roots ?? [];
+  const roots = Array.isArray(data) ? data : (data as { roots?: unknown[] })?.roots ?? [];
+  const totalEmployees = (data as { total_employees?: number })?.total_employees;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Network className="h-6 w-6 text-primary" />
-          Organization Chart
-        </h1>
-        <p className="text-muted-foreground">Company hierarchy and reporting structure</p>
-      </div>
-
+    <ListPageLayout
+      className="p-3 lg:p-4"
+      title="Organization Chart"
+      description={
+        totalEmployees
+          ? `${totalEmployees} active employees · department clusters and reporting lines`
+          : "Company hierarchy and reporting structure"
+      }
+      icon={<Network className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Org Chart" },
+      ]}
+    >
       {isLoading ? (
         <Skeleton className="h-64 w-full" />
       ) : roots.length === 0 ? (
@@ -67,10 +53,13 @@ export default function OrgChartPage() {
           <CardHeader>
             <CardTitle className="text-base">No org chart data</CardTitle>
           </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Add reporting managers in employee profiles to build the hierarchy.
+          </CardContent>
         </Card>
       ) : (
-        roots.map((node: any) => <OrgNode key={node.id} node={node} />)
+        <OrgChartTree roots={roots as Parameters<typeof OrgChartTree>[0]["roots"]} />
       )}
-    </div>
+    </ListPageLayout>
   );
 }

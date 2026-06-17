@@ -26,10 +26,13 @@ import {
   Clock,
   CheckCircle,
   AlertTriangle,
+  ListTodo,
 } from "lucide-react";
 import type { Task } from "@/types";
 import { toLocaleDateStringIST, nowIST } from "@/lib/date-utils";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 const statusColors = {
   todo: "bg-muted text-foreground",
@@ -91,16 +94,15 @@ function TasksPageContent() {
 
   return (
     <>
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Tasks</h1>
-          <p className="text-muted-foreground">
-            Manage your tasks and assignments
-          </p>
-        </div>
-        {/* New Task Button - visible to all users */}
+    <ListPageLayout
+      title="Tasks"
+      description="Manage your tasks and assignments"
+      breadcrumbs={[
+        { label: "Sales", href: "/sales" },
+        { label: "Tasks" },
+      ]}
+      icon={<ListTodo className="h-4 w-4" />}
+      actions={
         <Button
           onClick={sheet.openCreate}
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -108,76 +110,108 @@ function TasksPageContent() {
           <Plus className="w-4 h-4 mr-2" />
           New Task
         </Button>
-      </div>
+      }
+      filters={
+        <div className="flex flex-wrap gap-4">
+          <Select
+            value={status}
+            onValueChange={(v) => {
+              setStatus(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="todo">To Do</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4">
-        <Select
-          value={status}
-          onValueChange={(v) => {
-            setStatus(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="todo">To Do</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-          </SelectContent>
-        </Select>
+          <Select
+            value={priority}
+            onValueChange={(v) => {
+              setPriority(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+            </SelectContent>
+          </Select>
 
-        <Select
-          value={priority}
-          onValueChange={(v) => {
-            setPriority(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Priority" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Priorities</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={assigneeId}
-          onValueChange={(v) => {
-            setAssigneeId(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Assignee" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Assignees</SelectItem>
-            {users.map((u: any) => (
-              <SelectItem key={u.id} value={u.id}>
-                {u.fullName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-{(status !== "all" || priority !== "all" || assigneeId !== "all") && (
-  <Button variant="ghost" size="sm" onClick={() => {
-    setStatus("all");
-    setPriority("all");
-    setAssigneeId("all");
-    setPage(1);
-  }}>Clear Filters</Button>
-)}
-      </div>
-
-      {/* Tasks List */}
+          <Select
+            value={assigneeId}
+            onValueChange={(v) => {
+              setAssigneeId(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Assignee" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Assignees</SelectItem>
+              {users.map((u: any) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.fullName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(status !== "all" || priority !== "all" || assigneeId !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStatus("all");
+                setPriority("all");
+                setAssigneeId("all");
+                setPage(1);
+              }}
+            >
+              Clear Filters
+            </Button>
+          )}
+        </div>
+      }
+      footer={
+        meta && meta.totalPages > 1 ? (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Page {meta.page} of {meta.totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!meta.hasPrevPage}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!meta.hasNextPage}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ) : undefined
+      }
+    >
       {isLoading ? (
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
@@ -189,9 +223,10 @@ function TasksPageContent() {
           Failed to load tasks
         </div>
       ) : tasks.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          No tasks found
-        </div>
+        <EmptyState
+          icon={<ListTodo className="h-12 w-12 opacity-50" />}
+          title="No tasks found"
+        />
       ) : (
         <div className="space-y-4">
           {tasks.map((task: Task) => (
@@ -262,34 +297,7 @@ function TasksPageContent() {
           ))}
         </div>
       )}
-
-      {/* Pagination */}
-      {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Page {meta.page} of {meta.totalPages}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta.hasPrevPage}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta.hasNextPage}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
+    </ListPageLayout>
 
     <CreateTaskSheet
       open={sheet.createOpen}

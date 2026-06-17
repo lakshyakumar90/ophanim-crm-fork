@@ -20,6 +20,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
+import { EmptyState } from "@/components/shared/empty-state";
 
 function budgetTotal(b: Budget) {
   return Number(b.total_allocated ?? b.total_amount ?? 0);
@@ -59,51 +61,50 @@ function BudgetsPageContent() {
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold">
-              <PiggyBank className="h-6 w-6 text-primary" />
-              Budgets
-            </h1>
-            <p className="text-muted-foreground">Department budgets and spending limits</p>
-          </div>
-          {canCreate && (
+      <ListPageLayout
+        title="Budgets"
+        description="Department budgets and spending limits"
+        breadcrumbs={[
+          { label: "Finance", href: "/finance" },
+          { label: "Budgets" },
+        ]}
+        icon={<PiggyBank className="h-4 w-4" />}
+        actions={
+          canCreate ? (
             <Button onClick={sheet.openCreate}>
               <Plus className="mr-2 h-4 w-4" />
               New Budget
             </Button>
-          )}
-        </div>
-
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Fiscal Year</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Spent</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell colSpan={5}>
-                      <Skeleton className="h-8 w-full" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : budgets.length === 0 ? (
+          ) : undefined
+        }
+      >
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-16" />
+            ))}
+          </div>
+        ) : budgets.length === 0 ? (
+          <EmptyState
+            icon={<PiggyBank className="h-12 w-12 opacity-50" />}
+            title="No budgets found"
+            actionLabel={canCreate ? "Create your first budget" : undefined}
+            onAction={canCreate ? sheet.openCreate : undefined}
+          />
+        ) : (
+          <div className="rounded-xl ring-1 ring-border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    No budgets found
-                  </TableCell>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Fiscal Year</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Spent</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ) : (
-                budgets.map((b) => (
+              </TableHeader>
+              <TableBody>
+                {budgets.map((b) => (
                   <TableRow key={b.id}>
                     <TableCell className="font-medium">{b.name}</TableCell>
                     <TableCell>{b.fiscal_year}</TableCell>
@@ -119,12 +120,12 @@ function BudgetsPageContent() {
                       </Badge>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </ListPageLayout>
 
       {canCreate && (
         <CreateBudgetSheet

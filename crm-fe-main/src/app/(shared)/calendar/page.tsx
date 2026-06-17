@@ -695,7 +695,7 @@ export default function GlobalCalendarPage() {
   const userListForFilter = isAdminOrGlobal ? allUsers : isManager ? myTeamMembers : [];
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div className="flex flex-col h-[calc(100dvh-3rem)] min-h-0 -m-3 lg:-m-4 bg-background overflow-hidden">
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex flex-col gap-3 px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-20">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -887,7 +887,7 @@ export default function GlobalCalendarPage() {
       </div>
 
       {/* ── Calendar Grid (H-scrollable) ──────────────────────────────────── */}
-      <div ref={scrollRef} className="flex-1 overflow-x-auto overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
         <div
           className="grid h-full"
           style={{ gridTemplateColumns: `repeat(${calDays.length}, minmax(160px, 1fr))`, minHeight: "500px" }}

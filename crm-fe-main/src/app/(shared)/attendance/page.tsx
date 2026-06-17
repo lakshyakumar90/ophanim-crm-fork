@@ -22,6 +22,7 @@ import {
 import { MyHistorySection } from "@/components/attendance/MyHistorySection";
 import { TeamOverviewFilters } from "@/components/attendance/TeamOverviewFilters";
 import { TeamAttendanceTable } from "@/components/attendance/TeamAttendanceTable";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function AttendancePage() {
   const router = useRouter();
@@ -90,16 +91,16 @@ export default function AttendancePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Attendance</h1>
-        <p className="text-muted-foreground">
-          {canManageTeamAttendance
-            ? "Monitor team attendance and track your own"
-            : "Track your daily attendance and view your analytics"}
-        </p>
-      </div>
-
+    <ListPageLayout
+      title="Attendance"
+      description={
+        canManageTeamAttendance
+          ? "Monitor team attendance and track your own"
+          : "Track your daily attendance and view your analytics"
+      }
+      breadcrumbs={[{ label: "Attendance" }]}
+    >
+      <div className="space-y-6">
       <AttendanceClockCard
         userFullName={user.fullName}
         userShiftType={user.shiftType}
@@ -182,6 +183,7 @@ export default function AttendancePage() {
           />
         </>
       )}
-    </div>
+      </div>
+    </ListPageLayout>
   );
 }

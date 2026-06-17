@@ -16,9 +16,6 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,28 +32,34 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-  LineChart,
-  Line,
 } from "recharts";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { ChartCard } from "@/components/charts/chart-card";
+import { buildChartConfig, chartAxisProps, chartGridProps } from "@/components/charts/chart-config";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const STATUS_COLORS = {
-  active: "#22c55e",
-  completed: "#10b981",
-  planned: "#3b82f6",
-  onHold: "#f59e0b",
-  cancelled: "#ef4444",
-  idle: "#dc2626",
-};
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+] as const;
 
-const PRIORITY_COLORS = {
-  high: "#ef4444",
-  medium: "#f59e0b",
-  low: "#22c55e",
-};
+const pmPerformanceConfig = buildChartConfig({
+  Completion: { label: "Completion Rate %", colorIndex: 0 },
+  Overdue: { label: "Overdue Tasks", colorIndex: 3 },
+});
+
+const workloadConfig = buildChartConfig({
+  Tasks: { label: "Active Tasks", colorIndex: 1 },
+});
 
 export default function ProjectAnalyticsPage() {
   const { user } = useAuth();
@@ -129,29 +132,35 @@ export default function ProjectAnalyticsPage() {
 
   // Prepare Chart Data
   const statusData = [
-    { name: "Active", value: stats.active, color: STATUS_COLORS.active },
+    { name: "Active", value: stats.active },
     {
       name: "Completed",
       value: stats.completed,
-      color: STATUS_COLORS.completed,
     },
-    { name: "Planned", value: stats.planned, color: STATUS_COLORS.planned },
-    { name: "On Hold", value: stats.onHold, color: STATUS_COLORS.onHold },
+    { name: "Planned", value: stats.planned },
+    { name: "On Hold", value: stats.onHold },
     {
       name: "Cancelled",
       value: stats.cancelled,
-      color: STATUS_COLORS.cancelled,
     },
-  ].filter((d) => d.value > 0);
+  ]
+    .filter((d) => d.value > 0)
+    .map((entry, index) => ({
+      ...entry,
+      fill: CHART_COLORS[index % CHART_COLORS.length],
+    }));
+
+  const statusConfig = buildChartConfig(
+    Object.fromEntries(statusData.map((d) => [d.name, { label: d.name }])),
+  );
 
   const priorityData = [
-    { name: "High", value: stats.byPriority.high, color: PRIORITY_COLORS.high },
+    { name: "High", value: stats.byPriority.high },
     {
       name: "Medium",
       value: stats.byPriority.medium,
-      color: PRIORITY_COLORS.medium,
     },
-    { name: "Low", value: stats.byPriority.low, color: PRIORITY_COLORS.low },
+    { name: "Low", value: stats.byPriority.low },
   ];
 
   const pmData = stats.byManager.map((pm) => ({
@@ -260,131 +269,95 @@ export default function ProjectAnalyticsPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Status Distribution */}
-            <Card className="col-span-1">
-              <CardHeader>
-                <CardTitle>Project Status</CardTitle>
-                <CardDescription>
-                  Distribution of active vs inactive projects
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPie>
-                      <Pie
-                        data={statusData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={2}
-                        dataKey="value"
-                        label={({ name, percent }) =>
-                          percent !== undefined && percent > 0.05
-                            ? `${name} ${(percent * 100).toFixed(0)}%`
-                            : ""
-                        }
-                      >
-                        {statusData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </RechartsPie>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+            <ChartCard
+              title="Project Status"
+              description="Distribution of active vs inactive projects"
+              height={280}
+            >
+              <ChartContainer config={statusConfig} className="h-full w-full">
+                <RechartsPie>
+                  <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, percent }) =>
+                      percent !== undefined && percent > 0.05
+                        ? `${name} ${(percent * 100).toFixed(0)}%`
+                        : ""
+                    }
+                  >
+                    {statusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                </RechartsPie>
+              </ChartContainer>
+            </ChartCard>
 
-            {/* Manager Performance */}
             {(isAdmin || isManager) && (
-              <Card className="col-span-1">
-                <CardHeader>
-                  <CardTitle>Manager Performance</CardTitle>
-                  <CardDescription>
-                    Task completion rates & overdue count
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={pmData}
-                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" />
-                        <YAxis
-                          yAxisId="left"
-                          orientation="left"
-                          stroke="#8884d8"
-                        />
-                        <YAxis
-                          yAxisId="right"
-                          orientation="right"
-                          stroke="#82ca9d"
-                        />
-                        <Tooltip />
-                        <Legend />
-                        <Bar
-                          yAxisId="left"
-                          dataKey="Completion"
-                          name="Completion Rate %"
-                          fill="#8884d8"
-                          radius={[4, 4, 0, 0]}
-                        />
-                        <Bar
-                          yAxisId="right"
-                          dataKey="Overdue"
-                          name="Overdue Tasks"
-                          fill="#ff8042"
-                          radius={[4, 4, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
+              <ChartCard
+                title="Manager Performance"
+                description="Task completion rates & overdue count"
+                height={280}
+              >
+                <ChartContainer config={pmPerformanceConfig} className="h-full w-full">
+                  <BarChart data={pmData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chartGridProps} />
+                    <XAxis dataKey="name" {...chartAxisProps} />
+                    <YAxis yAxisId="left" orientation="left" {...chartAxisProps} width={32} />
+                    <YAxis yAxisId="right" orientation="right" {...chartAxisProps} width={32} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Bar
+                      yAxisId="left"
+                      dataKey="Completion"
+                      fill="var(--color-Completion)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      yAxisId="right"
+                      dataKey="Overdue"
+                      fill="var(--color-Overdue)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ChartContainer>
+              </ChartCard>
             )}
 
-            {/* Team Workload */}
             {(isAdmin || isManager) && workloadData.length > 0 && (
-              <Card className="col-span-1 lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Top Active Team Workload</CardTitle>
-                  <CardDescription>
-                    Users with the most active tasks assigned
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={workloadData}
-                        layout="vertical"
-                        margin={{ top: 0, right: 30, left: 40, bottom: 5 }}
-                      >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          horizontal={true}
-                          vertical={false}
-                        />
-                        <XAxis type="number" />
-                        <YAxis dataKey="fullName" type="category" width={100} />
-                        <Tooltip />
-                        <Bar
-                          dataKey="Tasks"
-                          fill="#3b82f6"
-                          radius={[0, 4, 4, 0]}
-                          barSize={20}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
+              <ChartCard
+                title="Top Active Team Workload"
+                description="Users with the most active tasks assigned"
+                className="lg:col-span-2"
+                height={280}
+              >
+                <ChartContainer config={workloadConfig} className="h-full w-full">
+                  <BarChart
+                    data={workloadData}
+                    layout="vertical"
+                    margin={{ top: 0, right: 30, left: 40, bottom: 5 }}
+                  >
+                    <CartesianGrid {...chartGridProps} horizontal vertical={false} />
+                    <XAxis type="number" {...chartAxisProps} />
+                    <YAxis dataKey="fullName" type="category" width={100} {...chartAxisProps} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar
+                      dataKey="Tasks"
+                      fill="var(--color-Tasks)"
+                      radius={[0, 4, 4, 0]}
+                      barSize={20}
+                    />
+                  </BarChart>
+                </ChartContainer>
+              </ChartCard>
             )}
           </div>
         </div>

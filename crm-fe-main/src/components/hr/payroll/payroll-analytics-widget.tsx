@@ -15,16 +15,31 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
   BarChart,
   Bar,
 } from "recharts";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { ChartCard } from "@/components/charts/chart-card";
+import { buildChartConfig, chartAxisProps, chartGridProps } from "@/components/charts/chart-config";
 import type { PayrollAnalytics } from "@/types/payroll";
 import { formatINR, formatPayrollMonthLabel, parseNum } from "@/lib/payroll-format";
 import { AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+const trendConfig = buildChartConfig({
+  gross: { label: "Gross", colorIndex: 0 },
+  net: { label: "Net", colorIndex: 1 },
+});
+
+const deptConfig = buildChartConfig({
+  value: { label: "Gross", colorIndex: 2 },
+});
 
 export function PayrollAnalyticsWidget({
   analytics,
@@ -72,54 +87,79 @@ export function PayrollAnalyticsWidget({
   return (
     <div className="space-y-6">
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Monthly payroll trend</CardTitle>
-            <CardDescription>Last 6 months — gross vs net (₹)</CardDescription>
-          </CardHeader>
-          <CardContent className="h-72">
-            {trendData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Not enough data yet.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip
-                    formatter={(value) => formatINR(Number(value ?? 0))}
-                    contentStyle={{ borderRadius: 8 }}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="gross" name="Gross" stroke="#6366f1" strokeWidth={2} dot />
-                  <Line type="monotone" dataKey="net" name="Net" stroke="#10b981" strokeWidth={2} dot />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+        <ChartCard
+          title="Monthly payroll trend"
+          description="Last 6 months — gross vs net (₹)"
+          height={280}
+        >
+          {trendData.length === 0 ? (
+            <p className="px-(--card-spacing) text-sm text-muted-foreground">Not enough data yet.</p>
+          ) : (
+            <ChartContainer config={trendConfig} className="h-full w-full">
+              <LineChart data={trendData} margin={{ left: 0, right: 8 }}>
+                <CartesianGrid {...chartGridProps} />
+                <XAxis dataKey="label" {...chartAxisProps} />
+                <YAxis
+                  {...chartAxisProps}
+                  width={40}
+                  tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => formatINR(Number(value ?? 0))}
+                    />
+                  }
+                />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Line
+                  type="monotone"
+                  dataKey="gross"
+                  stroke="var(--color-gross)"
+                  strokeWidth={2}
+                  dot
+                />
+                <Line
+                  type="monotone"
+                  dataKey="net"
+                  stroke="var(--color-net)"
+                  strokeWidth={2}
+                  dot
+                />
+              </LineChart>
+            </ChartContainer>
+          )}
+        </ChartCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Department cost (gross)</CardTitle>
-            <CardDescription>Allocation from recent payroll records</CardDescription>
-          </CardHeader>
-          <CardContent className="h-72">
-            {deptBars.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No department breakdown.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={deptBars} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis type="number" tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`} />
-                  <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(value) => formatINR(Number(value ?? 0))} />
-                  <Bar dataKey="value" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Gross" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+        <ChartCard
+          title="Department cost (gross)"
+          description="Allocation from recent payroll records"
+          height={280}
+        >
+          {deptBars.length === 0 ? (
+            <p className="px-(--card-spacing) text-sm text-muted-foreground">No department breakdown.</p>
+          ) : (
+            <ChartContainer config={deptConfig} className="h-full w-full">
+              <BarChart data={deptBars} layout="vertical" margin={{ left: 0, right: 16 }}>
+                <CartesianGrid {...chartGridProps} horizontal={false} vertical />
+                <XAxis
+                  type="number"
+                  {...chartAxisProps}
+                  tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`}
+                />
+                <YAxis type="category" dataKey="name" width={100} {...chartAxisProps} />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => formatINR(Number(value ?? 0))}
+                    />
+                  }
+                />
+                <Bar dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ChartContainer>
+          )}
+        </ChartCard>
       </div>
 
       <Card>

@@ -12,6 +12,7 @@ import {
 } from "@/components/hr/employees/DeactivateConfirmDialog";
 import { AddEmployeeSheet } from "@/components/hr/employees/AddEmployeeSheet";
 import { EmployeeDetailDrawer } from "@/components/hr/employees/detail/EmployeeDetailDrawer";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export function EmployeesPageContent() {
   const {
@@ -81,12 +82,15 @@ export function EmployeesPageContent() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-400 mx-auto w-full">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Employees</h1>
-        <p className="text-muted-foreground">{employees.length} total employees</p>
-      </div>
-
+    <ListPageLayout
+      title="Employees"
+      description={`${employees.length} total employees`}
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Employees" },
+      ]}
+    >
+      <div className="space-y-6">
       {error ? (
         <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 rounded-md p-3">{error}</div>
       ) : null}
@@ -229,6 +233,7 @@ export function EmployeesPageContent() {
         onConfirm={() => void confirmActivate()}
         busy={busy}
       />
-    </div>
+      </div>
+    </ListPageLayout>
   );
 }

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 import { CreateBenefitPlanModal } from "@/components/hr/benefits/CreateBenefitPlanModal";
 import { EnrollBenefitModal } from "@/components/hr/benefits/EnrollBenefitModal";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 export default function BenefitsPage() {
   const { user, can } = useAuth();
@@ -60,18 +61,18 @@ export default function BenefitsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Gift className="h-6 w-6 text-primary" />
-            Benefits
-          </h1>
-          <p className="text-muted-foreground">
-            {isHrView ? "Manage benefit plans and enrollments" : "Your benefit enrollments"}
-          </p>
-        </div>
-        {canManage ? (
+    <ListPageLayout
+      title="Benefits"
+      description={
+        isHrView ? "Manage benefit plans and enrollments" : "Your benefit enrollments"
+      }
+      icon={<Gift className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "HR", href: "/hr" },
+        { label: "Benefits" },
+      ]}
+      actions={
+        canManage ? (
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="gap-2" onClick={() => setEnrollOpen(true)}>
               <UserPlus className="h-4 w-4" />
@@ -82,9 +83,10 @@ export default function BenefitsPage() {
               Create plan
             </Button>
           </div>
-        ) : null}
-      </div>
-
+        ) : undefined
+      }
+    >
+      <div className="space-y-6">
       <div>
         <h2 className="mb-3 text-lg font-semibold">Available Plans</h2>
         {isLoading ? (
@@ -152,6 +154,7 @@ export default function BenefitsPage() {
         plans={planList.map((p: any) => ({ id: p.id, name: p.name }))}
         onEnrolled={refreshAll}
       />
-    </div>
+      </div>
+    </ListPageLayout>
   );
 }

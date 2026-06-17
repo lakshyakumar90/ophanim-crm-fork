@@ -27,6 +27,7 @@ import {
   ProjectTeamDetailSheet,
   type ProjectTeamDetail,
 } from "@/components/projects/ProjectTeamDetailSheet";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 interface ProjectMember {
   id: string;
@@ -307,13 +308,17 @@ export default function GlobalMembersPage() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Header */}
-      <div className="flex flex-col gap-4 px-4 py-4 lg:px-6 bg-background/50 backdrop-blur-sm border-b sticky top-0 z-10">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Teams & Members</h1>
-          <p className="text-muted-foreground">Project team members across all your projects</p>
-        </div>
+    <>
+    <ListPageLayout
+      className="p-3 lg:p-4"
+      title="Teams & Members"
+      description="Project team members across all your projects"
+      icon={<Users2 className="h-4 w-4" />}
+      breadcrumbs={[
+        { label: "Projects", href: "/projects" },
+        { label: "Members" },
+      ]}
+      filters={
         <div className="relative max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -323,10 +328,8 @@ export default function GlobalMembersPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 px-4 py-4 lg:px-6 overflow-y-auto">
+      }
+    >
         {isLoading ? (
           <div className="flex items-center justify-center h-40">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -487,7 +490,7 @@ export default function GlobalMembersPage() {
             })}
           </Tabs>
         )}
-      </div>
+    </ListPageLayout>
 
       <ProjectTeamDetailSheet
         project={selectedProject}
@@ -504,6 +507,6 @@ export default function GlobalMembersPage() {
         open={memberSheetOpen}
         onOpenChange={setMemberSheetOpen}
       />
-    </div>
+    </>
   );
 }

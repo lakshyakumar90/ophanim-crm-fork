@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 const ROLE_GROUPS = [
   { key: "projectManagers", label: "Project Managers", color: "bg-purple-500" },
@@ -55,17 +56,16 @@ export default function CapacityPage() {
   }, [data]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Gauge className="h-6 w-6 text-primary" />
-          Team Capacity
-        </h1>
-        <p className="text-muted-foreground">
-          {summary.total} available resources across project roles
-        </p>
-      </div>
-
+    <ListPageLayout
+      className="p-3 lg:p-4"
+      title="Team Capacity"
+      description={`${summary.total} available resources across project roles`}
+      icon={<Gauge className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "Projects", href: "/projects" },
+        { label: "Capacity" },
+      ]}
+    >
       {isLoading ? (
         <Skeleton className="h-96 w-full" />
       ) : (
@@ -135,6 +135,6 @@ export default function CapacityPage() {
           </Card>
         </div>
       )}
-    </div>
+    </ListPageLayout>
   );
 }

@@ -12,6 +12,7 @@ import { toLocaleStringIST } from "@/lib/date-utils";
 import { useAuth } from "@/providers/auth-provider";
 import { usePollingCoordinator } from "@/lib/polling-coordinator";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 interface Notification {
   id: string;
@@ -129,22 +130,20 @@ export default function NotificationsPage() {
     Boolean(notification.actionUrl) || hasLink(notification);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
-          <p className="text-muted-foreground">
-            Stay updated with your activities
-          </p>
-        </div>
-        {notifications.some((n) => !n.isRead) && (
+    <ListPageLayout
+      title="Notifications"
+      description="Stay updated with your activities"
+      icon={<Bell className="h-4 w-4" />}
+      breadcrumbs={[{ label: "Notifications" }]}
+      actions={
+        notifications.some((n) => !n.isRead) ? (
           <Button variant="outline" onClick={handleMarkAllRead}>
             <Check className="w-4 h-4 mr-2" />
             Mark all as read
           </Button>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -239,6 +238,6 @@ export default function NotificationsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </ListPageLayout>
   );
 }

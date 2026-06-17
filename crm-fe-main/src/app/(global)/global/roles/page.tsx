@@ -52,6 +52,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ListPageLayout } from "@/components/shared/list-page-layout";
 
 // ── Delete confirmation state ─────────────────────────────────────────────────
 interface DeleteState {
@@ -165,25 +166,22 @@ export default function RolesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">Roles & Permissions</h1>
-          </div>
-          <p className="text-muted-foreground text-sm mt-1">
-            Create custom roles and assign them to users. Each user&apos;s
-            effective permissions are the union of all their roles.
-          </p>
-        </div>
+    <>
+    <ListPageLayout
+      title="Roles & Permissions"
+      description="Create custom roles and assign them to users. Each user&apos;s effective permissions are the union of all their roles."
+      icon={<Shield className="h-4 w-4 text-primary" />}
+      breadcrumbs={[
+        { label: "Global", href: "/global" },
+        { label: "Roles" },
+      ]}
+      actions={
         <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Create Role
         </Button>
-      </div>
-
+      }
+    >
       {/* Roles Table */}
       <Card>
         <CardHeader>
@@ -337,6 +335,7 @@ export default function RolesPage() {
           )}
         </CardContent>
       </Card>
+    </ListPageLayout>
 
       {/* Create / Edit Modal */}
       <CreateRoleSheet
@@ -428,6 +427,6 @@ export default function RolesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

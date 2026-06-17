@@ -54,11 +54,11 @@ export default function MyPayslipsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full print:max-w-none">
+    <div className="flex flex-col gap-4 p-3 lg:p-4 max-w-4xl mx-auto w-full print:max-w-none">
       <div className="flex flex-wrap items-center justify-between gap-4 print:hidden">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">My payslips</h1>
-          <p className="text-muted-foreground mt-1">Disbursed payroll records for your account.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">My payslips</h1>
+          <p className="text-sm text-muted-foreground mt-1">Disbursed payroll records for your account.</p>
         </div>
         {canOps && (
           <Button variant="outline" onClick={() => router.push("/hr/payroll")}>

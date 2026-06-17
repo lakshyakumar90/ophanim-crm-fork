@@ -28,9 +28,13 @@ import {
   PieChart,
   Pie,
   Cell,
-  Tooltip,
-  ResponsiveContainer,
 } from "recharts";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { buildChartConfig } from "@/components/charts/chart-config";
 import { format, addDays, differenceInDays, isPast } from "date-fns";
 import type { Project, Task } from "@/types";
 import { projectsApi } from "@/lib/projects-api";
@@ -41,12 +45,13 @@ import { nowIST } from "@/lib/date-utils";
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
 
-const DONUT_COLORS = {
-  completed: "#22c55e",
-  in_progress: "#a855f7",
-  todo: "#94a3b8",
-  review: "#3b82f6",
-};
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+] as const;
 
 const PRIORITY_COLORS: Record<string, string> = {
   low: "bg-slate-100 text-slate-700 border-slate-200",
@@ -118,11 +123,20 @@ export default function ProjectAnalyticsPage() {
   const tp = stats?.taskProgress;
   const donutData = tp
     ? [
-        { name: "Completed", value: tp.completed, color: DONUT_COLORS.completed },
-        { name: "In Progress", value: tp.inProgress, color: DONUT_COLORS.in_progress },
-        { name: "To Do", value: tp.todo, color: DONUT_COLORS.todo },
-      ].filter((d) => d.value > 0)
+        { name: "Completed", value: tp.completed },
+        { name: "In Progress", value: tp.inProgress },
+        { name: "To Do", value: tp.todo },
+      ]
+        .filter((d) => d.value > 0)
+        .map((entry, index) => ({
+          ...entry,
+          color: CHART_COLORS[index % CHART_COLORS.length],
+        }))
     : [];
+
+  const donutConfig = buildChartConfig(
+    Object.fromEntries(donutData.map((d) => [d.name, { label: d.name }])),
+  );
 
   const completionRate =
     tp && tp.total > 0 ? Math.round((tp.completed / tp.total) * 100) : 0;
@@ -375,7 +389,7 @@ export default function ProjectAnalyticsPage() {
             ) : (
               <div className="flex items-center gap-4">
                 <div className="flex-1" style={{ height: 160 }}>
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ChartContainer config={donutConfig} className="h-full w-full">
                     <PieChart>
                       <Pie
                         data={donutData}
@@ -384,6 +398,7 @@ export default function ProjectAnalyticsPage() {
                         innerRadius="46%"
                         outerRadius="74%"
                         dataKey="value"
+                        nameKey="name"
                         paddingAngle={2}
                         startAngle={90}
                         endAngle={-270}
@@ -392,16 +407,9 @@ export default function ProjectAnalyticsPage() {
                           <Cell key={i} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: "8px",
-                          fontSize: 12,
-                          border: "1px solid hsl(var(--border))",
-                          background: "hsl(var(--card))",
-                        }}
-                      />
+                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                     </PieChart>
-                  </ResponsiveContainer>
+                  </ChartContainer>
                 </div>
                 <div className="flex flex-col gap-2">
                   {donutData.map((d) => (
