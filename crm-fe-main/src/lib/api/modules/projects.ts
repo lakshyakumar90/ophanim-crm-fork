@@ -46,8 +46,10 @@ export const projectsApi = {
     userId: string,
     data: { role?: string; allocationPercentage?: number },
   ) => api.put(`/projects/${projectId}/members/${userId}`, data),
-  removeMember: (projectId: string, userId: string) =>
-    api.delete(`/projects/${projectId}/members/${userId}`),
+  removeMember: (projectId: string, userId: string, role?: string) =>
+    api.delete(`/projects/${projectId}/members/${userId}`, {
+      params: role ? { role } : undefined,
+    }),
   getStats: async () => {
     const res = await api.get("/projects/stats");
     return unwrap(res);

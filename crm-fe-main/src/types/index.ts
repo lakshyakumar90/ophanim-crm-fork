@@ -261,6 +261,14 @@ export interface Project {
   description: string | null;
   clientName: string | null;
   leadId: string | null;
+  lead?: {
+    id: string;
+    leadName: string;
+    businessName: string | null;
+    status?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  };
   managerId: string;
   status: "planned" | "in_progress" | "on_hold" | "completed" | "cancelled";
   priority: "low" | "medium" | "high";

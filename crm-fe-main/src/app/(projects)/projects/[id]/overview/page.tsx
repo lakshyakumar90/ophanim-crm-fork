@@ -30,7 +30,6 @@ import { ProjectNotes } from "@/components/projects/project-notes";
 import { format } from "date-fns";
 import type { Project } from "@/types";
 import { projectsApi } from "@/lib/projects-api";
-import { leadsApi } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
@@ -70,16 +69,18 @@ export default function ProjectOverviewPage() {
   const params = useParams();
   const id = params.id as string;
   const { user } = useAuth();
-  const isManagerOrAbove = user?.role === "admin" || user?.role === "manager";
 
   const [project, setProject] = useState<Project | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [linkedLead, setLinkedLead] = useState<{
-    id: string;
-    leadName: string;
-    businessName: string | null;
-  } | null>(null);
+
+  const linkedLead = project?.lead
+    ? {
+        id: project.lead.id,
+        leadName: project.lead.leadName,
+        businessName: project.lead.businessName,
+      }
+    : null;
 
   const fetchData = async (quiet = false) => {
     if (!quiet) setIsLoading(true);
@@ -93,11 +94,6 @@ export default function ProjectOverviewPage() {
       ]);
       if (projectData) {
         setProject(projectData);
-        if (isManagerOrAbove && projectData.leadId) {
-          leadsApi.get(projectData.leadId).then((lead: any) => {
-            if (lead) setLinkedLead({ id: lead.id, leadName: lead.leadName, businessName: lead.businessName });
-          }).catch(() => {});
-        }
       }
       if (statsRes.ok) {
         const data = await statsRes.json();
@@ -194,7 +190,7 @@ export default function ProjectOverviewPage() {
                 </p>
               </div>
             </div>
-            {isManagerOrAbove && linkedLead && (
+            {linkedLead && (
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-50 text-green-600 shrink-0">
                   <Link2 className="h-5 w-5" />

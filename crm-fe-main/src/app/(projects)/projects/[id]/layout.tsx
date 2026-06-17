@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { projectsApi } from "@/lib/projects-api";
 import { useAuth } from "@/providers/auth-provider";
+import { canManageProject } from "@/lib/projects-scope";
 import type { Project } from "@/types";
 
 const STATUS_CONFIG: Record<
@@ -58,7 +59,7 @@ export default function ProjectLayout({
 }) {
   const params = useParams();
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const id = params.id as string;
   const isDiscussionRoute = pathname.endsWith("/discussion");
 
@@ -79,13 +80,7 @@ export default function ProjectLayout({
   // 1. A global admin
   // 2. The assigned manager_id on this specific project
   // 3. Listed as project_manager in project_members for this project
-  const isGlobalAdmin = user?.role === "admin";
-  const isProjectManager =
-    project?.manager?.id === user?.id ||
-    project?.members?.some(
-      (m: any) => m.userId === user?.id && m.role === "project_manager",
-    );
-  const isManagerOrAbove = isGlobalAdmin || !!isProjectManager;
+  const isManagerOrAbove = canManageProject(project, user, can);
 
   const navItems: NavItem[] = [
     { label: "Overview", href: `/projects/${id}/overview`, icon: LayoutDashboard },
@@ -224,7 +219,8 @@ export default function ProjectLayout({
         {/* Page Content */}
         <div
           className={cn(
-            "flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col",
+            "flex-1 min-w-0 min-h-0 flex flex-col",
+            isDiscussionRoute ? "overflow-hidden" : "overflow-y-auto",
             !isDiscussionRoute && "px-4 py-4 lg:px-6",
           )}
         >

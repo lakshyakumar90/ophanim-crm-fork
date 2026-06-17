@@ -2,7 +2,7 @@ import type { Response, NextFunction } from "express";
 import { USER_ROLES, type UserRole } from "../config/constants.js";
 import { ApiError } from "../utils/responses.js";
 import { ERROR_CODES } from "../utils/error-codes.js";
-import type { AuthenticatedRequest } from "../types/api.types.js";
+import type { AuthenticatedRequest, AuthUser } from "../types/api.types.js";
 import { supabaseAdmin } from "../config/supabase.js";
 
 /**
@@ -587,6 +587,163 @@ export function requireHRAccess() {
       throw new ApiError(
         ERROR_CODES.FORBIDDEN,
         "Access restricted to HR department and administrators only",
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+const PROJECT_VIEW_PERMISSIONS = [
+  "projects:view",
+  "projects:edit",
+  "projects:create",
+  "timesheets:view",
+  "timesheets:manage",
+  "milestones:view",
+  "milestones:manage",
+] as const;
+
+/**
+ * Whether the user may access project read APIs (list, stats, detail).
+ * Scoped data is still filtered in the service layer — this only gates entry.
+ */
+export async function userCanAccessProjects(
+  authUser: AuthUser,
+): Promise<boolean> {
+  if (
+    authUser.role === USER_ROLES.ADMIN ||
+    authUser.permissions.includes("crm:admin")
+  ) {
+    return true;
+  }
+
+  if (
+    PROJECT_VIEW_PERMISSIONS.some((perm) =>
+      authUser.permissions.includes(perm),
+    )
+  ) {
+    return true;
+  }
+
+  const departmentIds = [
+    ...(authUser.departmentId ? [authUser.departmentId] : []),
+    ...(authUser.departmentIds ?? []),
+  ];
+
+  if (departmentIds.length > 0) {
+    const { data: departments } = await supabaseAdmin
+      .from("departments")
+      .select("slug")
+      .in("id", departmentIds);
+
+    if (
+      departments?.some((dept) => dept.slug === "project-management")
+    ) {
+      return true;
+    }
+  }
+
+  const [managerRes, memberRes] = await Promise.all([
+    supabaseAdmin
+      .from("projects")
+      .select("id")
+      .eq("manager_id", authUser.id)
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("project_members")
+      .select("id")
+      .eq("user_id", authUser.id)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  return !!(managerRes.data || memberRes.data);
+}
+
+/**
+ * Read access to projects for PM team members, assignees, and RBAC holders.
+ */
+export function requireProjectViewAccess() {
+  return async (
+    req: AuthenticatedRequest,
+    _res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new ApiError(ERROR_CODES.AUTH_TOKEN_MISSING);
+      }
+
+      if (await userCanAccessProjects(req.user)) {
+        return next();
+      }
+
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "Missing permission: projects:view",
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
+ * Allow assigning project members when the user has global permission
+ * or is the project manager for the target project.
+ */
+export function requireProjectMemberAssignment() {
+  return async (
+    req: AuthenticatedRequest,
+    _res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new ApiError(ERROR_CODES.AUTH_TOKEN_MISSING);
+      }
+
+      const { permissions } = req.user;
+      if (
+        req.user.role === USER_ROLES.ADMIN ||
+        permissions.includes("crm:admin") ||
+        permissions.includes("projects:assign_member")
+      ) {
+        return next();
+      }
+
+      const projectId = req.params.id as string;
+      if (!projectId) {
+        throw new ApiError(ERROR_CODES.FORBIDDEN, "Missing project id");
+      }
+
+      const { data: project } = await supabaseAdmin
+        .from("projects")
+        .select("manager_id")
+        .eq("id", projectId)
+        .single();
+
+      if (project?.manager_id === req.user.id) {
+        return next();
+      }
+
+      const { data: member } = await supabaseAdmin
+        .from("project_members")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("user_id", req.user.id)
+        .eq("role", "project_manager")
+        .maybeSingle();
+
+      if (member) {
+        return next();
+      }
+
+      throw new ApiError(
+        ERROR_CODES.FORBIDDEN,
+        "Missing permission: projects:assign_member",
       );
     } catch (error) {
       next(error);

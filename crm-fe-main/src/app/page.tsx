@@ -31,7 +31,11 @@ export default function RootPage() {
 
     // Employees and Managers with departments go to their department dashboard
     if (user.departmentSlug) {
-      router.replace(`/${user.departmentSlug}`);
+      const target =
+        user.departmentSlug === "project-management"
+          ? "/projects"
+          : `/${user.departmentSlug}`;
+      router.replace(target);
       return;
     }
 

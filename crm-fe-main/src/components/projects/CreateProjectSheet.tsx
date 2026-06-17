@@ -217,13 +217,23 @@ function CreateProjectFormBody({
     setLoading(true);
     try {
       const teamMembers: { userId: string; role: string }[] = [];
-      data.developers?.forEach((id) => teamMembers.push({ userId: id, role: "Developer" }));
-      data.seoSpecialists?.forEach((id) => teamMembers.push({ userId: id, role: "SEO Specialist" }));
-      data.contentWriters?.forEach((id) => teamMembers.push({ userId: id, role: "Content Writer" }));
-      data.designers?.forEach((id) => teamMembers.push({ userId: id, role: "Designer" }));
+      data.developers?.forEach((id) => teamMembers.push({ userId: id, role: "developer" }));
+      data.seoSpecialists?.forEach((id) => teamMembers.push({ userId: id, role: "seo_specialist" }));
+      data.contentWriters?.forEach((id) => teamMembers.push({ userId: id, role: "content_writer" }));
+      data.designers?.forEach((id) => teamMembers.push({ userId: id, role: "designer" }));
 
       const leadId = data.leadId === "none" ? undefined : data.leadId;
-      await projectsApi.create({ ...data, leadId, teamMembers });
+      await projectsApi.create({
+        name: data.name,
+        description: data.description,
+        clientName: data.clientName,
+        leadId,
+        managerId: data.managerId,
+        priority: data.priority,
+        startDate: data.startDate?.toISOString(),
+        endDate: data.endDate?.toISOString(),
+        teamMembers,
+      });
 
       toast.success("Project created successfully");
       form.reset();
@@ -279,7 +289,20 @@ function CreateProjectFormBody({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Customer (Won Lead)</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    if (value === "none") return;
+                    const lead = wonLeads.find((l) => l.id === value);
+                    if (lead) {
+                      form.setValue(
+                        "clientName",
+                        lead.businessName || lead.leadName || "",
+                      );
+                    }
+                  }}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Link to a customer" />

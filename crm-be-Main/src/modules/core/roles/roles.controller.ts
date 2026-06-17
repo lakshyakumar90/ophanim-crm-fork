@@ -10,6 +10,7 @@ import { ERROR_CODES } from "../../../utils/error-codes.js";
 import { supabaseAdmin } from "../../../config/supabase.js";
 import { ALL_PERMISSION_KEYS } from "../../../lib/permissions.js";
 import { slugToJobTitle } from "../../../utils/job-title.utils.js";
+import { ensurePmSpecialistRoles } from "./roles.seed.js";
 
 function slugify(name: string): string {
   return name
@@ -37,6 +38,8 @@ export const listRoles = async (
   next: NextFunction,
 ) => {
   try {
+
+    await ensurePmSpecialistRoles();
 
     const { data, error } = await supabaseAdmin
       .from("roles")

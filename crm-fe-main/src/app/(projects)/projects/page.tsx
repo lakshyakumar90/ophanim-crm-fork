@@ -64,14 +64,21 @@ export default function ProjectsPage() {
   const fetchProjects = async () => {
     setIsLoading(true);
     try {
-      const [projectsData, statsData] = await Promise.all([
+      const [projectsResult, statsResult] = await Promise.allSettled([
         projectsApi.list(),
         projectsApi.getStats(),
       ]);
 
-      setProjects(Array.isArray(projectsData) ? projectsData : []);
-      if (statsData) {
-        setStats(statsData);
+      if (projectsResult.status === "fulfilled") {
+        const projectsData = projectsResult.value;
+        setProjects(Array.isArray(projectsData) ? projectsData : []);
+      } else {
+        console.error("Failed to fetch projects", projectsResult.reason);
+        setProjects([]);
+      }
+
+      if (statsResult.status === "fulfilled" && statsResult.value) {
+        setStats(statsResult.value);
       }
 
       // Fetch idle projects only for admin

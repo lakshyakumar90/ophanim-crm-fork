@@ -143,9 +143,12 @@ export const removeMember = async (
   next: NextFunction,
 ) => {
   try {
+    const role =
+      typeof req.query.role === "string" ? req.query.role : undefined;
     await removeProjectMember(
       req.params.id as string,
       req.params.userId as string,
+      role,
     );
     sendSuccess(res, null);
   } catch (error) {

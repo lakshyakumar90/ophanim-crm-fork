@@ -3,13 +3,14 @@ import { authenticate } from "../../../middleware/auth.middleware.js";
 import {
   requirePermission,
   excludeDepartment,
+  requireProjectViewAccess,
 } from "../../../middleware/authorization.middleware.js";
 import { asyncHandler } from "../../../middleware/error.middleware.js";
 import * as sprintsController from "./sprints.controller.js";
 
 const router: RouterType = Router({ mergeParams: true });
 
-const viewProjects = requirePermission("projects:view") as RequestHandler;
+const viewProjects = requireProjectViewAccess() as RequestHandler;
 const editProjects = requirePermission("projects:edit") as RequestHandler;
 
 router.use(authenticate as any);

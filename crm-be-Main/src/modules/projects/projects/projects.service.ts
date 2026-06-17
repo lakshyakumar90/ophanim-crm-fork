@@ -56,6 +56,14 @@ export interface ProjectRecord {
   description: string | null;
   clientName: string | null;
   leadId: string | null;
+  lead?: {
+    id: string;
+    leadName: string;
+    businessName: string | null;
+    status: string | null;
+    email: string | null;
+    phone: string | null;
+  };
   managerId: string;
   status: "planned" | "in_progress" | "on_hold" | "completed" | "cancelled";
   priority: "low" | "medium" | "high";
@@ -110,7 +118,7 @@ function mapProjectMemberRow(
 }
 
 function mapProjectRow(
-  row: ProjectRow & { manager?: any; members?: any[] },
+  row: ProjectRow & { manager?: any; members?: any[]; lead?: any },
 ): ProjectRecord {
   return {
     id: row.id,
@@ -118,6 +126,16 @@ function mapProjectRow(
     description: row.description,
     clientName: row.client_name,
     leadId: row.lead_id,
+    lead: row.lead
+      ? {
+          id: row.lead.id,
+          leadName: row.lead.lead_name,
+          businessName: row.lead.business_name,
+          status: row.lead.status,
+          email: row.lead.email,
+          phone: row.lead.phone,
+        }
+      : undefined,
     managerId: row.manager_id,
     status: row.status,
     priority: row.priority,
@@ -241,6 +259,7 @@ export async function getProjectById(
       `
       *,
       manager:users!manager_id(id, full_name, email, avatar_url),
+      lead:leads!lead_id(id, lead_name, business_name, status, email, phone),
       members:project_members(
         *,
         user:users(id, full_name, email, avatar_url)
@@ -505,12 +524,19 @@ export async function addProjectMember(input: {
 export async function removeProjectMember(
   projectId: string,
   userId: string,
+  role?: string,
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("project_members")
     .delete()
     .eq("project_id", projectId)
     .eq("user_id", userId);
+
+  if (role) {
+    query = query.eq("role", role);
+  }
+
+  const { error } = await query;
 
   if (error) {
     throw new ApiError(ERROR_CODES.DATABASE_ERROR, error.message);
@@ -946,7 +972,7 @@ export async function getProjectResources(_authUser: AuthUser): Promise<{
       .eq("is_active", true),
     supabaseAdmin
       .from("user_resolved_permissions" as any)
-      .select("user_id, role_names"),
+      .select("user_id, role_names, permissions"),
     supabaseAdmin
       .from("project_members")
       .select(
@@ -1001,9 +1027,16 @@ export async function getProjectResources(_authUser: AuthUser): Promise<{
   }
 
   const rbacRoleNames = new Map<string, string[]>();
+  const projectPermissions = new Map<string, string[]>();
   for (const row of (rbacRes.data || []) as any[]) {
     rbacRoleNames.set(row.user_id, row.role_names || []);
+    projectPermissions.set(row.user_id, row.permissions || []);
   }
+
+  const hasProjectPermission = (userId: string) => {
+    const perms = projectPermissions.get(userId) || [];
+    return perms.some((p: string) => p.startsWith("projects:"));
+  };
 
   const hasRbacRole = (userId: string, roleName: string) =>
     (rbacRoleNames.get(userId) || []).some(
@@ -1026,34 +1059,38 @@ export async function getProjectResources(_authUser: AuthUser): Promise<{
     };
   };
 
+  const eligibleUsers = allUsers.filter(
+    (u: any) => u.role === "admin" || hasProjectPermission(u.id),
+  );
+
   return {
-    developers: allUsers
+    developers: eligibleUsers
       .filter(
         (u: any) =>
           u.job_title === "developer" || hasRbacRole(u.id, "Developer"),
       )
       .map(enrichUser),
-    designers: allUsers
+    designers: eligibleUsers
       .filter(
         (u: any) =>
           u.job_title === "designer" || hasRbacRole(u.id, "Designer"),
       )
       .map(enrichUser),
-    seoSpecialists: allUsers
+    seoSpecialists: eligibleUsers
       .filter(
         (u: any) =>
           u.job_title === "seo_specialist" ||
           hasRbacRole(u.id, "SEO Specialist"),
       )
       .map(enrichUser),
-    contentWriters: allUsers
+    contentWriters: eligibleUsers
       .filter(
         (u: any) =>
           u.job_title === "content_writer" ||
           hasRbacRole(u.id, "Content Writer"),
       )
       .map(enrichUser),
-    projectManagers: allUsers
+    projectManagers: eligibleUsers
       .filter(
         (u: any) =>
           u.job_title === "project_manager" ||

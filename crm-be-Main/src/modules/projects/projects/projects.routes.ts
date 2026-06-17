@@ -7,8 +7,9 @@ import multer from "multer";
 import { authenticate } from "../../../middleware/auth.middleware.js";
 import {
   requirePermission,
-  requireAnyPermission,
   excludeDepartment,
+  requireProjectMemberAssignment,
+  requireProjectViewAccess,
 } from "../../../middleware/authorization.middleware.js";
 import { asyncHandler } from "../../../middleware/error.middleware.js";
 import * as projectController from "./projects.controller.js";
@@ -27,16 +28,12 @@ const upload = multer({
   },
 });
 
-const viewProjects = requirePermission("projects:view") as RequestHandler;
+const viewProjects = requireProjectViewAccess() as RequestHandler;
 const createProjects = requirePermission("projects:create") as RequestHandler;
 const editProjects = requirePermission("projects:edit") as RequestHandler;
 const closeProjects = requirePermission("projects:close") as RequestHandler;
-const assignMembers = requirePermission("projects:assign_member") as RequestHandler;
-const viewOrEdit = requireAnyPermission([
-  "projects:view",
-  "projects:edit",
-  "projects:create",
-]) as RequestHandler;
+const assignMembers = requireProjectMemberAssignment() as RequestHandler;
+const participateInProjects = requireProjectViewAccess() as RequestHandler;
 
 router.use(authenticate as any);
 router.use(excludeDepartment("sales", "finance") as any);
@@ -96,9 +93,9 @@ router.delete(
 
 router.get("/:id/notes", viewProjects, asyncHandler(projectController.getProjectNotes) as RequestHandler);
 
-router.post("/:id/notes", viewOrEdit, asyncHandler(projectController.createProjectNote) as RequestHandler);
+router.post("/:id/notes", participateInProjects, asyncHandler(projectController.createProjectNote) as RequestHandler);
 
-router.put("/:id/notes/:noteId", viewOrEdit, asyncHandler(projectController.updateProjectNote) as RequestHandler);
+router.put("/:id/notes/:noteId", participateInProjects, asyncHandler(projectController.updateProjectNote) as RequestHandler);
 
 router.post(
   "/:id/notes/:noteId/pin",
@@ -116,7 +113,7 @@ router.get("/:id/files", viewProjects, asyncHandler(projectController.getProject
 
 router.post(
   "/:id/files",
-  editProjects,
+  participateInProjects,
   upload.single("file") as RequestHandler,
   asyncHandler(projectController.uploadProjectFile) as RequestHandler,
 );

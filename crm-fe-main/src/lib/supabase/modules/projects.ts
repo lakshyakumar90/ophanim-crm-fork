@@ -28,6 +28,7 @@ export async function getProjectById(id: string) {
     .from("projects")
     .select(
       `*, manager:users!manager_id(id, full_name, avatar_url, email),
+       lead:leads!lead_id(id, lead_name, business_name, status, email, phone),
        members:project_members(id, user_id, role, allocation_percentage,
          user:users!user_id(id, full_name, avatar_url, job_title, email))`,
     )

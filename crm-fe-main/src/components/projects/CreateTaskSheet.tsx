@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { projectsApi } from "@/lib/projects-api";
 import useSWR from "swr";
 import { getTodayIST } from "@/lib/date-utils";
 import { useAuth, useIsManager, useIsAdmin } from "@/providers/auth-provider";
+import { getProjectMemberAssignees, type ProjectAssignee } from "@/lib/projects-scope";
 import type { Project } from "@/types";
 import { FormSideSheet } from "@/components/ui/form-side-sheet";
 import { Button } from "@/components/ui/button";
@@ -65,10 +66,18 @@ function CreateTaskFormBody({
   const isManager = useIsManager();
   const isAdmin = useIsAdmin();
 
-  const { data: usersData, isLoading: loadingUsers } = useSWR("users-list", () =>
-    usersApi.list(),
+  const projectId = fixedProjectId || selectedProjectId;
+
+  const { data: usersData, isLoading: loadingUsers } = useSWR(
+    !projectId && (isManager || isAdmin) ? "users-list" : null,
+    () => usersApi.list(),
   );
   const users = usersData?.data || [];
+
+  const { data: projectData, isLoading: loadingProject } = useSWR(
+    projectId ? ["project", projectId, "assignees"] : null,
+    () => projectsApi.get(projectId!),
+  );
 
   const { data: projectsData, isLoading: loadingProjects } = useSWR(
     !fixedProjectId ? "projects-list-for-task" : null,
@@ -76,7 +85,18 @@ function CreateTaskFormBody({
   );
   const projects: Project[] = Array.isArray(projectsData) ? projectsData : [];
 
-  const projectId = fixedProjectId || selectedProjectId;
+  const assignableUsers = useMemo((): ProjectAssignee[] => {
+    if (projectId && projectData) {
+      return getProjectMemberAssignees(projectData);
+    }
+    return (users as ProjectAssignee[]).map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+    }));
+  }, [projectId, projectData, users]);
+
+  const loadingAssignees = projectId ? loadingProject : loadingUsers;
+  const canPickAssignee = isAdmin || isManager || Boolean(projectId);
 
   const {
     register,
@@ -107,7 +127,7 @@ function CreateTaskFormBody({
       await tasksApi.create({
         ...data,
         dueDate: buildDueDateISO(),
-        assignedTo: isManager || isAdmin ? data.assignedTo : user?.id,
+        assignedTo: canPickAssignee ? data.assignedTo : user?.id,
         ...(projectId ? { projectId, taskType: "project_related" } : {}),
       });
       toast.success("Task created successfully");
@@ -166,28 +186,32 @@ function CreateTaskFormBody({
         </div>
       )}
 
-      {(isAdmin || isManager) && (
+      {canPickAssignee && (
         <div className="space-y-2">
           <Label>Assign To</Label>
           <Select
             defaultValue={user?.id}
             onValueChange={(v) => setValue("assignedTo", v)}
-            disabled={loadingUsers}
+            disabled={loadingAssignees}
           >
             <SelectTrigger>
-              <SelectValue placeholder={loadingUsers ? "Loading..." : "Select assignee"} />
+              <SelectValue
+                placeholder={
+                  loadingAssignees
+                    ? "Loading..."
+                    : projectId
+                      ? "Select project member"
+                      : "Select assignee"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
-              {user && (
-                <SelectItem value={user.id}>{user.fullName} (Me)</SelectItem>
-              )}
-              {users
-                .filter((u: any) => u.id !== user?.id)
-                .map((u: any) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.fullName}
-                  </SelectItem>
-                ))}
+              {assignableUsers.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.fullName}
+                  {u.id === user?.id ? " (Me)" : ""}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

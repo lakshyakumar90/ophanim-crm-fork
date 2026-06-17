@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import { tasksApi, usersApi, projectsApi } from "@/lib/api";
 import useSWR from "swr";
 import { getTodayIST } from "@/lib/date-utils";
 import { useAuth, useIsManager, useIsAdmin } from "@/providers/auth-provider";
+import { getProjectMemberAssignees } from "@/lib/projects-scope";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +33,7 @@ const taskSchema = z.object({
   taskType: z.string().optional(),
   reminderBeforeMinutes: z.number().optional().nullable(),
   projectId: z.string().optional().nullable(),
+  sprintId: z.string().optional().nullable(),
 });
 
 type TaskFormData = z.infer<typeof taskSchema>;
@@ -67,20 +69,6 @@ function CreateProjectTaskFormBody({
   const [dueMinute, setDueMinute] = useState("00");
   const [duePeriod, setDuePeriod] = useState<"AM" | "PM">("AM");
 
-  // Data Fetching - only fetch users for managers/admins who can assign to others
-  const { data: usersData, isLoading: loadingUsers } = useSWR(
-    (isManager || isAdmin) ? "users-list" : null,
-    () => usersApi.list(),
-  );
-
-  const { data: projectsData } = useSWR("projects-list", () =>
-    projectsApi.list(),
-  );
-
-  // Handle nested data logic
-  const users = usersData?.data || [];
-  const projects = Array.isArray(projectsData) ? projectsData : [];
-
   const {
     register,
     handleSubmit,
@@ -97,6 +85,51 @@ function CreateProjectTaskFormBody({
       projectId: defaultProjectId,
     },
   });
+
+  // Data Fetching
+  const { data: usersData, isLoading: loadingUsers } = useSWR(
+    isManager || isAdmin ? "users-list" : null,
+    () => usersApi.list(),
+  );
+
+  const { data: projectsData } = useSWR("projects-list", () =>
+    projectsApi.list(),
+  );
+
+  const selectedProjectId = watch("projectId") || defaultProjectId;
+
+  const { data: projectData, isLoading: loadingProject } = useSWR(
+    selectedProjectId ? ["project", selectedProjectId, "assignees"] : null,
+    () => projectsApi.get(selectedProjectId as string),
+  );
+
+  const { data: sprintsData } = useSWR(
+    selectedProjectId ? ["sprints", selectedProjectId] : null,
+    () => projectsApi.listSprints(selectedProjectId as string),
+  );
+
+  const users = usersData?.data || [];
+  const projects = Array.isArray(projectsData) ? projectsData : [];
+  const sprints = Array.isArray(sprintsData)
+    ? sprintsData
+    : (sprintsData as any)?.data ?? [];
+
+  const assignableUsers = useMemo(() => {
+    if (selectedProjectId && projectData) {
+      return getProjectMemberAssignees(projectData);
+    }
+    if (isManager || isAdmin) {
+      return (users as { id: string; fullName: string }[]).map((u) => ({
+        id: u.id,
+        fullName: u.fullName,
+      }));
+    }
+    return [];
+  }, [selectedProjectId, projectData, users, isManager, isAdmin]);
+
+  const loadingAssignees = selectedProjectId ? loadingProject : loadingUsers;
+  const canPickAssignee =
+    isAdmin || isManager || Boolean(selectedProjectId || defaultProjectId);
 
   // Build due date ISO string
   const buildDueDateISO = (): string | undefined => {
@@ -115,8 +148,9 @@ function CreateProjectTaskFormBody({
       await tasksApi.create({
         ...data,
         dueDate: buildDueDateISO(),
-        assignedTo: isManager || isAdmin ? data.assignedTo : user?.id,
-        projectId: data.projectId || undefined,
+        assignedTo: canPickAssignee ? data.assignedTo : user?.id,
+        projectId: data.projectId || defaultProjectId || undefined,
+        sprintId: data.sprintId && data.sprintId !== "none" ? data.sprintId : undefined,
         taskType: "project_related",
       });
       toast.success("Task created successfully");
@@ -146,35 +180,29 @@ function CreateProjectTaskFormBody({
               )}
             </div>
 
-            {/* Assign To - Only for managers and admins; employees can only assign to self */}
-            {(isManager || isAdmin) && (
+            {/* Assign To */}
+            {canPickAssignee && (
             <div className="space-y-2">
               <Label htmlFor="assignedTo">Assign To</Label>
               <Select
                 defaultValue={user?.id}
                 onValueChange={(v) => setValue("assignedTo", v)}
-                disabled={loadingUsers}
+                disabled={loadingAssignees}
               >
                 <SelectTrigger>
                   <SelectValue
                     placeholder={
-                      loadingUsers ? "Loading..." : "Select assignee"
+                      loadingAssignees ? "Loading..." : "Select assignee"
                     }
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {user && (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.fullName} (Me)
+                  {assignableUsers.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.fullName}
+                      {u.id === user?.id ? " (Me)" : ""}
                     </SelectItem>
-                  )}
-                  {users
-                    ?.filter((u: any) => u.id !== user?.id)
-                    .map((u: any) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.fullName}
-                      </SelectItem>
-                    ))}
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -201,35 +229,24 @@ function CreateProjectTaskFormBody({
               </Select>
             </div>
 
-            {/* Assign To - Only admins and managers can assign to others; employees assign to self only */}
-            {(isManager || isAdmin) && (
+            {(selectedProjectId || defaultProjectId) && sprints.length > 0 && (
               <div className="space-y-2">
-                <Label htmlFor="assignedTo">Assign To</Label>
+                <Label htmlFor="sprintId">Sprint (optional)</Label>
                 <Select
-                  defaultValue={user?.id}
-                  onValueChange={(v) => setValue("assignedTo", v)}
-                  disabled={loadingUsers}
+                  onValueChange={(v) =>
+                    setValue("sprintId", v === "none" ? null : v)
+                  }
                 >
                   <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        loadingUsers ? "Loading..." : "Select assignee"
-                      }
-                    />
+                    <SelectValue placeholder="No sprint" />
                   </SelectTrigger>
                   <SelectContent>
-                    {user && (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.fullName} (Me)
+                    <SelectItem value="none">No sprint</SelectItem>
+                    {sprints.map((sprint: any) => (
+                      <SelectItem key={sprint.id} value={sprint.id}>
+                        {sprint.name}
                       </SelectItem>
-                    )}
-                    {users
-                      ?.filter((u: any) => u.id !== user?.id)
-                      .map((u: any) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.fullName}
-                        </SelectItem>
-                      ))}
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

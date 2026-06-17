@@ -26,6 +26,7 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  Upload,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -47,6 +48,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { isProjectManagerFor } from "@/lib/projects-scope";
 
 interface Note {
   id: string;
@@ -248,6 +250,8 @@ export function ProjectNotes({
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [filePickerTarget, setFilePickerTarget] = useState<"new" | string>("new");
 
   // Mention picker
@@ -398,8 +402,8 @@ export function ProjectNotes({
     setShowScrollBtn(distFromBottom > 150);
   };
 
-  const loadProjectFiles = async () => {
-    if (projectFiles.length > 0) return;
+  const loadProjectFiles = async (force = false) => {
+    if (!force && projectFiles.length > 0) return;
     setLoadingFiles(true);
     try {
       const token = localStorage.getItem("crm_access_token");
@@ -417,16 +421,53 @@ export function ProjectNotes({
     }
   };
 
-  const openFilePicker = async (target: "new" | string) => {
-    setFilePickerTarget(target);
-    setShowFilePicker(true);
-    await loadProjectFiles();
-  };
-
   const insertFileRef = (file: ProjectFile) => {
     const ref = `\n📎 [${file.name}](file:${file.id})`;
     setNewNote((prev) => prev + ref);
     setShowFilePicker(false);
+  };
+
+  const handleDiscussionFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setUploadingFile(true);
+    try {
+      const token = localStorage.getItem("crm_access_token");
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API_URL}/projects/${projectId}/files`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err?.error?.message || err?.error || "Upload failed");
+        return;
+      }
+
+      const data = await res.json();
+      const uploaded = data.data as ProjectFile;
+      setProjectFiles((prev) => [uploaded, ...prev]);
+      insertFileRef(uploaded);
+      toast.success("File uploaded and attached");
+    } catch {
+      toast.error("Failed to upload file");
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const openFilePicker = async (target: "new" | string) => {
+    setFilePickerTarget(target);
+    setShowFilePicker(true);
+    await loadProjectFiles(true);
   };
 
   const openMentionPicker = (target: "new" | string) => {
@@ -513,9 +554,9 @@ export function ProjectNotes({
   const isOwnMessage = (note: Note) => note.userId === user?.id;
   const isProjectManagerOrAdmin =
     user?.role === "admin" ||
-    user?.role === "manager";
+    isProjectManagerFor(projectData?.data, user?.id);
 
-  const canPin = (note: Note) => isProjectManagerOrAdmin;
+  const canPin = (_note?: Note) => isProjectManagerOrAdmin;
 
   // Group notes by day for date dividers
   const pinnedNotes = notes.filter((n) => n.isPinned);
@@ -833,6 +874,32 @@ export function ProjectNotes({
               Attach a Project File
             </DialogTitle>
           </DialogHeader>
+          <div className="flex items-center justify-between gap-2 pb-2">
+            <p className="text-xs text-muted-foreground">
+              Upload a new file or attach an existing one
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 shrink-0"
+              disabled={uploadingFile}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploadingFile ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5" />
+              )}
+              Upload
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleDiscussionFileUpload}
+            />
+          </div>
           <div className="space-y-2 max-h-[320px] overflow-y-auto">
             {loadingFiles ? (
               <div className="flex justify-center py-8">
@@ -842,7 +909,7 @@ export function ProjectNotes({
               <div className="text-center py-8 text-muted-foreground">
                 <File className="h-8 w-8 mx-auto mb-2 opacity-20" />
                 <p className="text-sm">No files uploaded yet.</p>
-                <p className="text-xs mt-1">Upload files in the Files tab first.</p>
+                <p className="text-xs mt-1">Use Upload above to add a file.</p>
               </div>
             ) : (
               projectFiles.map((file) => (

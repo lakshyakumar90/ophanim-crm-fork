@@ -13,7 +13,8 @@
     "test:integration": "vitest run tests/integration",
     "test:db": "vitest run tests/db",
     "test:watch": "vitest",
-    "migrate:053": "node scripts/apply-migration-053.js"
+    "migrate:053": "node scripts/apply-migration-053.js",
+    "seed:pm-roles": "tsc && node scripts/seed-pm-roles.mjs"
   },
   "keywords": [
     "crm",

@@ -20,6 +20,14 @@ export const createProjectSchema = z.object({
   priority: projectPriorityEnum.default("medium"),
   startDate: z.string().datetime().optional().nullable(),
   endDate: z.string().datetime().optional().nullable(),
+  teamMembers: z
+    .array(
+      z.object({
+        userId: z.string().uuid(),
+        role: z.string().min(1),
+      }),
+    )
+    .optional(),
 });
 
 // Update Project

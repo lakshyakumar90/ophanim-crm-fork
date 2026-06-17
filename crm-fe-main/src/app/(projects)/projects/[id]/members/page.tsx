@@ -45,6 +45,7 @@ import { toast } from "sonner";
 import type { Project } from "@/types";
 import { projectsApi } from "@/lib/projects-api";
 import { useAuth } from "@/providers/auth-provider";
+import { canAssignProjectMembers } from "@/lib/projects-scope";
 import { useHeaderRefresh } from "@/hooks/layout/useHeaderRefresh";
 
 function getRoleBadgeColor(role: string): string {
@@ -85,11 +86,14 @@ function getRoleLabel(role: string): string {
 export default function ProjectResourcesPage() {
   const params = useParams();
   const id = params.id as string;
-  const { user } = useAuth();
+  const { user, can } = useAuth();
 
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<{
+    userId: string;
+    role: string;
+  } | null>(null);
   const [removing, setRemoving] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
 
@@ -111,26 +115,24 @@ export default function ProjectResourcesPage() {
 
   useHeaderRefresh({ onRefresh: () => fetchProject(true), isRefreshing: isLoading });
 
-  const isGlobalAdmin = user?.role === "admin";
-  const isProjectManager =
-    project?.manager?.id === user?.id ||
-    project?.members?.some(
-      (m: any) => (m.userId || m.user?.id) === user?.id && m.role === "project_manager",
-    );
-  const isManagerOrAbove = isGlobalAdmin || !!isProjectManager;
+  const canManageMembers = canAssignProjectMembers(project, user, can);
 
   const confirmRemove = async () => {
-    if (!pendingRemoveId) return;
+    if (!pendingRemove) return;
     setRemoving(true);
     try {
-      await projectsApi.removeMember(id, pendingRemoveId);
+      await projectsApi.removeMember(
+        id,
+        pendingRemove.userId,
+        pendingRemove.role,
+      );
       toast.success("Member removed from project");
       fetchProject(true);
     } catch {
       toast.error("Failed to remove member");
     } finally {
       setRemoving(false);
-      setPendingRemoveId(null);
+      setPendingRemove(null);
     }
   };
 
@@ -193,9 +195,11 @@ export default function ProjectResourcesPage() {
   const totalMembers = memberGroups.reduce((sum, g) => sum + g.data.length, 0);
 
   // Find the member being removed for the confirmation dialog
-  const removingMember = pendingRemoveId
+  const removingMember = pendingRemove
     ? [...allMembers, ...(managerEntry ? [managerEntry] : [])].find(
-        (m) => (m.user?.id || m.userId) === pendingRemoveId,
+        (m) =>
+          (m.user?.id || m.userId) === pendingRemove.userId &&
+          m.role === pendingRemove.role,
       )
     : null;
 
@@ -209,7 +213,7 @@ export default function ProjectResourcesPage() {
               {totalMembers} member{totalMembers !== 1 ? "s" : ""} on this project
             </CardDescription>
           </div>
-          {isManagerOrAbove && (
+          {canManageMembers && (
             <>
               <Button size="sm" className="gap-1" onClick={() => setAddMemberOpen(true)}>
                 <Plus className="h-4 w-4" /> Add Member
@@ -228,7 +232,7 @@ export default function ProjectResourcesPage() {
             <div className="text-center py-12 text-muted-foreground">
               <Users className="h-10 w-10 mx-auto mb-3 opacity-20" />
               <p>No team members assigned yet.</p>
-              {isManagerOrAbove && (
+              {canManageMembers && (
                 <p className="text-xs mt-1">Use &quot;Add Member&quot; to get started.</p>
               )}
             </div>
@@ -251,7 +255,7 @@ export default function ProjectResourcesPage() {
                         <TableHead className="w-[240px]">Member</TableHead>
                         <TableHead>Project Role</TableHead>
                         <TableHead className="w-[100px]">Allocation</TableHead>
-                        {isManagerOrAbove && (
+                        {canManageMembers && (
                           <TableHead className="w-[60px] text-right">Actions</TableHead>
                         )}
                       </TableRow>
@@ -259,7 +263,7 @@ export default function ProjectResourcesPage() {
                     <TableBody>
                       {group.data.map((member: any) => {
                         const userId = member.user?.id || member.userId;
-                        const canRemove = isManagerOrAbove && userId && !member.isPrimaryManager;
+                        const canRemove = canManageMembers && userId && !member.isPrimaryManager;
                         return (
                           <TableRow key={member.id || userId}>
                             <TableCell>
@@ -293,14 +297,19 @@ export default function ProjectResourcesPage() {
                                 {member.allocationPercentage ?? 100}%
                               </span>
                             </TableCell>
-                            {isManagerOrAbove && (
+                            {canManageMembers && (
                               <TableCell className="text-right">
                                 {canRemove ? (
                                   <Button
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 text-muted-foreground hover:text-red-600"
-                                    onClick={() => setPendingRemoveId(userId)}
+                                    onClick={() =>
+                                      setPendingRemove({
+                                        userId,
+                                        role: member.role,
+                                      })
+                                    }
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
@@ -321,8 +330,8 @@ export default function ProjectResourcesPage() {
 
       {/* Remove member confirmation dialog */}
       <AlertDialog
-        open={!!pendingRemoveId}
-        onOpenChange={(open) => { if (!open) setPendingRemoveId(null); }}
+        open={!!pendingRemove}
+        onOpenChange={(open) => !open && setPendingRemove(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>

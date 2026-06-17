@@ -23,6 +23,7 @@ export const createTaskSchema = z.object({
     .default("general"),
   relatedLeadId: z.string().uuid().optional().nullable(),
   projectId: z.string().uuid().optional().nullable(),
+  sprintId: z.string().uuid().optional().nullable(),
   relatedTeamId: z.string().uuid().optional().nullable(),
   relatedUserId: z.string().uuid().optional().nullable(),
   assignedTo: z.string().uuid("Invalid assigned user ID").optional(), // Optional - defaults to self
@@ -42,6 +43,7 @@ export const updateTaskSchema = z.object({
   dueDate: z.string().datetime().optional().nullable(),
   tags: z.array(z.string()).optional().nullable(),
   projectId: z.string().uuid().optional().nullable(),
+  sprintId: z.string().uuid().optional().nullable(),
   relatedTeamId: z.string().uuid().optional().nullable(),
   relatedUserId: z.string().uuid().optional().nullable(),
 });

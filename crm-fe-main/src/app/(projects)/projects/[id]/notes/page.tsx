@@ -18,6 +18,7 @@ import {
   FileImage,
   Loader2,
   Plus,
+  Upload,
   X,
 } from "lucide-react";
 import {
@@ -145,8 +146,10 @@ function PrivateNotes({ projectId }: { projectId: string }) {
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchNotes = async () => {
     try {
@@ -169,8 +172,8 @@ function PrivateNotes({ projectId }: { projectId: string }) {
     if (user) fetchNotes();
   }, [projectId, user]);
 
-  const loadProjectFiles = async () => {
-    if (projectFiles.length > 0) return;
+  const loadProjectFiles = async (force = false) => {
+    if (!force && projectFiles.length > 0) return;
     setLoadingFiles(true);
     try {
       const token = localStorage.getItem("crm_access_token");
@@ -190,7 +193,7 @@ function PrivateNotes({ projectId }: { projectId: string }) {
 
   const openFilePicker = async () => {
     setShowFilePicker(true);
-    await loadProjectFiles();
+    await loadProjectFiles(true);
   };
 
   const insertFileRef = (file: ProjectFile) => {
@@ -198,6 +201,41 @@ function PrivateNotes({ projectId }: { projectId: string }) {
     setNewNote((prev) => prev + ref);
     setShowFilePicker(false);
     textareaRef.current?.focus();
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setUploadingFile(true);
+    try {
+      const token = localStorage.getItem("crm_access_token");
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API_URL}/projects/${projectId}/files`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err?.error?.message || err?.error || "Upload failed");
+        return;
+      }
+
+      const data = await res.json();
+      const uploaded = data.data as ProjectFile;
+      setProjectFiles((prev) => [uploaded, ...prev]);
+      insertFileRef(uploaded);
+      toast.success("File uploaded and attached");
+    } catch {
+      toast.error("Failed to upload file");
+    } finally {
+      setUploadingFile(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -342,6 +380,32 @@ function PrivateNotes({ projectId }: { projectId: string }) {
               Attach a Project File
             </DialogTitle>
           </DialogHeader>
+          <div className="flex items-center justify-between gap-2 pb-2">
+            <p className="text-xs text-muted-foreground">
+              Upload a new file or attach an existing one
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 shrink-0"
+              disabled={uploadingFile}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploadingFile ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5" />
+              )}
+              Upload
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+          </div>
           <div className="space-y-2 max-h-[300px] overflow-y-auto">
             {loadingFiles ? (
               <div className="flex justify-center py-8">
@@ -351,6 +415,7 @@ function PrivateNotes({ projectId }: { projectId: string }) {
               <div className="text-center py-8 text-muted-foreground">
                 <File className="h-8 w-8 mx-auto mb-2 opacity-20" />
                 <p className="text-sm">No files uploaded yet.</p>
+                <p className="text-xs mt-1">Use Upload above to add a file.</p>
               </div>
             ) : (
               projectFiles.map((file) => (

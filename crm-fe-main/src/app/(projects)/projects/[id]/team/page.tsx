@@ -6,5 +6,5 @@ export default async function LegacyTeamPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  redirect(`/projects/${id}/resources`);
+  redirect(`/projects/${id}/members`);
 }

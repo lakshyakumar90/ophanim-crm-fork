@@ -41,7 +41,7 @@ export default function ProjectsLayout({
   return (
     <AppShell>
       <StartupAlertsDialog />
-      <div className={cn("h-full", !isProjectDetail && "p-4 lg:p-6")}>{children}</div>
+      <div className={cn("h-full min-h-0", !isProjectDetail && "p-4 lg:p-6")}>{children}</div>
     </AppShell>
   );
 }

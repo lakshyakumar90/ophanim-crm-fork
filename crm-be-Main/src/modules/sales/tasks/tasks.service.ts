@@ -30,6 +30,7 @@ interface TaskRecord {
   taskType: string;
   relatedLeadId: string | null;
   projectId: string | null;
+  sprintId: string | null;
   relatedTeamId: string | null; // Added
   relatedUserId: string | null; // Added
   departmentId: string | null;
@@ -63,6 +64,7 @@ interface TaskRow {
   task_type: string;
   related_lead_id: string | null;
   project_id: string | null;
+  sprint_id: string | null;
   related_team_id: string | null; // Added
   related_user_id: string | null; // Added
   department_id: string | null;
@@ -91,6 +93,7 @@ function mapTaskRowToRecord(data: TaskRow): TaskRecord {
     taskType: data.task_type,
     relatedLeadId: data.related_lead_id,
     projectId: data.project_id,
+    sprintId: (data as any).sprint_id ?? null,
     relatedTeamId: data.related_team_id, // Map
     relatedUserId: data.related_user_id, // Map
     departmentId: data.department_id,
@@ -354,6 +357,7 @@ export async function createTask(
     task_type: input.taskType || "general",
     related_lead_id: input.relatedLeadId,
     project_id: input.projectId,
+    sprint_id: input.sprintId ?? null,
     related_team_id: (input as any).relatedTeamId ?? null,
     related_user_id: (input as any).relatedUserId ?? null,
     assigned_to: assignedTo,
@@ -443,6 +447,7 @@ export async function updateTask(
   if (input.dueDate !== undefined) updateData["due_date"] = input.dueDate;
   if (input.tags !== undefined) updateData["tags"] = input.tags;
   if (input.projectId !== undefined) updateData["project_id"] = input.projectId;
+  if (input.sprintId !== undefined) updateData["sprint_id"] = input.sprintId;
   if ((input as any).relatedTeamId !== undefined)
     updateData["related_team_id"] = (input as any).relatedTeamId;
   if ((input as any).relatedUserId !== undefined)
